@@ -1,0 +1,140 @@
+school_name,team_id,logo_url,local_path,filename
+Missouri State,454,https://s3.amazonaws.com/cstest/teams/CMYKBearHead_.jpg.220x220_q95.jpg,school_logos/Missouri_State_454.jpg,Missouri_State_454.jpg
+Monmouth,10007454,https://s3.amazonaws.com/cstest/teams/Monmouth.jpg.220x220_q95.jpg,school_logos/Monmouth_10007454.jpg,Monmouth_10007454.jpg
+Mount Saint Mary's (MD),544,https://s3.amazonaws.com/cstest/mb/2018/07/6943ac53-7c61-40.jpeg.220x220_q95.jpg,school_logos/Mount_Saint_Marys_MD_544.jpg,Mount_Saint_Marys_MD_544.jpg
+NJIT,443,https://s3.amazonaws.com/cstest/mb/2016/10/header_logo.png.220x220_q95.png,school_logos/NJIT_443.png,NJIT_443.png
+Niagara,434,https://s3.amazonaws.com/cstest/mb/2025/08/60624961-8bcb-4916-bde0-cdc062d0cd40.jpg.220x220_q95.jpg,school_logos/Niagara_434.jpg,Niagara_434.jpg
+NC State,394,https://s3.amazonaws.com/cstest/teams/block_s_logo.jpeg.220x220_q95.jpg,school_logos/NC_State_394.jpg,NC_State_394.jpg
+NKU,10039851,https://s3.amazonaws.com/cstest/mb/2023/11/18efefdd-27ed-47ac-b45b-0603efe053fa.jpg.220x220_q95.jpg,school_logos/NKU_10039851.jpg,NKU_10039851.jpg
+Northwestern,401,https://s3.amazonaws.com/cstest/teams/401/northwestern-university-logo.gif.220x220_q95.jpg,school_logos/Northwestern_401.jpg,Northwestern_401.jpg
+Oakland,21,https://s3.amazonaws.com/cstest/mb/2021/08/9154c975-ae5f-4beb-8352-538446669ea6.jpg.220x220_q95.jpg,school_logos/Oakland_21.jpg,Oakland_21.jpg
+Ohio State,393,https://s3.amazonaws.com/cstest/teams/393/ohio-state-university-logo.jpg.220x220_q95.jpg,school_logos/Ohio_State_393.jpg,Ohio_State_393.jpg
+Old Dominion,410,https://s3.amazonaws.com/cstest/teams/80-olddominion1.gif.220x220_q95.jpg,school_logos/Old_Dominion_410.jpg,Old_Dominion_410.jpg
+Penn State,82,https://s3.amazonaws.com/cstest/teams/80-pennstate.gif.220x220_q95.jpg,school_logos/Penn_State_82.jpg,Penn_State_82.jpg
+Princeton,477,https://s3.amazonaws.com/cstest/teams/80-princeton.gif.220x220_q95.jpg,school_logos/Princeton_477.jpg,Princeton_477.jpg
+Providence,479,https://s3.amazonaws.com/cstest/teams/479.gif.220x220_q95.png,school_logos/Providence_479.png,Providence_479.png
+Purdue,27,https://s3.amazonaws.com/cstest/teams/27/purdue-university-logo.gif.220x220_q95.jpg,school_logos/Purdue_27.jpg,Purdue_27.jpg
+Queens (NC),9415,https://s3.amazonaws.com/cstest/mb/2024/01/5e668307-cf1f-438d-9224-26e027381439.jpg.220x220_q95.jpg,school_logos/Queens_NC_9415.jpg,Queens_NC_9415.jpg
+Rider,484,https://s3.amazonaws.com/cstest/teams/484/rider-university-logo.jpg.220x220_q95.jpg,school_logos/Rider_484.jpg,Rider_484.jpg
+Saint Louis,491,https://s3.amazonaws.com/cstest/mb/2016/05/SLU_logo.jpg.220x220_q95.jpg,school_logos/Saint_Louis_491.jpg,Saint_Louis_491.jpg
+Saint Mary's (CA),10049846,https://s3.amazonaws.com/cstest/mb/2025/08/bdd21983-dfac-4949-beed-d6f0199de309.jpg.220x220_q95.jpg,school_logos/Saint_Marys_CA_10049846.jpg,Saint_Marys_CA_10049846.jpg
+Saint Peters,468,https://s3.amazonaws.com/cstest/mb/2023/01/fd213c96-462e-4a90-80b6-25d2fed10a49.jpg.220x220_q95.jpg,school_logos/Saint_Peters_468.jpg,Saint_Peters_468.jpg
+Seattle,90,https://s3.amazonaws.com/cstest/teams/90.gif.220x220_q95.png,school_logos/Seattle_90.png,Seattle_90.png
+Seton Hall,462,https://s3.amazonaws.com/cstest/teams/462.gif.220x220_q95.png,school_logos/Seton_Hall_462.png,Seton_Hall_462.png
+South Dakota State,451,https://s3.amazonaws.com/cstest/teams/80-southdakotastate1.gif.220x220_q95.jpg,school_logos/South_Dakota_State_451.jpg,South_Dakota_State_451.jpg
+Southern Illinois,453,https://s3.amazonaws.com/cstest/mb/2019/08/48a5c577-4c28-4a.png.220x220_q95.png,school_logos/Southern_Illinois_453.png,Southern_Illinois_453.png
+Southern Methodist,75,https://s3.amazonaws.com/cstest/teams/75/southern-methodist-university-logo.jpg.220x220_q95.jpg,school_logos/Southern_Methodist_75.jpg,Southern_Methodist_75.jpg
+St. Bonaventure,457,https://s3.amazonaws.com/cstest/mb/2024/10/2024_STB_Logo_Primary-Light_1.png.220x220_q95.png,school_logos/St_Bonaventure_457.png,St_Bonaventure_457.png
+Stanford,112,https://s3.amazonaws.com/cstest/teams/112/stanford-university-logo.png.220x220_q95.png,school_logos/Stanford_112.png,Stanford_112.png
+Stonehill,10023198,https://s3.amazonaws.com/cstest/mb/2019/12/5fbb870f-054b-45.jpeg.220x220_q95.jpg,school_logos/Stonehill_10023198.jpg,Stonehill_10023198.jpg
+Stony Brook,418,https://s3.amazonaws.com/cstest/mb/2022/11/6733158d-e90d-4f26-bc0f-13281d5a61ae.jpg.220x220_q95.jpg,school_logos/Stony_Brook_418.jpg,Stony_Brook_418.jpg
+Texas A&M,80,https://s3.amazonaws.com/cstest/teams/80/texas-am-university-logo.jpg.220x220_q95.jpg,school_logos/Texas_AM_80.jpg,Texas_AM_80.jpg
+TCU,318,https://s3.amazonaws.com/cstest/mb/2019/12/ca9996be-63c1-4a.png.220x220_q95.jpg,school_logos/TCU_318.png,TCU_318.png
+Towson,320,https://s3.amazonaws.com/cstest/mb/2022/08/1086a759-b6b5-41b4-a3eb-dea3eddbb175.jpg.220x220_q95.jpg,school_logos/Towson_320.jpg,Towson_320.jpg
+Air Force,337,https://s3.amazonaws.com/cstest/teams/AF_blue_Logo.jpg.220x220_q95.jpg,school_logos/Air_Force_337.jpg,Air_Force_337.jpg
+Army,326,https://s3.amazonaws.com/cstest/teams/Athena_Logo_Primary.jpg.220x220_q95.jpg,school_logos/Army_326.jpg,Army_326.jpg
+Navy,327,https://s3.amazonaws.com/cstest/teams/327/us-naval-academy-navy-logo.jpg.220x220_q95.jpg,school_logos/Navy_327.jpg,Navy_327.jpg
+UMBC,138,https://s3.amazonaws.com/cstest/teams/138/maryland-baltimore-county-university-of-umbc-logo.jpg.220x220_q95.jpg,school_logos/UMBC_138.jpg,UMBC_138.jpg
+Alabama,65,https://s3.amazonaws.com/cstest/mb/2023/01/f7b502ea-96be-4551-9909-6706b4ec029c.jpg.220x220_q95.jpg,school_logos/Alabama_65.jpg,Alabama_65.jpg
+Arizona,120,https://s3.amazonaws.com/cstest/teams/80-arizona.gif.220x220_q95.jpg,school_logos/Arizona_120.jpg,Arizona_120.jpg
+California,110,https://s3.amazonaws.com/cstest/teams/california.gif.220x220_q95.jpg,school_logos/California_110.jpg,California_110.jpg
+UC San Diego,121,https://s3.amazonaws.com/cstest/mb/2021/09/c2b7deb8-83f8-4b13-94a6-49e3b0fe6570.jpg.220x220_q95.jpg,school_logos/UC_San_Diego_121.jpg,UC_San_Diego_121.jpg
+UC-Santa Barbara,194,https://s3.amazonaws.com/cstest/mb/2017/06/ucsb_logo_300_x_300.png.220x220_q95.png,school_logos/UC-Santa_Barbara_194.png,UC-Santa_Barbara_194.png
+Cincinnati,260,https://s3.amazonaws.com/cstest/teams/80-cincinnati.gif.220x220_q95.jpg,school_logos/Cincinnati_260.jpg,Cincinnati_260.jpg
+Connecticut,28,https://s3.amazonaws.com/cstest/teams/28/connecticut-university-of-logo.gif.220x220_q95.jpg,school_logos/Connecticut_28.jpg,Connecticut_28.jpg
+Delaware,275,https://s3.amazonaws.com/cstest/mb/2019/01/0e3c309a-b2d7-4b.png.220x220_q95.jpg,school_logos/Delaware_275.png,Delaware_275.png
+Denver,276,https://s3.amazonaws.com/cstest/teams/DU_Monogram_3C_1.jpg.220x220_q95.jpg,school_logos/Denver_276.jpg,Denver_276.jpg
+Evansville,240,https://s3.amazonaws.com/cstest/teams/240.gif.220x220_q95.png,school_logos/Evansville_240.png,Evansville_240.png
+Florida,117,https://s3.amazonaws.com/cstest/teams/Gatorhead-color_.jpg.220x220_q95.jpg,school_logos/Florida_117.jpg,Florida_117.jpg
+Georgia,124,https://s3.amazonaws.com/cstest/teams/80-georgia.gif.220x220_q95.jpg,school_logos/Georgia_124.jpg,Georgia_124.jpg
+Hawaii,51,https://s3.amazonaws.com/cstest/teams/80-hawaii1.gif.220x220_q95.jpg,school_logos/Hawaii_51.jpg,Hawaii_51.jpg
+Illinois-Chicago,158,https://s3.amazonaws.com/cstest/mb/2020/12/e037a2c0-2e40-4791-9f2a-568c3e3e75c1.jpg.220x220_q95.jpg,school_logos/Illinois-Chicago_158.jpg,Illinois-Chicago_158.jpg
+Incarnate Word,154,https://s3.amazonaws.com/cstest/teams/IncarnateWord.jpg.220x220_q95.jpg,school_logos/Incarnate_Word_154.jpg,Incarnate_Word_154.jpg
+Kentucky,176,https://s3.amazonaws.com/cstest/mb/2016/09/Untitled-1_VyAYN2i.png.220x220_q95.png,school_logos/Kentucky_176.png,Kentucky_176.png
+Louisville,174,https://s3.amazonaws.com/cstest/teams/174/louisville-university-of-logo.png.220x220_q95.jpg,school_logos/Louisville_174.png,Louisville_174.png
+Maine,169,https://s3.amazonaws.com/cstest/teams/169.gif.220x220_q95.png,school_logos/Maine_169.png,Maine_169.png
+Massachusetts,421,https://s3.amazonaws.com/cstest/mb/2022/11/e629bd34-98ac-496a-98b7-8902f6decc44.jpg.220x220_q95.jpg,school_logos/Massachusetts_421.jpg,Massachusetts_421.jpg
+Michigan,89,https://s3.amazonaws.com/cstest/teams/Single_Border_Blue_M.JPG.220x220_q95.jpg,school_logos/Michigan_89.jpg,Michigan_89.jpg
+Minnesota,31,https://s3.amazonaws.com/cstest/teams/80-minnesota.gif.220x220_q95.jpg,school_logos/Minnesota_31.jpg,Minnesota_31.jpg
+Missouri,431,https://s3.amazonaws.com/cstest/teams/80-missouri.gif.220x220_q95.jpg,school_logos/Missouri_431.jpg,Missouri_431.jpg
+Nebraska-Omaha,97,https://s3.amazonaws.com/cstest/teams/97.gif.220x220_q95.png,school_logos/Nebraska-Omaha_97.png,Nebraska-Omaha_97.png
+UNLV,440,https://s3.amazonaws.com/cstest/mb/2018/08/fc9460e9-ad68-4a.jpeg.220x220_q95.jpg,school_logos/UNLV_440.jpg,UNLV_440.jpg
+North Carolina,60,https://s3.amazonaws.com/cstest/teams/60/north-carolina-chapel-hill-university-of-logo.gif.220x220_q95.jpg,school_logos/North_Carolina_60.jpg,North_Carolina_60.jpg
+UNC-Wilmington,395,https://s3.amazonaws.com/cstest/teams/395/north-carolina-wilmington-university-of-logo.jpg.220x220_q95.jpg,school_logos/UNC-Wilmington_395.jpg,UNC-Wilmington_395.jpg
+Notre Dame,53,https://s3.amazonaws.com/cstest/teams/53/notre-dame-university-of-logo.png.220x220_q95.jpg,school_logos/Notre_Dame_53.png,Notre_Dame_53.png
+Penn,416,https://s3.amazonaws.com/cstest/teams/416.gif.220x220_q95.png,school_logos/Penn_416.png,Penn_416.png
+Pittsburgh,405,https://s3.amazonaws.com/cstest/mb/2025/05/fb992292-8278-45bf-b516-a5b42d159751.jpg.220x220_q95.jpg,school_logos/Pittsburgh_405.jpg,Pittsburgh_405.jpg
+St Thomas (MN),469,https://s3.amazonaws.com/cstest/mb/2022/03/8c1fd0b7-9daa-4784-bbe7-a95f369a49ab.jpg.220x220_q95.jpg,school_logos/St_Thomas_MN_469.jpg,St_Thomas_MN_469.jpg
+South Carolina,95,https://s3.amazonaws.com/cstest/teams/USC_logo.jpg.220x220_q95.jpg,school_logos/South_Carolina_95.jpg,South_Carolina_95.jpg
+South Dakota,83,https://s3.amazonaws.com/cstest/teams/83/south-dakota-university-of-logo.png.220x220_q95.jpg,school_logos/South_Dakota_83.png,South_Dakota_83.png
+USC,102,https://s3.amazonaws.com/cstest/teams/southern_cal.gif.220x220_q95.jpg,school_logos/USC_102.jpg,USC_102.jpg
+Southern Indiana,10028295,https://s3.amazonaws.com/cstest/mb/2023/05/12da5635-4891-464c-9daf-393c1fd9c7da.jpg.220x220_q95.jpg,school_logos/Southern_Indiana_10028295.jpg,Southern_Indiana_10028295.jpg
+Tennessee,44,https://s3.amazonaws.com/cstest/mb/2017/10/e4d7cf8f-7081-47.png.220x220_q95.png,school_logos/Tennessee_44.png,Tennessee_44.png
+Texas,105,https://s3.amazonaws.com/cstest/mb/2025/10/Texas_Longhorns_logo.svg.png.220x220_q95.png,school_logos/Texas_105.png,Texas_105.png
+Pacific,413,https://s3.amazonaws.com/cstest/mb/2020/04/22d7fafd-5ce1-4b.jpeg.220x220_q95.jpg,school_logos/Pacific_413.jpg,Pacific_413.jpg
+Utah,330,https://s3.amazonaws.com/cstest/mb/2025/02/1169f174-c617-44d2-86b4-9266995df982.jpg.220x220_q95.jpg,school_logos/Utah_330.jpg,Utah_330.jpg
+Virginia,73,https://s3.amazonaws.com/cstest/mb/2019/10/6bc20225-870c-40.png.220x220_q95.png,school_logos/Virginia_73.png,Virginia_73.png
+UW-Green Bay,368,https://s3.amazonaws.com/cstest/mb/2018/11/e03e924a-f0d0-42.jpeg.220x220_q95.jpg,school_logos/UW-Green_Bay_368.jpg,UW-Green_Bay_368.jpg
+Wisconsin,98,https://s3.amazonaws.com/cstest/mb/2016/08/Red-W-White-Outline-RGB.png.220x220_q95.png,school_logos/Wisconsin_98.png,Wisconsin_98.png
+Milwaukee,369,https://s3.amazonaws.com/cstest/mb/2016/02/university-of-wisconsin-milwaukee-logo.png.220x220_q95.png,school_logos/Milwaukee_369.png,Milwaukee_369.png
+Wyoming,374,https://s3.amazonaws.com/cstest/teams/374.gif.220x220_q95.png,school_logos/Wyoming_374.png,Wyoming_374.png
+Valparaiso,332,https://s3.amazonaws.com/cstest/mb/2021/11/238ea3b6-b2a8-4ed5-becb-83f8534efdd0.jpg.220x220_q95.jpg,school_logos/Valparaiso_332.jpg,Valparaiso_332.jpg
+Villanova,32,https://s3.amazonaws.com/cstest/teams/32.gif.220x220_q95.png,school_logos/Villanova_32.png,Villanova_32.png
+Virginia Military Institute,335,https://s3.amazonaws.com/cstest/mb/2018/05/c051ad53-eeb6-47.jpeg.220x220_q95.jpg,school_logos/Virginia_Military_Institute_335.jpg,Virginia_Military_Institute_335.jpg
+Virginia Tech,336,https://s3.amazonaws.com/cstest/teams/80-virginiatech.gif.220x220_q95.jpg,school_logos/Virginia_Tech_336.jpg,Virginia_Tech_336.jpg
+Wagner,296,https://s3.amazonaws.com/cstest/teams/296.gif.220x220_q95.png,school_logos/Wagner_296.png,Wagner_296.png
+West Virginia,294,https://s3.amazonaws.com/cstest/teams/west_virginia.gif.220x220_q95.jpg,school_logos/West_Virginia_294.jpg,West_Virginia_294.jpg
+William & Mary,350,https://s3.amazonaws.com/cstest/mb/2018/07/2a9607fb-6afd-4f.jpeg.220x220_q95.jpg,school_logos/William_Mary_350.jpg,William_Mary_350.jpg
+Xavier,375,https://s3.amazonaws.com/cstest/teams/375.gif.220x220_q95.png,school_logos/Xavier_375.png,Xavier_375.png
+Yale,376,https://s3.amazonaws.com/cstest/mb/2019/06/4f144a05-f9ca-4e.png.220x220_q95.png,school_logos/Yale_376.png,Yale_376.png
+Youngstown State,378,https://s3.amazonaws.com/cstest/mb/2017/02/Y_red_white_black.jpg.220x220_q95.jpg,school_logos/Youngstown_State_378.jpg,Youngstown_State_378.jpg
+Adams State,627,https://s3.amazonaws.com/cstest/mb/2016/11/Adams_State_Grizzlies_logo.png.220x220_q95.png,school_logos/Adams_State_627.png,Adams_State_627.png
+Adelphi,442,https://s3.amazonaws.com/cstest/mb/2017/09/7c1ce4b9-78f2-47.jpeg.220x220_q95.jpg,school_logos/Adelphi_442.jpg,Adelphi_442.jpg
+Ashland,217,https://s3.amazonaws.com/cstest/teams/ashland_logo.jpg.220x220_q95.jpg,school_logos/Ashland_217.jpg,Ashland_217.jpg
+Assumption,564,https://s3.amazonaws.com/cstest/mb/2019/04/fd1f9cb8-8771-4c.jpeg.220x220_q95.jpg,school_logos/Assumption_564.jpg,Assumption_564.jpg
+Augustana (SD),10007690,https://s3.amazonaws.com/cstest/mb/2024/09/bdb7508b-f5f6-465f-b86f-f8370d1315f8.jpg.220x220_q95.jpg,school_logos/Augustana_SD_10007690.jpg,Augustana_SD_10007690.jpg
+Barry,10034633,https://s3.amazonaws.com/cstest/mb/2022/11/Barry.png.220x220_q95.png,school_logos/Barry_10034633.png,Barry_10034633.png
+Barton,10008686,https://s3.amazonaws.com/cstest/teams/Barton.jpg.220x220_q95.jpg,school_logos/Barton_10008686.jpg,Barton_10008686.jpg
+Bentley,225,https://s3.amazonaws.com/cstest/mb/2025/12/f597bd3e-3682-4409-a1fc-a350a7f968d6.jpg.220x220_q95.jpg,school_logos/Bentley_225.jpg,Bentley_225.jpg
+Biola,384,https://s3.amazonaws.com/cstest/mb/2019/08/be3e025d-e725-4a.png.220x220_q95.png,school_logos/Biola_384.png,Biola_384.png
+Bloomsburg,227,https://s3.amazonaws.com/cstest/teams/227/bloomsburg-university-logo.jpg.220x220_q95.jpg,school_logos/Bloomsburg_227.jpg,Bloomsburg_227.jpg
+Carson-Newman,10003343,https://s3.amazonaws.com/cstest/teams/Carson_Newman_Logo.jpg.220x220_q95.jpg,school_logos/Carson-Newman_10003343.jpg,Carson-Newman_10003343.jpg
+Catawba,201,https://s3.amazonaws.com/cstest/mb/2023/06/317a8e5a-32ee-4b66-9762-49daa86b14be.jpg.220x220_q95.jpg,school_logos/Catawba_201.jpg,Catawba_201.jpg
+Chowan,10007086,https://s3.amazonaws.com/cstest/teams/10007086/chowan-university-logo.jpg.220x220_q95.jpg,school_logos/Chowan_10007086.jpg,Chowan_10007086.jpg
+Clarion,114,https://s3.amazonaws.com/cstest/teams/114/clarion-university-logo.jpg.220x220_q95.jpg,school_logos/Clarion_114.jpg,Clarion_114.jpg
+Staten Island,312,https://s3.amazonaws.com/cstest/teams/Staten_Island.jpg.220x220_q95.jpg,school_logos/Staten_Island_312.jpg,Staten_Island_312.jpg
+Colorado Mesa,517,https://s3.amazonaws.com/cstest/mb/2021/08/cc69f142-3c00-4f66-b4a8-bca7ef17af18.jpg.220x220_q95.jpg,school_logos/Colorado_Mesa_517.jpg,Colorado_Mesa_517.jpg
+Colorado Mines,50,https://s3.amazonaws.com/cstest/mb/2016/11/Blaster.png.220x220_q95.png,school_logos/Colorado_Mines_50.png,Colorado_Mines_50.png
+Concordia,542,https://s3.amazonaws.com/cstest/mb/2022/08/190df227-4878-4ac9-8c12-14fe8cdf6b6b.jpg.220x220_q95.jpg,school_logos/Concordia_542.jpg,Concordia_542.jpg
+Converse,8475,https://s3.amazonaws.com/cstest/teams/8475/converse-college-logo.png.220x220_q95.png,school_logos/Converse_8475.png,Converse_8475.png
+Davenport,10012529,https://s3.amazonaws.com/cstest/mb/2018/07/bc01cbee-84e5-42.png.220x220_q95.png,school_logos/Davenport_10012529.png,Davenport_10012529.png
+Davis and Elkins,628,https://s3.amazonaws.com/cstest/mb/2016/08/DE.jpg.220x220_q95.jpg,school_logos/Davis_and_Elkins_628.jpg,Davis_and_Elkins_628.jpg
+Delta State,48,https://s3.amazonaws.com/cstest/teams/DeltaState.jpg.220x220_q95.jpg,school_logos/Delta_State_48.jpg,Delta_State_48.jpg
+Drury,122,https://s3.amazonaws.com/cstest/teams/Drury.jpg.220x220_q95.jpg,school_logos/Drury_122.jpg,Drury_122.jpg
+Emmanuel,10003592,https://s3.amazonaws.com/cstest/teams/10003592/emmanuel-college-logo.jpg.220x220_q95.jpg,school_logos/Emmanuel_10003592.jpg,Emmanuel_10003592.jpg
+Fairmont State,205,https://s3.amazonaws.com/cstest/mb/2020/09/2018_Fairmont_State_Logo_Mark_Maroon.png.220x220_q95.png,school_logos/Fairmont_State_205.png,Fairmont_State_205.png
+Felician,10028852,https://s3.amazonaws.com/cstest/mb/2021/11/Felician.png.220x220_q95.png,school_logos/Felician_10028852.png,Felician_10028852.png
+Florida Southern,354,https://s3.amazonaws.com/cstest/teams/FloridaSouthern.jpg.220x220_q95.jpg,school_logos/Florida_Southern_354.jpg,Florida_Southern_354.jpg
+Florida Tech,10001800,https://s3.amazonaws.com/cstest/mb/2024/05/25d3b0f2-719e-407f-b656-d14ea5194e07.jpg.220x220_q95.jpg,school_logos/Florida_Tech_10001800.jpg,Florida_Tech_10001800.jpg
+Fresno Pacific,534,https://s3.amazonaws.com/cstest/teams/534/fresno-pacific-university-logo.jpg.220x220_q95.jpg,school_logos/Fresno_Pacific_534.jpg,Fresno_Pacific_534.jpg
+Frostburg State,233,https://s3.amazonaws.com/cstest/teams/233/frostburg-state-university-logo.jpg.220x220_q95.jpg,school_logos/Frostburg_State_233.jpg,Frostburg_State_233.jpg
+Gannon,248,https://s3.amazonaws.com/cstest/mb/2025/11/43502415-fa74-4b1a-9ac1-fb6b8816a90e.jpg.220x220_q95.jpg,school_logos/Gannon_248.jpg,Gannon_248.jpg
+Grand Valley,86,https://s3.amazonaws.com/cstest/mb/2023/11/e36db099-b347-470f-860a-591456abb3a8.jpg.220x220_q95.jpg,school_logos/Grand_Valley_86.jpg,Grand_Valley_86.jpg
+Henderson State,58,https://s3.amazonaws.com/cstest/mb/2019/10/c96318de-3cbf-46.jpeg.220x220_q95.jpg,school_logos/Henderson_State_58.jpg,Henderson_State_58.jpg
+Indiana (PA),79,https://s3.amazonaws.com/cstest/mb/2024/09/30e68eb7-b72a-4b50-94e8-f59993563393.jpg.220x220_q95.jpg,school_logos/Indiana_PA_79.jpg,Indiana_PA_79.jpg
+King,614,https://s3.amazonaws.com/cstest/mb/2018/11/5322b657-c1a9-4d.jpeg.220x220_q95.jpg,school_logos/King_614.jpg,King_614.jpg
+Kutztown,151,https://s3.amazonaws.com/cstest/teams/151/kutztown-university-logo.jpg.220x220_q95.jpg,school_logos/Kutztown_151.jpg,Kutztown_151.jpg
+Lake Superior State,10037277,https://s3.amazonaws.com/cstest/mb/2023/03/Lake_State.jpg.220x220_q95.jpg,school_logos/Lake_Superior_State_10037277.jpg,Lake_Superior_State_10037277.jpg
+Lenoir-Rhyne,550,https://s3.amazonaws.com/cstest/teams/LenoirRhyne.jpg.220x220_q95.jpg,school_logos/Lenoir-Rhyne_550.jpg,Lenoir-Rhyne_550.jpg
+Lewis,57,https://s3.amazonaws.com/cstest/mb/2024/10/99aa61f3-7761-4f50-b296-83485db6ca78.jpg.220x220_q95.jpg,school_logos/Lewis_57.jpg,Lewis_57.jpg
+Lynn,10002387,https://s3.amazonaws.com/cstest/teams/10002387/lynn-university-logo.jpg.220x220_q95.jpg,school_logos/Lynn_10002387.jpg,Lynn_10002387.jpg
+Malone,626,https://s3.amazonaws.com/cstest/mb/2025/05/fe6a7920-7495-420a-9b40-a000870a6fee.jpg.220x220_q95.jpg,school_logos/Malone_626.jpg,Malone_626.jpg
+Mars Hill,536,https://s3.amazonaws.com/cstest/mb/2016/07/629f5e19e28866f8adec30fb0e7e86a5_400x400_bSCeQUW.png.220x220_q95.jpg,school_logos/Mars_Hill_536.png,Mars_Hill_536.png
+Maryville,10002186,https://s3.amazonaws.com/cstest/teams/Mvillesaints_1.png.220x220_q95.jpg,school_logos/Maryville_10002186.png,Maryville_10002186.png
+McKendree,10008207,https://s3.amazonaws.com/cstest/mb/2016/09/TwitterLogo_ZujXLFb.jpg.220x220_q95.jpg,school_logos/McKendree_10008207.jpg,McKendree_10008207.jpg
+Missouri S&T,447,https://s3.amazonaws.com/cstest/mb/2025/06/38080257-9017-4035-89d3-4620a92d19b8.jpg.220x220_q95.jpg,school_logos/Missouri_ST_447.jpg,Missouri_ST_447.jpg
+Northern Michigan,72,https://s3.amazonaws.com/cstest/mb/2016/05/NMU.png.220x220_q95.png,school_logos/Northern_Michigan_72.png,Northern_Michigan_72.png
+Nova Southeastern,655,https://s3.amazonaws.com/cstest/mb/2019/12/44ce76f0-f785-48.png.220x220_q95.png,school_logos/Nova_Southeastern_655.png,Nova_Southeastern_655.png
+Oklahoma Christian,10009480,https://s3.amazonaws.com/cstest/mb/2020/06/bfa9eed3-c56c-4a.png.220x220_q95.png,school_logos/Oklahoma_Christian_10009480.png,Oklahoma_Christian_10009480.png
+Ouachita Baptist,412,https://s3.amazonaws.com/cstest/teams/412/ouachita-baptist-university-logo.jpg.220x220_q95.jpg,school_logos/Ouachita_Baptist_412.jpg,Ouachita_Baptist_412.jpg
+Pace,610,https://s3.amazonaws.com/cstest/mb/2019/09/c8847b6c-009f-4a.png.220x220_q95.png,school_logos/Pace_610.png,Pace_610.png

@@ -1,0 +1,82 @@
+name,team_id,swimcloud_url,conference,division,is_mid_major,mens_division_rank,mens_conference_rank,mens_mid_major_rank,womens_division_rank,womens_conference_rank,womens_mid_major_rank
+Missouri State,454,https://www.swimcloud.com/team/454,Missouri Valley,Division 1 Mid-Major,True,51,1,1,71,3,18
+Monmouth,10007454,https://www.swimcloud.com/team/10007454,Coastal,Division 1,False,52,1,,72,1,
+Mount Saint Mary's (MD),544,https://www.swimcloud.com/team/544,MAAC,Division 1 Mid-Major,True,53,1,2,73,5,19
+NJIT,443,https://www.swimcloud.com/team/443,America East,Division 1 Mid-Major,True,54,1,3,,,
+Niagara,434,https://www.swimcloud.com/team/434,MAAC,Division 1 Mid-Major,True,55,2,4,75,6,21
+NC State,394,https://www.swimcloud.com/team/394,ACC,Division 1,False,56,1,,76,1,
+NKU,10039851,https://www.swimcloud.com/team/10039851,Horizon,Division 1 Mid-Major,True,57,1,5,79,2,24
+Northwestern,401,https://www.swimcloud.com/team/401,Big Ten,Division 1,False,58,1,,80,2,
+Oakland,21,https://www.swimcloud.com/team/21,Horizon,Division 1 Mid-Major,True,59,2,6,81,3,25
+Ohio State,393,https://www.swimcloud.com/team/393,Big Ten,Division 1,False,60,2,,82,3,
+Old Dominion,410,https://www.swimcloud.com/team/410,ASUN,Division 1 Mid-Major,True,61,1,7,84,1,27
+Penn State,82,https://www.swimcloud.com/team/82,Big Ten,Division 1,False,62,3,,85,4,
+Princeton,477,https://www.swimcloud.com/team/477,Ivy,Division 1 Mid-Major,True,63,1,8,87,1,29
+Providence,479,https://www.swimcloud.com/team/479,Big East,Division 1 Mid-Major,True,64,1,9,88,2,30
+Purdue,27,https://www.swimcloud.com/team/27,Big Ten,Division 1,False,65,4,,89,5,
+Queens (NC),9415,https://www.swimcloud.com/team/9415,ASUN,Division 1 Mid-Major,True,66,2,10,90,2,31
+Rider,484,https://www.swimcloud.com/team/484,MAAC,Division 1 Mid-Major,True,67,3,11,92,7,33
+Saint Louis,491,https://www.swimcloud.com/team/491,Atlantic 10,Division 1 Mid-Major,True,68,1,12,96,2,36
+Saint Mary's (CA),10049846,https://www.swimcloud.com/team/10049846,MPSF,Division 1 Mid-Major,True,69,1,13,97,4,37
+Saint Peters,468,https://www.swimcloud.com/team/468,MAAC,Division 1 Mid-Major,True,70,4,14,98,9,38
+Seattle,90,https://www.swimcloud.com/team/90,Big West,Division 1 Mid-Major,True,71,1,15,,,
+Seton Hall,462,https://www.swimcloud.com/team/462,Big East,Division 1 Mid-Major,True,72,2,16,,,
+South Dakota State,451,https://www.swimcloud.com/team/451,Summit,Division 1 Mid-Major,True,73,1,17,,,
+Southern Illinois,453,https://www.swimcloud.com/team/453,Missouri Valley,Division 1 Mid-Major,True,74,2,18,,,
+Southern Methodist,75,https://www.swimcloud.com/team/75,ACC,Division 1,False,75,2,,,,
+St. Bonaventure,457,https://www.swimcloud.com/team/457,Atlantic 10,Division 1 Mid-Major,True,76,2,19,,,
+Stanford,112,https://www.swimcloud.com/team/112,ACC,Division 1,False,77,3,,,,
+Stonehill,10023198,https://www.swimcloud.com/team/10023198,Northeast,Division 1 Mid-Major,True,78,1,20,,,
+Stony Brook,418,https://www.swimcloud.com/team/418,Coastal,Division 1,False,79,2,,,,
+Texas A&M,80,https://www.swimcloud.com/team/80,SEC,Division 1,False,80,1,,,,
+TCU,318,https://www.swimcloud.com/team/318,Big 12,Division 1,False,81,1,,,,
+Towson,320,https://www.swimcloud.com/team/320,Coastal,Division 1 Mid-Major,True,82,3,21,,,
+Air Force,337,https://www.swimcloud.com/team/337,Mountain West,Division 1 Mid-Major,True,83,1,22,,,
+Army,326,https://www.swimcloud.com/team/326,Patriot,Division 1 Mid-Major,True,84,1,23,,,
+Navy,327,https://www.swimcloud.com/team/327,Patriot,Division 1 Mid-Major,True,85,2,24,,,
+UMBC,138,https://www.swimcloud.com/team/138,America East,Division 1 Mid-Major,True,86,2,25,,,
+Alabama,65,https://www.swimcloud.com/team/65,SEC,Division 1,False,87,2,,,,
+Arizona,120,https://www.swimcloud.com/team/120,Big 12,Division 1,False,88,2,,,,
+California,110,https://www.swimcloud.com/team/110,ACC,Division 1,False,89,4,,,,
+UC San Diego,121,https://www.swimcloud.com/team/121,Big West,Division 1 Mid-Major,True,90,2,26,,,
+UC-Santa Barbara,194,https://www.swimcloud.com/team/194,Big West,Division 1 Mid-Major,True,91,3,27,,,
+Cincinnati,260,https://www.swimcloud.com/team/260,Big 12,Division 1,False,92,3,,,,
+Connecticut,28,https://www.swimcloud.com/team/28,Big East,Division 1 Mid-Major,True,93,3,28,,,
+Delaware,275,https://www.swimcloud.com/team/275,ASUN,Division 1 Mid-Major,True,94,3,29,,,
+Denver,276,https://www.swimcloud.com/team/276,Summit,Division 1 Mid-Major,True,95,2,30,,,
+Evansville,240,https://www.swimcloud.com/team/240,Missouri Valley,Division 1 Mid-Major,True,96,3,31,,,
+Florida,117,https://www.swimcloud.com/team/117,SEC,Division 1,False,97,3,,,,
+Georgia,124,https://www.swimcloud.com/team/124,SEC,Division 1,False,98,4,,,,
+Hawaii,51,https://www.swimcloud.com/team/51,Big West,Division 1 Mid-Major,True,99,4,32,,,
+Illinois-Chicago,158,https://www.swimcloud.com/team/158,Missouri Valley,Division 1 Mid-Major,True,100,4,33,,,
+Indiana State,10007691,https://www.swimcloud.com/team/10007691,Missouri Valley,Division 1 Mid-Major,True,,,,51,1,1
+Indiana,92,https://www.swimcloud.com/team/92,Big Ten,Division 1,False,,,,52,1,
+IU-Indianapolis,181,https://www.swimcloud.com/team/181,Horizon,Division 1 Mid-Major,True,,,,53,1,2
+Iona,161,https://www.swimcloud.com/team/161,MAAC,Division 1 Mid-Major,True,,,,54,1,3
+Iowa State,162,https://www.swimcloud.com/team/162,Big 12,Division 1,False,,,,55,1,
+James Madison,159,https://www.swimcloud.com/team/159,American Athletic,Division 1 Mid-Major,True,,,,56,1,4
+La Salle,146,https://www.swimcloud.com/team/146,Atlantic 10,Division 1 Mid-Major,True,,,,57,1,5
+Lafayette,130,https://www.swimcloud.com/team/130,Patriot,Division 1 Mid-Major,True,,,,58,1,6
+Le Moyne,145,https://www.swimcloud.com/team/145,Northeast,Division 1 Mid-Major,True,,,,59,1,7
+Lehigh,141,https://www.swimcloud.com/team/141,Patriot,Division 1 Mid-Major,True,,,,60,2,8
+Liberty,452,https://www.swimcloud.com/team/452,American Athletic,Division 1 Mid-Major,True,,,,61,2,9
+LIU,10005731,https://www.swimcloud.com/team/10005731,Northeast,Division 1 Mid-Major,True,,,,62,2,10
+Louisiana State,56,https://www.swimcloud.com/team/56,SEC,Division 1,False,,,,63,1,
+Loyola,156,https://www.swimcloud.com/team/156,Patriot,Division 1 Mid-Major,True,,,,64,3,11
+Manhattan,128,https://www.swimcloud.com/team/128,MAAC,Division 1 Mid-Major,True,,,,65,2,12
+Marist,147,https://www.swimcloud.com/team/147,MAAC,Division 1 Mid-Major,True,,,,66,3,13
+Marquette,10050057,https://www.swimcloud.com/team/10050057,Big East,Division 1 Mid-Major,True,,,,67,1,14
+Marshall,377,https://www.swimcloud.com/team/377,American Athletic,Division 1 Mid-Major,True,,,,68,3,15
+Merrimack,10002057,https://www.swimcloud.com/team/10002057,MAAC,Division 1 Mid-Major,True,,,,69,4,16
+Miami-OH,426,https://www.swimcloud.com/team/426,Missouri Valley,Division 1 Mid-Major,True,,,,70,2,17
+New Mexico State,444,https://www.swimcloud.com/team/444,MPSF,Division 1 Mid-Major,True,,,,74,1,20
+Northeastern,18,https://www.swimcloud.com/team/18,Coastal,Division 1 Mid-Major,True,,,,77,2,22
+Northern Arizona,398,https://www.swimcloud.com/team/398,MPSF,Division 1 Mid-Major,True,,,,78,2,23
+Ohio,408,https://www.swimcloud.com/team/408,Mid-American,Division 1 Mid-Major,True,,,,83,1,26
+Pepperdine,417,https://www.swimcloud.com/team/417,MPSF,Division 1 Mid-Major,True,,,,86,3,28
+Rice,483,https://www.swimcloud.com/team/483,American Athletic,Division 1 Mid-Major,True,,,,91,4,32
+Rutgers,43,https://www.swimcloud.com/team/43,Big Ten,Division 1,False,,,,93,6,
+Sacred Heart,475,https://www.swimcloud.com/team/475,MAAC,Division 1 Mid-Major,True,,,,94,8,34
+Saint Francis (PA),474,https://www.swimcloud.com/team/474,Northeast,Division 1 Mid-Major,True,,,,95,3,35
+San Diego State,496,https://www.swimcloud.com/team/496,Mountain West,Division 1 Mid-Major,True,,,,99,1,39
+San Jose State,499,https://www.swimcloud.com/team/499,Mountain West,Division 1 Mid-Major,True,,,,100,2,40

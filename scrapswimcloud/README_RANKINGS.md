@@ -1,0 +1,321 @@
+# Swimming Rankings Analysis Scripts
+
+Comprehensive analysis tools for NCAA Division 1 men's and women's swimming rankings data.
+
+## Overview
+
+These scripts provide detailed analysis of swimming rankings including:
+- National rankings (Division 1)
+- Conference rankings
+- Men's and women's teams
+- Mid-major classifications
+- Comparative analysis
+
+## Data Source
+
+The rankings data is stored in `mens_womens_rankings.csv` which contains:
+- **63 schools** total
+- **50 men's teams** (9 Division 1, 41 Mid-Major)
+- **50 women's teams** (10 Division 1, 40 Mid-Major)
+- **37 schools** with both men's and women's teams
+- **19 conferences** (men's), **20 conferences** (women's)
+
+## Files Created
+
+### 1. analyze_rankings.py (Interactive Tool)
+**Main analysis script with menu-driven interface**
+
+Features:
+- Overview of all rankings
+- Men's national rankings
+- Women's national rankings
+- Side-by-side men's vs women's comparison
+- Conference-specific rankings
+- Individual school rankings
+- Top conferences analysis
+- Export capabilities
+
+**Usage:**
+```bash
+python3 analyze_rankings.py
+```
+
+**Menu Options:**
+1. Overview - Summary statistics
+2. Men's National Rankings - Top N schools
+3. Women's National Rankings - Top N schools
+4. Compare Men's vs Women's - Side-by-side comparison
+5. Conference Rankings - Rankings within a specific conference
+6. School Rankings - Detailed info for a specific school
+7. Top Conferences - Best performing conferences
+8. List All Conferences - All conferences with team counts
+9. Export Rankings Report - Export to CSV
+10. Export by Conference - Separate CSV files per conference
+
+---
+
+### 2. show_all_rankings.py (Automated Display)
+**Runs predefined analyses automatically**
+
+Displays:
+- Overview statistics
+- Top 30 men's teams
+- Top 30 women's teams
+- Men's vs women's comparison (top 25)
+- Top conferences
+- All conferences list
+- Example: ACC conference rankings
+- Example: Stanford school profile
+- Exports complete rankings report
+
+**Usage:**
+```bash
+python3 show_all_rankings.py
+```
+
+---
+
+### 3. display_rankings_table.py (Simple Table View)
+**Clean, formatted table display of all rankings**
+
+Shows:
+- All schools with men's and women's rankings in one table
+- Top 20 men's and women's side-by-side
+- Schools grouped by conference
+- Summary statistics
+
+**Usage:**
+```bash
+python3 display_rankings_table.py
+```
+
+---
+
+## Data Structure
+
+### Input CSV Columns:
+- `name` - School name
+- `team_id` - SwimCloud team ID
+- `swimcloud_url` - URL to team page
+- `conference` - Conference affiliation
+- `division` - Division 1 or Division 1 Mid-Major
+- `is_mid_major` - Boolean flag
+- `mens_division_rank` - National rank for men's team
+- `mens_conference_rank` - Conference rank for men's team
+- `mens_mid_major_rank` - Mid-major rank for men's team (if applicable)
+- `womens_division_rank` - National rank for women's team
+- `womens_conference_rank` - Conference rank for women's team
+- `womens_mid_major_rank` - Mid-major rank for women's team (if applicable)
+
+---
+
+## Sample Rankings (Top 10)
+
+### Men's Top 10:
+1. American (Patriot)
+2. Arizona State (Big 12)
+3. Auburn (SEC)
+4. Ball State (Missouri Valley)
+5. Bellarmine (ASUN)
+6. Binghamton (America East)
+7. Boston College (ACC)
+8. Boston University (Patriot)
+9. Brigham Young (Big 12)
+10. Brown (Ivy)
+
+### Women's Top 10:
+1. American (Patriot)
+2. Arizona State (Big 12)
+3. Auburn (SEC)
+4. Ball State (Missouri Valley)
+5. Bellarmine (ASUN)
+6. Binghamton (America East)
+7. Boston College (ACC)
+8. Boston University (Patriot)
+9. Bowling Green (Mid-American)
+10. Brigham Young (Big 12)
+
+---
+
+## Use Cases
+
+### For Athletic Directors:
+- Compare your school's ranking to conference rivals
+- Identify recruitment competition
+- Track program positioning
+
+### For Coaches:
+- Analyze conference competition
+- Scout opponents
+- Benchmark program performance
+
+### For Researchers:
+- Study conference strength
+- Analyze men's vs women's program development
+- Track mid-major programs
+
+### For Recruits:
+- Find top-ranked programs
+- Compare schools within conferences
+- Identify program strength
+
+---
+
+## Example Usage
+
+### Check a specific school's rankings:
+```python
+from analyze_rankings import RankingsAnalyzer
+
+analyzer = RankingsAnalyzer()
+analyzer.school_rankings('Stanford')
+```
+
+### Compare schools in a conference:
+```python
+analyzer.conference_rankings('Pac-12')
+```
+
+### Get top schools for both genders:
+```python
+analyzer.compare_mens_womens(top_n=20)
+```
+
+### Export conference-specific files:
+```python
+analyzer.export_by_conference()
+# Creates separate CSV for each conference
+```
+
+---
+
+## Conference List
+
+The dataset includes teams from:
+- ACC
+- America East
+- ASUN
+- Atlantic 10
+- Big 12
+- Big East
+- Big Ten
+- Big West
+- Coastal
+- Horizon
+- Ivy
+- MAAC
+- Mid-American
+- Missouri Valley
+- Mountain West
+- MPSF
+- Northeast
+- Patriot
+- SEC
+- Summit
+
+---
+
+## Output Files
+
+### Generated by Scripts:
+
+1. **rankings_report.csv** - Complete rankings for all schools
+2. **complete_rankings.csv** - Detailed export
+3. **rankings_[Conference].csv** - Per-conference files (20 files)
+
+### CSV Format:
+```
+School,Conference,Division,Mid-Major,Men_National_Rank,Men_Conference_Rank,Women_National_Rank,Women_Conference_Rank
+American,Patriot,Division 1 Mid-Major,True,1,1,1,1
+Arizona State,Big 12,Division 1,False,2,1,2,1
+...
+```
+
+---
+
+## Advanced Analysis
+
+### Find top mid-major programs:
+```python
+analyzer = RankingsAnalyzer()
+df = analyzer.df[analyzer.df['is_mid_major'] == True]
+top_mid_major = df.sort_values('mens_division_rank').head(10)
+```
+
+### Schools ranked higher in women's than men's:
+```python
+both = analyzer.df[(analyzer.df['mens_division_rank'].notna()) &
+                   (analyzer.df['womens_division_rank'].notna())]
+womens_stronger = both[both['womens_division_rank'] < both['mens_division_rank']]
+```
+
+### Conference with best average ranking:
+```python
+analyzer.top_conferences()
+```
+
+---
+
+## Integration with Other Scripts
+
+These ranking scripts integrate with:
+- `analyze_mens_times.py` - Correlate rankings with performance times
+- `visualize_mens_times.py` - Add ranking overlays to visualizations
+- `scrap_*.py` - Source data from SwimCloud
+
+---
+
+## Requirements
+
+```bash
+pip3 install pandas tabulate
+```
+
+Or use the project requirements.txt:
+```bash
+pip3 install -r requirements.txt
+```
+
+---
+
+## Tips
+
+1. **Quick Overview**: Run `python3 display_rankings_table.py | head -100`
+2. **Export All**: Use option 10 in `analyze_rankings.py` to get per-conference files
+3. **Custom Analysis**: Import `RankingsAnalyzer` class in your own scripts
+4. **Conference Comparison**: Use option 5 repeatedly to compare multiple conferences
+
+---
+
+## Future Enhancements
+
+Possible additions:
+- Historical ranking trends
+- Ranking changes over time
+- Conference realignment analysis
+- Correlation with meet results
+- Power rankings combining times and rankings
+
+---
+
+## Support
+
+For custom queries or analysis:
+1. Use the interactive menu in `analyze_rankings.py`
+2. Import and use the `RankingsAnalyzer` class
+3. Modify the scripts for specific needs
+
+---
+
+## Quick Reference
+
+| Script | Purpose | Interactive | Output |
+|--------|---------|-------------|--------|
+| `analyze_rankings.py` | Full analysis with menu | Yes | Screen + CSV |
+| `show_all_rankings.py` | Auto-run analyses | No | Screen + CSV |
+| `display_rankings_table.py` | Simple table view | No | Screen only |
+
+---
+
+**Last Updated:** January 2026
+**Data Currency:** Current NCAA Division 1 season
