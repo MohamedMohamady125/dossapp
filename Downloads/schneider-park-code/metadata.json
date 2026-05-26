@@ -1,0 +1,6 @@
+{
+  "name": "Schneider Park",
+  "description": "Smart, eco-friendly campus transit and parking shuttle manager for Schneider Electric employees and drivers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
