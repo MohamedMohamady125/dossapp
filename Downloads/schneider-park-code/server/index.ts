@@ -20,15 +20,26 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Initialize database on first request
+// Initialize database on first request (with proper async error handling)
 let dbInitialized = false;
-app.use(async (_req, _res, next) => {
-  if (!dbInitialized) {
-    await initializeDatabase();
-    dbInitialized = true;
-    console.log('Database initialized');
+let dbInitPromise: Promise<void> | null = null;
+app.use((req, res, next) => {
+  if (dbInitialized) return next();
+  if (!dbInitPromise) {
+    dbInitPromise = initializeDatabase()
+      .then(() => {
+        dbInitialized = true;
+        console.log('Database initialized');
+      })
+      .catch((err) => {
+        dbInitPromise = null;
+        throw err;
+      });
   }
-  next();
+  dbInitPromise.then(() => next()).catch((err) => {
+    console.error('DB init failed:', err);
+    res.status(500).json({ error: 'Database initialization failed' });
+  });
 });
 
 // Routes
@@ -55,8 +66,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 export default app;
 
 // Only listen when running directly (not as Vercel serverless)
-const isVercel = process.env.VERCEL === '1';
-if (!isVercel) {
+if (!process.env.VERCEL) {
   const PORT = parseInt(process.env.API_PORT || '3001', 10);
   app.listen(PORT, () => {
     console.log(`Schneider Park API server running on http://localhost:${PORT}`);
