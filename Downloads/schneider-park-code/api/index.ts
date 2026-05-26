@@ -12,10 +12,13 @@ dotenv.config({ path: '.env.local' });
 let _client: Client | null = null;
 function getClient(): Client {
   if (!_client) {
-    _client = createClient({
-      url: process.env.TURSO_DATABASE_URL || 'file:schneider_park.db',
-      authToken: process.env.TURSO_AUTH_TOKEN || undefined,
-    });
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    console.log('DB connecting to:', url ? url.substring(0, 30) + '...' : 'NO TURSO_DATABASE_URL SET');
+    if (!url) {
+      throw new Error('TURSO_DATABASE_URL environment variable is not set');
+    }
+    _client = createClient({ url, authToken });
   }
   return _client;
 }
