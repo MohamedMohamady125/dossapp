@@ -120,13 +120,22 @@ async def lifespan(app: FastAPI):
         await roster_source.refresh_all()
         logger.info(f"Initial Excel load complete ({len(configs)} branches)")
 
-    refresh_task = asyncio.create_task(_refresh_and_reconcile())
-    notification_task = asyncio.create_task(process_notification_queue(async_session))
+    # Skip background tasks in serverless (Vercel) — no long-running processes
+    import os
+    is_serverless = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+
+    refresh_task = None
+    notification_task = None
+    if not is_serverless:
+        refresh_task = asyncio.create_task(_refresh_and_reconcile())
+        notification_task = asyncio.create_task(process_notification_queue(async_session))
 
     yield
 
-    refresh_task.cancel()
-    notification_task.cancel()
+    if refresh_task:
+        refresh_task.cancel()
+    if notification_task:
+        notification_task.cancel()
     logger.info("BISM Academy backend shutting down")
 
 
