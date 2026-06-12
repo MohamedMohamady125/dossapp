@@ -25,6 +25,12 @@ mobile/android/local.properties
 *.swo
 .DS_Store
 
+# Credentials
+*.json
+!vercel.json
+!public/**/*.json
+!mobile/web/manifest.json
+
 # Test artifacts
 backend/tests/sample_workbook.xlsx
 .vercel
