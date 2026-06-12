@@ -141,7 +141,7 @@ async def process_notification_queue(db_session_factory, max_retries: int = 3):
                 if channel == "sms":
                     success = await provider.send_sms(to, item["body"])
                 elif channel == "email":
-                    success = await provider.send_email(to, item.get("subject", "BISM Receipt"), item["body"], item.get("attachment"))
+                    success = await provider.send_email(to, item.get("subject", "Aqua Athletic Receipt"), item["body"], item.get("attachment"))
                 elif channel == "whatsapp":
                     success = await provider.send_whatsapp(to, item["body"], item.get("attachment"))
 

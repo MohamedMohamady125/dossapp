@@ -283,7 +283,7 @@ async def _send_receipt_notifications(
 ):
     """Enqueue receipt notifications across all available channels."""
     body = (
-        f"BISM Swimming Academy - Payment Receipt\n"
+        f"Aqua Athletic Academy - Payment Receipt\n"
         f"Receipt #{receipt.receipt_number}\n"
         f"Athlete: {receipt.athlete_name}\n"
         f"Period: {receipt.period}\n"
@@ -299,6 +299,6 @@ async def _send_receipt_notifications(
     if email:
         await enqueue_notification(
             "email", email, body,
-            subject=f"BISM Receipt {receipt.receipt_number} — {receipt.period}",
+            subject=f"Aqua Athletic Receipt {receipt.receipt_number} — {receipt.period}",
             attachment=pdf_data, receipt_id=receipt.id,
         )

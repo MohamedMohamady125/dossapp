@@ -39,8 +39,8 @@ async def paymob_webhook(request: Request):
     # Extract merchant_order_id → parse branch_id, athlete_number, period
     order = obj.get("order", {})
     merchant_order_id = order.get("merchant_order_id", "")
-    # Expected format: BISM-{branch_id}-{athlete_number}-{period}
-    match = re.match(r"BISM-(\d+)-(\d+)-(.+)", merchant_order_id)
+    # Expected format: AQUA-{branch_id}-{athlete_number}-{period}
+    match = re.match(r"AQUA-(\d+)-(\d+)-(.+)", merchant_order_id)
     if not match:
         logger.error(f"Cannot parse merchant_order_id: {merchant_order_id}")
         return {"status": "error", "reason": "invalid order id format"}

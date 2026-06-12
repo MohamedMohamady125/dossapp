@@ -194,7 +194,7 @@ async def provision_account(
         phone = normalize_phone(athlete.phone1)
         if phone:
             msg = (
-                f"BISM Swimming Academy\n"
+                f"Aqua Athletic Academy\n"
                 f"Your login credentials:\n"
                 f"Code: {login_code}\n"
                 f"Password: {temp_password}\n"
@@ -243,7 +243,7 @@ async def reprovision_account(
         phone = normalize_phone(athlete.phone1) if athlete else None
         if phone:
             msg = (
-                f"BISM Swimming Academy\n"
+                f"Aqua Athletic Academy\n"
                 f"Your updated login credentials:\n"
                 f"Code: {account.login_code}\n"
                 f"Password: {temp_password}\n"

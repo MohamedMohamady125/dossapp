@@ -89,7 +89,7 @@ def generate_receipt_pdf(
     elements = []
 
     # Header
-    elements.append(Paragraph("BISM Swimming Academy", title_style))
+    elements.append(Paragraph("Aqua Athletic Academy", title_style))
     elements.append(Paragraph(f"{branch_name} Branch", subtitle_style))
     elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#1a237e")))
     elements.append(Spacer(1, 5 * mm))
@@ -150,7 +150,7 @@ def generate_receipt_pdf(
     elements.append(Spacer(1, 3 * mm))
 
     # Footer
-    elements.append(Paragraph("Thank you for choosing BISM Swimming Academy!", footer_style))
+    elements.append(Paragraph("Thank you for choosing Aqua Athletic Academy!", footer_style))
     elements.append(Paragraph("For inquiries, please contact your branch reception.", footer_style))
 
     doc.build(elements)

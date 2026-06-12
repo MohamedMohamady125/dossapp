@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Database (SQLite for local dev, PostgreSQL for production)
-    database_url: str = "sqlite+aiosqlite:///./bism_academy.db"
+    database_url: str = "sqlite+aiosqlite:///./aqua_athletic.db"
 
     # JWT
     jwt_secret_key: str = "change-me"
@@ -33,14 +33,14 @@ class Settings(BaseSettings):
     # Notifications
     sms_provider: str = "stub"
     sms_api_key: str = ""
-    sms_sender_id: str = "BISM"
+    sms_sender_id: str = "AQUA"
 
     email_provider: str = "stub"
     email_smtp_host: str = ""
     email_smtp_port: int = 587
     email_smtp_user: str = ""
     email_smtp_password: str = ""
-    email_from_address: str = "noreply@bismacademy.com"
+    email_from_address: str = "noreply@aquaathletic.com"
 
     whatsapp_provider: str = "stub"
     whatsapp_api_key: str = ""

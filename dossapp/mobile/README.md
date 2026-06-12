@@ -1,4 +1,4 @@
-# bism_academy
+# aqua_athletic
 
 A new Flutter project.
 

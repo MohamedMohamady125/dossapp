@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Icon(Icons.pool, size: 40, color: Colors.white),
                     ),
                     const SizedBox(height: 24),
-                    const Text('BISM Academy', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: -0.5)),
+                    const Text('Aqua Athletic', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: AppColors.textPrimary, letterSpacing: -0.5)),
                     const SizedBox(height: 4),
                     const Text('Swimming Academy', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
                     const SizedBox(height: 40),

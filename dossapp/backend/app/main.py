@@ -1,4 +1,4 @@
-"""BISM Academy — FastAPI application entry point."""
+"""Aqua Athletic — FastAPI application entry point."""
 
 import asyncio
 import logging
@@ -106,7 +106,7 @@ async def _refresh_and_reconcile():
 async def lifespan(app: FastAPI):
     global roster_source
 
-    logger.info("Starting BISM Academy backend...")
+    logger.info("Starting Aqua Athletic backend...")
 
     # Auto-create tables for SQLite dev mode
     from app.database import init_db
@@ -136,13 +136,13 @@ async def lifespan(app: FastAPI):
         refresh_task.cancel()
     if notification_task:
         notification_task.cancel()
-    logger.info("BISM Academy backend shutting down")
+    logger.info("Aqua Athletic backend shutting down")
 
 
 app = FastAPI(
-    title="BISM Swimming Academy",
+    title="Aqua Athletic Academy",
     version="1.0.0",
-    description="Backend API for BISM Swimming Academy management app",
+    description="Backend API for Aqua Athletic Academy management app",
     lifespan=lifespan,
 )
 
@@ -163,4 +163,4 @@ app.include_router(webhooks.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "bism-academy"}
+    return {"status": "ok", "service": "aqua-athletic"}

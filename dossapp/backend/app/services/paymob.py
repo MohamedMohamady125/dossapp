@@ -53,7 +53,7 @@ async def create_payment_intent(
                     "description": f"Athlete #{athlete_number}, Branch {branch_id}",
                     "quantity": 1,
                 }],
-                "merchant_order_id": f"BISM-{branch_id}-{athlete_number}-{period}",
+                "merchant_order_id": f"AQUA-{branch_id}-{athlete_number}-{period}",
             },
         )
         order_resp.raise_for_status()
@@ -63,7 +63,7 @@ async def create_payment_intent(
         billing = {
             "first_name": athlete_name.split()[0] if athlete_name else "Athlete",
             "last_name": " ".join(athlete_name.split()[1:]) if athlete_name and len(athlete_name.split()) > 1 else ".",
-            "email": email or "customer@bismacademy.com",
+            "email": email or "customer@aquaathletic.com",
             "phone_number": phone or "+201000000000",
             "apartment": "NA", "floor": "NA", "street": "NA",
             "building": "NA", "shipping_method": "NA",

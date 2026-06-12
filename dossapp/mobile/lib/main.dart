@@ -11,18 +11,18 @@ void main() {
   runApp(
     ChangeNotifierProvider(
       create: (_) => AuthProvider()..init(),
-      child: const BismApp(),
+      child: const AquaAthleticApp(),
     ),
   );
 }
 
-class BismApp extends StatelessWidget {
-  const BismApp({super.key});
+class AquaAthleticApp extends StatelessWidget {
+  const AquaAthleticApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BISM Academy',
+      title: 'Aqua Athletic',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
       home: Consumer<AuthProvider>(

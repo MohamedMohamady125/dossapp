@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Force SQLite to use /tmp on Vercel (only writable dir)
 if not os.environ.get("DATABASE_URL"):
-    os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/bism_academy.db"
+    os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/aqua_athletic.db"
 
 from app.main import app  # noqa: E402 — the ASGI app Vercel will serve
 

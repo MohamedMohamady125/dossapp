@@ -62,7 +62,7 @@ async def seed():
         if not existing_admin.scalars().first():
             admin = AdminUser(
                 username="admin",
-                email="admin@bismacademy.com",
+                email="admin@aquaathletic.com",
                 password_hash=hash_password("admin123"),  # Change in production!
                 role="admin",
                 is_active=True,

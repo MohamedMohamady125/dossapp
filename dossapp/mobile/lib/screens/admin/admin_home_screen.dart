@@ -68,7 +68,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BISM Academy'),
+        title: const Text('Aqua Athletic'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
