@@ -7735,7 +7735,7 @@ case 1:return A.M(q,r)}})
 return A.N($async$rK,r)},
 hl(a){var s=0,r=A.O(t.Wd),q,p,o,n,m
 var $async$hl=A.P(function(b,c){if(b===1)return A.L(c,r)
-while(true)switch(s){case 0:p="https://dossapp.vercel.app/api"+a
+while(true)switch(s){case 0:p="https://dossapp-tau.vercel.app/api"+a
 n=A
 m=A.e6(p,0,null)
 s=4
@@ -7763,7 +7763,7 @@ case 1:return A.M(q,r)}})
 return A.N($async$hl,r)},
 iz(a,b){var s=0,r=A.O(t.Wd),q,p,o,n,m
 var $async$iz=A.P(function(c,d){if(c===1)return A.L(d,r)
-while(true)switch(s){case 0:p="https://dossapp.vercel.app/api"+a
+while(true)switch(s){case 0:p="https://dossapp-tau.vercel.app/api"+a
 o=A.e6(p,0,null)
 s=3
 return A.H(A.rK(),$async$iz)
@@ -7803,7 +7803,7 @@ break
 case 5:b=l
 case 4:if(b==null){q=!1
 s=1
-break}l=A.e6("https://dossapp.vercel.app/api/auth/refresh",0,null)
+break}l=A.e6("https://dossapp-tau.vercel.app/api/auth/refresh",0,null)
 p=t.N
 o=A.ar(["Content-Type","application/json"],p,p)
 s=7
@@ -7864,7 +7864,7 @@ case 1:return A.M(q,r)}})
 return A.N($async$a0r,r)},
 J5(a,b){var s=0,r=A.O(t.P),q,p,o,n,m,l
 var $async$J5=A.P(function(c,d){if(c===1)return A.L(d,r)
-while(true)switch(s){case 0:o=A.e6("https://dossapp.vercel.app/api/auth/customer/login",0,null)
+while(true)switch(s){case 0:o=A.e6("https://dossapp-tau.vercel.app/api/auth/customer/login",0,null)
 n=t.N
 m=A.ar(["Content-Type","application/json"],n,n)
 s=3
@@ -7891,7 +7891,7 @@ throw A.e(A.fp(o,q==null?"Failed":q))}return A.M(null,r)}})
 return A.N($async$a0g,r)},
 J4(a,b){var s=0,r=A.O(t.P),q,p,o,n,m,l
 var $async$J4=A.P(function(c,d){if(c===1)return A.L(d,r)
-while(true)switch(s){case 0:o=A.e6("https://dossapp.vercel.app/api/auth/admin/login",0,null)
+while(true)switch(s){case 0:o=A.e6("https://dossapp-tau.vercel.app/api/auth/admin/login",0,null)
 n=t.N
 m=A.ar(["Content-Type","application/json"],n,n)
 s=3
