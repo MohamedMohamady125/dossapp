@@ -1,0 +1,14 @@
+mobile/build/
+mobile/.dart_tool/
+mobile/android/
+mobile/ios/
+mobile/linux/
+mobile/macos/
+mobile/windows/
+mobile/test/
+backend/venv/
+backend/tests/
+backend/bism_academy.db
+backend/__pycache__/
+docker-compose.yml
+*.db

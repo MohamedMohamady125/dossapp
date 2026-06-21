@@ -9,8 +9,10 @@ engine_kwargs: dict = {"echo": False}
 if _is_sqlite:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    engine_kwargs["pool_size"] = 20
-    engine_kwargs["max_overflow"] = 10
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 5
+    # asyncpg requires ssl=True for Neon/cloud PostgreSQL
+    engine_kwargs["connect_args"] = {"ssl": True}
 
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
