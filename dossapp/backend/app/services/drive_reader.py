@@ -26,9 +26,20 @@ def _get_drive_service():
     """Build a Google Drive API service client."""
     if not _HAS_GOOGLE:
         raise RuntimeError("Google Drive libraries not installed")
-    creds = service_account.Credentials.from_service_account_file(
-        settings.google_drive_credentials_json, scopes=SCOPES
-    )
+
+    creds_value = settings.google_drive_credentials_json.strip()
+    if not creds_value:
+        raise RuntimeError("GOOGLE_DRIVE_CREDENTIALS_JSON not configured")
+
+    # Support both file path (local dev) and inline JSON (Vercel/cloud)
+    import os
+    if os.path.isfile(creds_value):
+        creds = service_account.Credentials.from_service_account_file(creds_value, scopes=SCOPES)
+    else:
+        import json
+        info = json.loads(creds_value)
+        creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
@@ -72,5 +83,6 @@ def download_file(file_id: str) -> Optional[str]:
         logger.info(f"Downloaded Drive file {file_id} to {tmp.name}")
         return tmp.name
     except Exception as e:
-        logger.error(f"Failed to download Drive file {file_id}: {e}")
+        import traceback
+        logger.error(f"Failed to download Drive file {file_id}: {e}\n{traceback.format_exc()}")
         return None

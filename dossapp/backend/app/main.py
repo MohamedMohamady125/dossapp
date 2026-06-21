@@ -155,13 +155,14 @@ async def lifespan(app: FastAPI):
     configs = await _load_branch_configs()
     roster_source = ExcelRosterSource(configs)
 
-    if configs:
+    import os
+    is_serverless = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+
+    if configs and not is_serverless:
         await roster_source.refresh_all()
         logger.info(f"Initial Excel load complete ({len(configs)} branches)")
 
     # Skip background tasks in serverless (Vercel) — no long-running processes
-    import os
-    is_serverless = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
     refresh_task = None
     notification_task = None
@@ -203,3 +204,5 @@ app.include_router(webhooks.router)
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "aqua-athletic"}
+
+

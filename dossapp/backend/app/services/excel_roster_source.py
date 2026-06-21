@@ -26,11 +26,20 @@ class ExcelRosterSource(RosterSource):
         self._last_modified: dict[int, Optional[str]] = {}
         self._last_errors: dict[int, list[str]] = {}
         self._lock = asyncio.Lock()
+        self._initial_load_done = False
+
+    async def _ensure_loaded(self):
+        """Lazy-load data on first access (needed for serverless cold starts)."""
+        if not self._initial_load_done and self._configs:
+            self._initial_load_done = True
+            await self.refresh_all()
 
     async def get_branch_roster(self, branch_id: int) -> Optional[BranchRoster]:
+        await self._ensure_loaded()
         return self._cache.get(branch_id)
 
     async def get_all_rosters(self) -> dict[int, BranchRoster]:
+        await self._ensure_loaded()
         return dict(self._cache)
 
     async def refresh_branch(self, branch_id: int) -> bool:
@@ -58,7 +67,7 @@ class ExcelRosterSource(RosterSource):
             # Download and parse
             tmp_path = await asyncio.to_thread(download_file, drive_file_id)
             if not tmp_path:
-                logger.error(f"Failed to download file for branch {branch_id}")
+                logger.error(f"Failed to download file for branch {branch_id} (drive_file_id={drive_file_id})")
                 self._last_errors[branch_id] = [f"Download failed at {datetime.now(timezone.utc).isoformat()}"]
                 return False
 
