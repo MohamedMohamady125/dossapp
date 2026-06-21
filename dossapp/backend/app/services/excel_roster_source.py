@@ -33,6 +33,25 @@ class ExcelRosterSource(RosterSource):
         if not self._initial_load_done and self._configs:
             self._initial_load_done = True
             await self.refresh_all()
+            # Run reconciliation after loading Excel data (for serverless)
+            try:
+                await self._run_reconciliation()
+            except Exception as e:
+                logger.error(f"Post-load reconciliation error: {e}")
+
+    async def _run_reconciliation(self):
+        """Sync Excel payment data to the database."""
+        from app.database import async_session
+        from app.services.reconciliation import reconcile_branch
+
+        for branch_id, roster in self._cache.items():
+            try:
+                async with async_session() as db:
+                    count = await reconcile_branch(roster, db)
+                    if count > 0:
+                        logger.info(f"Reconciled {count} cash payments for branch {branch_id}")
+            except Exception as e:
+                logger.error(f"Reconciliation error for branch {branch_id}: {e}")
 
     async def get_branch_roster(self, branch_id: int) -> Optional[BranchRoster]:
         await self._ensure_loaded()
