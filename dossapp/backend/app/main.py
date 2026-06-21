@@ -102,6 +102,42 @@ async def _refresh_and_reconcile():
         await asyncio.sleep(settings.excel_refresh_interval_seconds)
 
 
+async def _auto_seed():
+    """Seed admin user and branches if the DB is empty (for Vercel ephemeral SQLite)."""
+    from app.models.admin_user import AdminUser
+    from app.utils.auth import hash_password
+
+    try:
+        async with async_session() as db:
+            existing_admin = await db.execute(select(AdminUser))
+            if existing_admin.scalars().first():
+                return  # Already seeded
+
+            # Seed branches
+            for i in range(1, 8):
+                drive_id = getattr(settings, f"drive_file_id_branch_{i}", "")
+                branch = Branch(
+                    name=f"branch_{i}",
+                    display_name=f"Branch {i}",
+                    drive_file_id=drive_id or None,
+                )
+                db.add(branch)
+
+            # Seed admin user
+            admin = AdminUser(
+                username="admin",
+                email="admin@aquaathletic.com",
+                password_hash=hash_password("admin123"),
+                role="admin",
+                is_active=True,
+            )
+            db.add(admin)
+            await db.commit()
+            logger.info("Auto-seeded admin user and branches")
+    except Exception as e:
+        logger.error(f"Auto-seed error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global roster_source
@@ -111,6 +147,9 @@ async def lifespan(app: FastAPI):
     # Auto-create tables for SQLite dev mode
     from app.database import init_db
     await init_db()
+
+    # Auto-seed admin user and branches if DB is empty (needed for Vercel /tmp SQLite)
+    await _auto_seed()
 
     # Load branch configs from DB
     configs = await _load_branch_configs()
