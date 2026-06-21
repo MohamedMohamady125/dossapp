@@ -23,7 +23,8 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
-    """Create all tables (used for SQLite dev mode)."""
+    """Create all tables if they don't exist."""
+    import app.models  # noqa: F401 — ensure all models are registered with Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

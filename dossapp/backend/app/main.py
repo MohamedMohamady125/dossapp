@@ -44,12 +44,16 @@ async def _load_branch_configs() -> list[dict]:
 
     # Fallback to settings if DB has no branches with Drive IDs
     if not configs:
+        branch_names = {
+            1: "Rehab", 2: "Choueifat Cairo", 3: "Choueifat",
+            4: "Madinaty", 5: "Branch 5", 6: "Branch 6", 7: "Branch 7",
+        }
         for i in range(1, 8):
             file_id = getattr(settings, f"drive_file_id_branch_{i}", "")
             if file_id:
                 configs.append({
                     "branch_id": i,
-                    "branch_name": f"Branch {i}",
+                    "branch_name": branch_names.get(i, f"Branch {i}"),
                     "drive_file_id": file_id,
                 })
 
@@ -113,12 +117,21 @@ async def _auto_seed():
             if existing_admin.scalars().first():
                 return  # Already seeded
 
-            # Seed branches
-            for i in range(1, 8):
+            # Seed branches with real names
+            branch_defs = [
+                ("rehab", "Rehab"),
+                ("choueifat_cairo", "Choueifat Cairo"),
+                ("choueifat", "Choueifat"),
+                ("madinaty", "Madinaty"),
+                ("branch_5", "Branch 5"),
+                ("branch_6", "Branch 6"),
+                ("branch_7", "Branch 7"),
+            ]
+            for i, (name, display_name) in enumerate(branch_defs, 1):
                 drive_id = getattr(settings, f"drive_file_id_branch_{i}", "")
                 branch = Branch(
-                    name=f"branch_{i}",
-                    display_name=f"Branch {i}",
+                    name=name,
+                    display_name=display_name,
                     drive_file_id=drive_id or None,
                 )
                 db.add(branch)
