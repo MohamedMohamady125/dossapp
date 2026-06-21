@@ -10,11 +10,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 if not os.environ.get("DATABASE_URL"):
     os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/aqua_athletic.db"
 
-from fastapi import FastAPI  # noqa: E402
-from app.main import app as backend_app  # noqa: E402
+# Set root_path so FastAPI matches routes under /api
+os.environ.setdefault("VERCEL", "1")
 
-# Mount the backend app under /api so Vercel routes work correctly
-app = FastAPI()
-app.mount("/api", backend_app)
+from app.main import app  # noqa: E402
+
+# Override root_path so routes like /auth/customer/login
+# match when Vercel sends /api/auth/customer/login
+app.root_path = "/api"
 
 # Vercel looks for `app` or `handler` at module level

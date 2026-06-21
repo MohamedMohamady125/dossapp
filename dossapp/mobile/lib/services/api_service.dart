@@ -100,6 +100,14 @@ class ApiService {
 
   // ── Customer Auth ──
 
+  static String _extractError(http.Response resp, String fallback) {
+    try {
+      return jsonDecode(resp.body)['detail'] ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   static Future<Map<String, dynamic>> customerLogin(String code, String password) async {
     final resp = await http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/customer/login'),
@@ -107,7 +115,7 @@ class ApiService {
       body: jsonEncode({'login_code': code, 'password': password}),
     );
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Login failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Login failed'));
     }
     final data = jsonDecode(resp.body);
     await _saveTokens(data);
@@ -117,7 +125,7 @@ class ApiService {
   static Future<void> changePassword(String newPassword) async {
     final resp = await _post('/auth/customer/change-password', {'new_password': newPassword});
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed'));
     }
   }
 
@@ -130,7 +138,7 @@ class ApiService {
       body: jsonEncode({'username': username, 'password': password}),
     );
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Login failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Login failed'));
     }
     final data = jsonDecode(resp.body);
     await _saveTokens(data);
@@ -154,7 +162,7 @@ class ApiService {
   static Future<Map<String, dynamic>> createPaymentIntent() async {
     final resp = await _post('/me/pay/paymob/intent', {});
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Payment failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Payment failed'));
     }
     return jsonDecode(resp.body);
   }
@@ -204,7 +212,7 @@ class ApiService {
       {'delivery_method': deliveryMethod},
     );
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Provision failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Provision failed'));
     }
     return jsonDecode(resp.body);
   }
@@ -217,7 +225,7 @@ class ApiService {
       {'delivery_method': deliveryMethod},
     );
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Re-provision failed');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Re-provision failed'));
     }
     return jsonDecode(resp.body);
   }
@@ -225,7 +233,7 @@ class ApiService {
   static Future<Map<String, dynamic>> markAsPaid(int branchId, int athleteNumber) async {
     final resp = await _post('/branches/$branchId/athletes/$athleteNumber/mark-paid', {});
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, jsonDecode(resp.body)['detail'] ?? 'Failed to mark as paid');
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to mark as paid'));
     }
     return jsonDecode(resp.body);
   }
