@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class PaymentIntentResponse(BaseModel):
-    token: str
+    url: str
     amount: str
     currency: str = "EGP"
 

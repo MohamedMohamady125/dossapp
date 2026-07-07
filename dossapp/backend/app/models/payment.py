@@ -10,7 +10,7 @@ class Payment(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     athlete_number = Column(Integer, nullable=False)
     period = Column(String(10), nullable=False)  # e.g. '2026-06'
-    source = Column(String(20), nullable=False)  # 'paymob' | 'cash'
+    source = Column(String(20), nullable=False)  # 'easykash' | 'cash'
     amount_owed_snapshot = Column(Numeric(12, 2), nullable=True)
     amount_paid = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(5), default="EGP", nullable=False)

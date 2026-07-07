@@ -18,7 +18,7 @@ from app.utils.auth import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, decode_token,
 )
-from app.routers.deps import get_current_customer
+from app.routers.deps import get_current_customer, get_current_staff
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -142,11 +142,29 @@ async def admin_login(req: AdminLoginRequest, request: Request, db: AsyncSession
         "role": admin.role,
         "branch_id": admin.assigned_branch_id,
     }
+    if admin.role == "coach":
+        token_data["coach_name"] = admin.coach_name
 
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
+        must_change_password=admin.must_change_password or False,
     )
+
+
+@router.post("/staff/change-password")
+async def staff_change_password(
+    req: ChangePasswordRequest,
+    user: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    user.password_hash = hash_password(req.new_password)
+    user.must_change_password = False
+    db.add(user)
+    return {"message": "Password changed successfully"}
 
 
 @router.post("/refresh", response_model=TokenResponse)

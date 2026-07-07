@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "642947002666",
+    "project_id": "aqua-athletic-41fad",
+    "storage_bucket": "aqua-athletic-41fad.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:642947002666:android:ff8872bbaf034863c06e53",
+        "android_client_info": {
+          "package_name": "com.aquaathletic.aqua_athletic"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdH3iMCNktdxPlvRl3kJZrCaZwGpuTGz4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

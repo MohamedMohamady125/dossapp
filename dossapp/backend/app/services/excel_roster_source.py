@@ -38,6 +38,16 @@ class ExcelRosterSource(RosterSource):
                 await self._run_reconciliation()
             except Exception as e:
                 logger.error(f"Post-load reconciliation error: {e}")
+            # Provision coach login accounts from parsed rosters
+            try:
+                await self._run_coach_sync()
+            except Exception as e:
+                logger.error(f"Post-load coach sync error: {e}")
+            # Push notification triggers (schedule changes, missed sessions)
+            try:
+                await self._run_push_triggers()
+            except Exception as e:
+                logger.error(f"Post-load push trigger error: {e}")
 
     async def _run_reconciliation(self):
         """Sync Excel payment data to the database."""
@@ -52,6 +62,34 @@ class ExcelRosterSource(RosterSource):
                         logger.info(f"Reconciled {count} cash payments for branch {branch_id}")
             except Exception as e:
                 logger.error(f"Reconciliation error for branch {branch_id}: {e}")
+
+    async def _run_coach_sync(self):
+        """Auto-create coach login accounts for coaches found in the rosters."""
+        from app.database import async_session
+        from app.services.coach_accounts import sync_coach_accounts
+
+        for branch_id, roster in self._cache.items():
+            try:
+                async with async_session() as db:
+                    count = await sync_coach_accounts(roster, db)
+                    if count > 0:
+                        logger.info(f"Created {count} coach accounts for branch {branch_id}")
+            except Exception as e:
+                logger.error(f"Coach sync error for branch {branch_id}: {e}")
+
+    async def _run_push_triggers(self):
+        """Detect schedule changes / missed sessions and send notifications."""
+        from app.database import async_session
+        from app.services.push_triggers import run_roster_triggers
+
+        for branch_id, roster in self._cache.items():
+            try:
+                async with async_session() as db:
+                    counts = await run_roster_triggers(roster, db)
+                    if counts["schedule"] or counts["missed"]:
+                        logger.info(f"Push triggers branch {branch_id}: {counts}")
+            except Exception as e:
+                logger.error(f"Push trigger error for branch {branch_id}: {e}")
 
     async def get_branch_roster(self, branch_id: int) -> Optional[BranchRoster]:
         await self._ensure_loaded()

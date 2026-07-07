@@ -36,10 +36,8 @@ class _BillScreenState extends State<BillScreen> {
     setState(() => _paying = true);
     try {
       final intent = await ApiService.createPaymentIntent();
-      final token = intent['token'];
-      // Open Paymob checkout in browser
-      // This presents the payment as in-person swimming lessons at a physical branch
-      final url = Uri.parse('https://accept.paymob.com/api/acceptance/iframes/0?payment_token=$token');
+      // Open Easykash hosted checkout in browser
+      final url = Uri.parse(intent['url'] as String);
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       }

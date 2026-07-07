@@ -59,6 +59,23 @@ class ApiService {
     return resp;
   }
 
+  static Future<http.Response> _delete(String path) async {
+    final resp = await http.delete(
+      Uri.parse('${AppConstants.baseUrl}$path'),
+      headers: await _headers(),
+    );
+    if (resp.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) {
+        return http.delete(
+          Uri.parse('${AppConstants.baseUrl}$path'),
+          headers: await _headers(),
+        );
+      }
+    }
+    return resp;
+  }
+
   static Future<bool> _tryRefresh() async {
     _refreshToken ??= await _storage.read(key: 'refresh_token');
     if (_refreshToken == null) return false;
@@ -145,6 +162,23 @@ class ApiService {
     return data;
   }
 
+  static Future<void> staffChangePassword(String newPassword) async {
+    final resp = await _post('/auth/staff/change-password', {'new_password': newPassword});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed'));
+    }
+  }
+
+  // ── Coach Endpoints ──
+
+  static Future<Map<String, dynamic>> getCoachSchedule() async {
+    final resp = await _get('/coach/schedule');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to load schedule'));
+    }
+    return jsonDecode(resp.body);
+  }
+
   // ── Customer Endpoints ──
 
   static Future<AthleteProfile> getProfile() async {
@@ -160,7 +194,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> createPaymentIntent() async {
-    final resp = await _post('/me/pay/paymob/intent', {});
+    final resp = await _post('/me/pay/easykash/checkout', {});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Payment failed'));
     }
@@ -181,6 +215,44 @@ class ApiService {
 
   static String receiptPdfUrl(int receiptId) {
     return '${AppConstants.baseUrl}/me/receipts/$receiptId/pdf';
+  }
+
+  // ── Notifications ──
+
+  static Future<void> registerDevice(String token, String platform) async {
+    final resp = await _post('/me/devices', {'token': token, 'platform': platform});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Device registration failed'));
+    }
+  }
+
+  static Future<void> unregisterDevice(String token) async {
+    final resp = await _delete('/me/devices/$token');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Device unregistration failed'));
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getNotifications({int limit = 50, int offset = 0}) async {
+    final resp = await _get('/me/notifications?limit=$limit&offset=$offset');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load notifications');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<int> getUnreadCount() async {
+    final resp = await _get('/me/notifications/unread-count');
+    if (resp.statusCode != 200) return 0;
+    return jsonDecode(resp.body)['unread'] ?? 0;
+  }
+
+  static Future<void> markNotificationRead(int id) async {
+    final resp = await _post('/me/notifications/$id/read', {});
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to mark read');
+  }
+
+  static Future<void> markAllNotificationsRead() async {
+    final resp = await _post('/me/notifications/read-all', {});
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to mark all read');
   }
 
   // ── Admin Endpoints ──

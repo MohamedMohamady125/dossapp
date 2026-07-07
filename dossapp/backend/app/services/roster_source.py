@@ -36,6 +36,7 @@ class Athlete:
     comment: Optional[str] = None
     receipt_no: Optional[str] = None
     schedule: list[ScheduleEntry] = field(default_factory=list)
+    attendance: dict[str, str] = field(default_factory=dict)  # ISO date -> 'P' | 'A'
 
 
 @dataclass

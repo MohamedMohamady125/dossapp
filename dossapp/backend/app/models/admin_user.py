@@ -10,8 +10,10 @@ class AdminUser(Base):
     username = Column(String(100), nullable=False, unique=True)
     email = Column(String(255), nullable=True, unique=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False)  # 'admin' | 'assistant'
+    role = Column(String(20), nullable=False)  # 'admin' | 'assistant' | 'coach'
     assigned_branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
+    coach_name = Column(String(255), nullable=True)  # matches coach name in Excel schedule (role='coach')
+    must_change_password = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)

@@ -8,6 +8,7 @@ import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import 'bill_screen.dart';
 import 'receipts_screen.dart';
+import 'notifications_screen.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -19,6 +20,26 @@ class CustomerHomeScreen extends StatefulWidget {
 class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _currentIndex = 0;
   int _refreshKey = 0;
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnread();
+  }
+
+  Future<void> _loadUnread() async {
+    final count = await ApiService.getUnreadCount();
+    if (mounted) setState(() => _unreadCount = count);
+  }
+
+  Widget _bellIcon(IconData icon) {
+    if (_unreadCount <= 0) return Icon(icon);
+    return Badge(
+      label: Text('$_unreadCount'),
+      child: Icon(icon),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +49,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() => _currentIndex = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-            NavigationDestination(icon: Icon(Icons.payment_outlined), selectedIcon: Icon(Icons.payment), label: 'Pay'),
-            NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Receipts'),
+          onDestinationSelected: (i) {
+            setState(() => _currentIndex = i);
+            _loadUnread();
+          },
+          destinations: [
+            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+            const NavigationDestination(icon: Icon(Icons.payment_outlined), selectedIcon: Icon(Icons.payment), label: 'Pay'),
+            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Receipts'),
+            NavigationDestination(
+              icon: _bellIcon(Icons.notifications_outlined),
+              selectedIcon: _bellIcon(Icons.notifications),
+              label: 'Alerts',
+            ),
           ],
         ),
       ),
@@ -44,6 +73,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++));
       case 1: return BillScreen(key: ValueKey('bill-$_refreshKey'));
       case 2: return ReceiptsScreen(key: ValueKey('rec-$_refreshKey'));
+      case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread);
       default: return const SizedBox.shrink();
     }
   }

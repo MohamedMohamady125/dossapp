@@ -11,7 +11,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session, engine
 from app.models.branch import Branch
-from app.routers import auth, customer, admin, webhooks
+from app.routers import auth, customer, admin, coach, cron, notifications, webhooks
 from app.services.excel_roster_source import ExcelRosterSource
 from app.services.reconciliation import reconcile_branch
 from app.services.identity_guard import check_identity_mismatches
@@ -89,6 +89,13 @@ async def _refresh_and_reconcile():
                                 logger.info(f"Reconciled {count} cash payments for branch {branch_id}")
 
                         async with async_session() as db:
+                            # Provision coach login accounts for new coaches
+                            from app.services.coach_accounts import sync_coach_accounts
+                            new_coaches = await sync_coach_accounts(roster, db)
+                            if new_coaches > 0:
+                                logger.info(f"Created {new_coaches} coach accounts for branch {branch_id}")
+
+                        async with async_session() as db:
                             # Identity guard — detect athlete number reuse
                             mismatches = await check_identity_mismatches(roster, db)
                             if mismatches > 0:
@@ -100,6 +107,16 @@ async def _refresh_and_reconcile():
                                 await save_roster_snapshot(roster, db)
                         except Exception as e:
                             logger.error(f"Snapshot save error for branch {branch_id}: {e}")
+
+                        # Push notifications: schedule changes + missed sessions
+                        try:
+                            from app.services.push_triggers import run_roster_triggers
+                            async with async_session() as db:
+                                counts = await run_roster_triggers(roster, db)
+                                if counts["schedule"] or counts["missed"]:
+                                    logger.info(f"Push triggers branch {branch_id}: {counts}")
+                        except Exception as e:
+                            logger.error(f"Push trigger error for branch {branch_id}: {e}")
         except Exception as e:
             logger.error(f"Refresh/reconciliation error: {e}")
 
@@ -211,7 +228,11 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(customer.router)
 app.include_router(admin.router)
+app.include_router(coach.router)
+app.include_router(cron.router)
+app.include_router(notifications.router)
 app.include_router(webhooks.router)
+app.include_router(webhooks.success_router)
 
 
 @app.get("/health")

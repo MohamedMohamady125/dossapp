@@ -24,11 +24,13 @@ class Settings(BaseSettings):
     drive_file_id_branch_6: str = ""
     drive_file_id_branch_7: str = ""
 
-    # Paymob
-    paymob_api_key: str = ""
-    paymob_secret_key: str = ""
-    paymob_hmac_secret: str = ""
-    paymob_integration_id: str = ""
+    # Easykash payment gateway
+    easykash_api_key: str = ""  # private API key from seller dashboard (Authorization header)
+    easykash_hmac_secret: str = ""  # HMAC secretKey from seller dashboard
+    easykash_payment_options: str = ""  # comma-separated method codes, e.g. "2,4,6"
+    easykash_signature_fields: str = "Amount,Currency,PaymentMethod,easykashRef,customerReference"
+    easykash_allow_unverified: bool = False  # dev only: accept callbacks without HMAC secret
+    public_base_url: str = "https://dossapp-tau.vercel.app/api"  # for post-payment redirect
 
     # Notifications
     sms_provider: str = "stub"
@@ -45,6 +47,16 @@ class Settings(BaseSettings):
     whatsapp_provider: str = "stub"
     whatsapp_api_key: str = ""
     whatsapp_phone_number_id: str = ""
+
+    # Push notifications (Firebase Cloud Messaging)
+    firebase_credentials_json: str = ""  # file path or inline JSON
+    firebase_project_id: str = ""  # optional; falls back to project_id in credentials
+
+    # Cron endpoint auth (Vercel sends Authorization: Bearer $CRON_SECRET)
+    cron_secret: str = ""
+
+    # Day of month for unpaid reminder
+    payment_reminder_day: int = 25
 
     # Excel refresh
     excel_refresh_interval_seconds: int = 60

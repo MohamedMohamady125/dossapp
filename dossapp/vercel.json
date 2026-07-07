@@ -9,6 +9,16 @@
       "use": "@vercel/static"
     }
   ],
+  "crons": [
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 9 25 * *"
+    }
+  ],
   "routes": [
     {
       "src": "/api/(.*)",

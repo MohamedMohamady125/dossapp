@@ -5,5 +5,9 @@ from app.models.payment import Payment
 from app.models.receipt import Receipt
 from app.models.notification_log import NotificationLog
 from app.models.roster_snapshot import RosterSnapshot
+from app.models.push import DeviceToken, InboxNotification, ScheduleSnapshot, NotificationDedupe
 
-__all__ = ["Branch", "AdminUser", "Account", "Payment", "Receipt", "NotificationLog", "RosterSnapshot"]
+__all__ = [
+    "Branch", "AdminUser", "Account", "Payment", "Receipt", "NotificationLog", "RosterSnapshot",
+    "DeviceToken", "InboxNotification", "ScheduleSnapshot", "NotificationDedupe",
+]

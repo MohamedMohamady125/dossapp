@@ -30,6 +30,7 @@ mobile/android/local.properties
 !vercel.json
 !public/**/*.json
 !mobile/web/manifest.json
+!mobile/android/app/google-services.json
 
 # Test artifacts
 backend/tests/sample_workbook.xlsx

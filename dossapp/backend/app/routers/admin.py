@@ -17,6 +17,7 @@ from app.models.payment import Payment
 from app.models.receipt import Receipt
 from app.routers.deps import get_current_admin, enforce_branch_scope
 from app.schemas.athlete import AthleteDetail, ProvisionRequest, ProvisionResponse, ScheduleSlot
+from app.schemas.notification import TestSendRequest
 from app.schemas.payment import PaymentOut, ReceiptOut
 from app.services.notifications import enqueue_notification
 from app.utils.auth import generate_login_code, generate_temp_password, hash_password
@@ -50,6 +51,31 @@ async def list_branches(admin: AdminUser = Depends(get_current_admin)):
             "athlete_count": len(roster.athletes),
         })
     return branches
+
+
+@router.get("/admin/coaches")
+async def list_coach_accounts(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List auto-provisioned coach accounts so the admin can hand out credentials."""
+    query = select(AdminUser).where(AdminUser.role == "coach")
+    if admin.role == "assistant":
+        query = query.where(AdminUser.assigned_branch_id == admin.assigned_branch_id)
+    result = await db.execute(query.order_by(AdminUser.assigned_branch_id, AdminUser.coach_name))
+
+    return [
+        {
+            "id": c.id,
+            "username": c.username,
+            "coach_name": c.coach_name,
+            "branch_id": c.assigned_branch_id,
+            "is_active": c.is_active,
+            "must_change_password": c.must_change_password,
+            "last_login_at": c.last_login_at.isoformat() if c.last_login_at else None,
+        }
+        for c in result.scalars().all()
+    ]
 
 
 @router.get("/branches/{branch_id}/athletes", response_model=list[AthleteDetail])
@@ -606,3 +632,77 @@ async def admin_download_receipt_pdf(
 async def excel_health(admin: AdminUser = Depends(get_current_admin)):
     source = _get_roster_source()
     return source.get_health()
+
+
+@router.get("/admin/debug/attendance/{branch_id}")
+async def debug_attendance(
+    branch_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Inspect parsed attendance marks per athlete — for tuning the date-column heuristic."""
+    enforce_branch_scope(admin, branch_id)
+    source = _get_roster_source()
+    roster = await source.get_branch_roster(branch_id)
+    if not roster:
+        raise HTTPException(status_code=404, detail="Branch data not available")
+
+    athletes_with_marks = [a for a in roster.athletes if a.attendance]
+    sample = [
+        {
+            "athlete_number": a.athlete_number,
+            "name": a.name,
+            "attendance": dict(sorted(a.attendance.items())),
+        }
+        for a in athletes_with_marks[:50]
+    ]
+    all_dates = sorted({d for a in athletes_with_marks for d in a.attendance})
+    return {
+        "branch_id": branch_id,
+        "branch_name": roster.branch_name,
+        "athletes_total": len(roster.athletes),
+        "athletes_with_attendance": len(athletes_with_marks),
+        "detected_dates": all_dates,
+        "sample": sample,
+    }
+
+
+@router.post("/admin/notifications/test-send")
+async def test_send_notification(
+    payload: TestSendRequest,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a test push+inbox notification to a customer account (dry_run uses FCM validate_only)."""
+    enforce_branch_scope(admin, payload.branch_id)
+
+    result = await db.execute(
+        select(Account).where(
+            Account.branch_id == payload.branch_id,
+            Account.athlete_number == payload.athlete_number,
+        )
+    )
+    account = result.scalar_one_or_none()
+    if not account:
+        raise HTTPException(status_code=404, detail="No customer account for that athlete")
+
+    from app.models.push import DeviceToken
+    from app.services.push_service import send_fcm, send_push_to_account, push_configured
+
+    if payload.dry_run:
+        tokens_result = await db.execute(
+            select(DeviceToken).where(DeviceToken.account_id == account.id, DeviceToken.is_active == True)  # noqa: E712
+        )
+        tokens = tokens_result.scalars().all()
+        results = []
+        for device in tokens:
+            ok, error = await send_fcm(device.token, payload.title, payload.body, validate_only=True)
+            results.append({"platform": device.platform, "ok": ok, "error": error})
+        return {
+            "dry_run": True,
+            "push_configured": push_configured(),
+            "devices": len(tokens),
+            "results": results,
+        }
+
+    await send_push_to_account(db, account.id, "test", payload.title, payload.body)
+    return {"dry_run": False, "message": "Notification sent"}

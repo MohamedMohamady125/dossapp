@@ -289,16 +289,92 @@ class AttendanceExtra:
     comment: Optional[str] = None
 
 
-def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list[ScheduleEntry]], dict[int, AttendanceExtra], list[str]]:
-    """Parse attendance sheet — handles all layout variations."""
+# Attendance mark classification (lowercased). Any other non-empty mark
+# defaults to Present — conservative, avoids false "missed sessions" alerts.
+ABSENT_MARKS = {"a", "ab", "abs", "absent", "x", "✗", "✘", "غ", "غياب", "0"}
+PRESENT_MARKS = {"p", "present", "✓", "✔", "1", "h", "attended"}
+
+
+def _classify_attendance_mark(raw) -> Optional[str]:
+    """Classify a cell mark as 'P'/'A', or None for empty (no session recorded)."""
+    s = _clean(raw).lower()
+    if not s:
+        return None
+    if s in ABSENT_MARKS:
+        return "A"
+    return "P"
+
+
+def _header_cell_to_date(val, default_year: int) -> Optional[str]:
+    """Interpret a header cell as a session date. Returns ISO date or None."""
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        if 2000 <= val.year <= 2100:
+            return val.strftime("%Y-%m-%d")
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    # Excel serial number (roughly 2005–2060)
+    try:
+        num = float(s)
+        if 38000 < num < 60000:
+            return (EXCEL_EPOCH + timedelta(days=num)).strftime("%Y-%m-%d")
+        return None
+    except (ValueError, TypeError, OverflowError):
+        pass
+    # String date with year: 5/10/2026, 5-10-26, 5.10.2026
+    m = re.fullmatch(r"(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})", s)
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if y < 100:
+            y += 2000
+        try:
+            return datetime(y, mo, d).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    # Day/month only: 5/10, 5-10 — infer year
+    m = re.fullmatch(r"(\d{1,2})[/\-.](\d{1,2})", s)
+    if m:
+        d, mo = int(m.group(1)), int(m.group(2))
+        try:
+            return datetime(default_year, mo, d).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
+
+
+def _detect_date_columns(ws: Worksheet, max_col: int, known_cols: set[int]) -> dict[int, str]:
+    """Find per-session date columns in the header area. Returns {col: ISO date}."""
+    default_year = datetime.now().year
+    date_cols: dict[int, str] = {}
+    max_row = ws.max_row or 0
+    for scan_row in range(1, min(6, max_row + 1)):
+        for col in range(1, min(60, max_col + 1)):
+            if col in known_cols or col in date_cols:
+                continue
+            iso = _header_cell_to_date(ws.cell(row=scan_row, column=col).value, default_year)
+            if iso:
+                date_cols[col] = iso
+    return date_cols
+
+
+def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list[ScheduleEntry]], dict[int, AttendanceExtra], dict[int, dict[str, str]], list[str]]:
+    """Parse attendance sheet — handles all layout variations.
+
+    Returns (schedule_map, extras_map, attendance_map, errors) where
+    attendance_map is {athlete_number: {iso_date: 'P'|'A'}}.
+    """
     errors: list[str] = []
     schedule_map: dict[int, list[ScheduleEntry]] = {}
     extras_map: dict[int, AttendanceExtra] = {}
+    attendance_map: dict[int, dict[str, str]] = {}
 
     max_row = ws.max_row or 0
     max_col = ws.max_column or 0
     if max_row < 2 or max_col < 4:
-        return schedule_map, extras_map, errors
+        return schedule_map, extras_map, attendance_map, errors
 
     # Detect column layout from first header-like row
     coach_col: Optional[int] = None
@@ -331,7 +407,13 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                 pr_col = col
 
     if id_col is None and name_col is None:
-        return schedule_map, extras_map, errors
+        return schedule_map, extras_map, attendance_map, errors
+
+    # Detect per-session date columns (attendance marks live under them)
+    known_cols = {c for c in (coach_col, id_col, name_col, pay_col, type_col, step_col, comment_col, pr_col) if c}
+    date_cols = _detect_date_columns(ws, max_col, known_cols)
+    if date_cols:
+        logger.info(f"  Attendance '{day_pair}': detected {len(date_cols)} date columns: {sorted(date_cols.values())}")
 
     current_time_block: Optional[str] = None
     current_coach: Optional[str] = None
@@ -376,6 +458,12 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
             )
             schedule_map.setdefault(athlete_num, []).append(entry)
 
+            # Attendance marks under date columns
+            for col, iso_date in date_cols.items():
+                mark = _classify_attendance_mark(ws.cell(row=row_idx, column=col).value)
+                if mark:
+                    attendance_map.setdefault(athlete_num, {})[iso_date] = mark
+
             # Extract pay/receipt/comment extras
             pay_raw = None
             if pay_col:
@@ -401,7 +489,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                     existing.comment = comment_raw
                 extras_map[athlete_num] = existing
 
-    return schedule_map, extras_map, errors
+    return schedule_map, extras_map, attendance_map, errors
 
 
 def parse_skills_sheet(ws: Worksheet) -> tuple[dict, list[str], list[str]]:
@@ -489,12 +577,16 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
     # Parse attendance sheets — merge schedule + extras
     for ws, day_pair in attendance_sheets:
         try:
-            schedule_map, extras_map, att_errors = parse_attendance_sheet(ws, day_pair)
+            schedule_map, extras_map, attendance_map, att_errors = parse_attendance_sheet(ws, day_pair)
             errors.extend(att_errors)
 
             for num, entries in schedule_map.items():
                 if num in athlete_by_num:
                     athlete_by_num[num].schedule.extend(entries)
+
+            for num, marks in attendance_map.items():
+                if num in athlete_by_num:
+                    athlete_by_num[num].attendance.update(marks)
 
             for num, extra in extras_map.items():
                 if num in athlete_by_num:

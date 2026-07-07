@@ -52,6 +52,43 @@ async def get_current_admin(
     return admin
 
 
+async def get_current_coach(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> AdminUser:
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access" or payload.get("role") != "coach":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    coach_id = payload.get("sub")
+    result = await db.execute(select(AdminUser).where(AdminUser.id == int(coach_id)))
+    coach = result.scalar_one_or_none()
+
+    if not coach or not coach.is_active or coach.role != "coach":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Coach not found or inactive")
+
+    return coach
+
+
+async def get_current_staff(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> AdminUser:
+    """Any active AdminUser — admin, assistant, or coach."""
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access" or payload.get("role") not in ("admin", "assistant", "coach"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(AdminUser).where(AdminUser.id == int(user_id)))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    return user
+
+
 def enforce_branch_scope(admin: AdminUser, branch_id: int):
     """Enforce that an assistant can only access their assigned branch."""
     if admin.role == "admin":

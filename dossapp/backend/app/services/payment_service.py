@@ -27,22 +27,23 @@ async def get_next_receipt_sequence(db: AsyncSession) -> int:
     return count + 1
 
 
-async def record_paymob_payment(
+async def record_online_payment(
     db: AsyncSession,
     branch_id: int,
     athlete_number: int,
     period: str,
     amount_paid: Decimal,
     amount_owed: Optional[Decimal],
-    paymob_transaction_id: str,
+    transaction_id: str,
     athlete_name: str,
     branch_name: str,
+    source: str = "easykash",
     level: Optional[str] = None,
     athlete_type: Optional[str] = None,
     phone: Optional[str] = None,
     email: Optional[str] = None,
 ) -> Optional[Receipt]:
-    """Record a Paymob payment and generate receipt. Idempotent."""
+    """Record an online gateway payment and generate receipt. Idempotent."""
 
     # Check idempotency
     existing = await db.execute(
@@ -50,23 +51,23 @@ async def record_paymob_payment(
             Payment.branch_id == branch_id,
             Payment.athlete_number == athlete_number,
             Payment.period == period,
-            Payment.source == "paymob",
+            Payment.source == source,
         )
     )
     if existing.scalar_one_or_none():
-        logger.info(f"Paymob payment already recorded for ({branch_id}, {athlete_number}, {period})")
+        logger.info(f"{source} payment already recorded for ({branch_id}, {athlete_number}, {period})")
         return None
 
-    # Create payment
+    # Create payment (gateway reference stored in the paymob_transaction_id column)
     payment = Payment(
         branch_id=branch_id,
         athlete_number=athlete_number,
         period=period,
-        source="paymob",
+        source=source,
         amount_owed_snapshot=amount_owed,
         amount_paid=amount_paid,
         currency="EGP",
-        paymob_transaction_id=paymob_transaction_id,
+        paymob_transaction_id=transaction_id,
         status="paid",
         paid_at=datetime.now(timezone.utc),
     )
@@ -89,7 +90,7 @@ async def record_paymob_payment(
         period=period,
         amount_paid=str(amount_paid),
         payment_channel="Online",
-        paymob_transaction_id=paymob_transaction_id,
+        paymob_transaction_id=transaction_id,
     )
 
     receipt = Receipt(
@@ -105,7 +106,7 @@ async def record_paymob_payment(
         period=period,
         amount_paid=str(amount_paid),
         payment_channel="Online",
-        paymob_transaction_id=paymob_transaction_id,
+        paymob_transaction_id=transaction_id,
         send_status={"sms": "pending", "email": "pending", "whatsapp": "pending"},
     )
     db.add(receipt)

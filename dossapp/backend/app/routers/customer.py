@@ -26,6 +26,28 @@ def _get_roster_source():
     return roster_source
 
 
+def _fmt_amount(amount) -> str:
+    """Decimal → plain string without trailing zeros (800.00 → '800')."""
+    s = format(amount, "f")
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+async def _last_paid_amount(db: AsyncSession, branch_id: int, athlete_number: int, before_period: str):
+    """Most recent prior-period payment amount — used as this month's bill when Excel Pay is empty."""
+    result = await db.execute(
+        select(Payment.amount_paid)
+        .where(
+            Payment.branch_id == branch_id,
+            Payment.athlete_number == athlete_number,
+            Payment.period < before_period,
+            Payment.status == "paid",
+        )
+        .order_by(Payment.period.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 @router.get("/", response_model=AthleteProfile)
 async def get_profile(account: Account = Depends(get_current_customer)):
     source = _get_roster_source()
@@ -84,7 +106,7 @@ async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSe
             Payment.status == "paid",
         )
     )
-    payment = result.scalar_one_or_none()
+    payment = result.scalars().first()
 
     receipt_number = None
     if payment:
@@ -93,9 +115,17 @@ async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSe
         )
         receipt_number = receipt_result.scalar_one_or_none()
 
+    # Excel Pay filled = already paid (cash). For unpaid athletes fall back to
+    # the last prior-period payment so online checkout has an amount to charge.
+    amount_owed = athlete.pay
+    if not amount_owed and not payment:
+        last = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
+        if last is not None:
+            amount_owed = _fmt_amount(last)
+
     return BillResponse(
         period=period,
-        amount_owed=athlete.pay,
+        amount_owed=amount_owed,
         is_paid=payment is not None,
         receipt_number=receipt_number,
         branch_name=roster.branch_name,
@@ -106,8 +136,12 @@ async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSe
     )
 
 
-@router.post("/pay/paymob/intent", response_model=PaymentIntentResponse)
-async def create_pay_intent(account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+@router.post("/pay/easykash/checkout", response_model=PaymentIntentResponse)
+async def create_pay_checkout(account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+    from app.config import settings
+    if not settings.easykash_api_key:
+        raise HTTPException(status_code=503, detail="Online payment not configured")
+
     source = _get_roster_source()
     roster = await source.get_branch_roster(account.branch_id)
     if not roster:
@@ -116,9 +150,6 @@ async def create_pay_intent(account: Account = Depends(get_current_customer), db
     athlete = next((a for a in roster.athletes if a.athlete_number == account.athlete_number), None)
     if not athlete:
         raise HTTPException(status_code=404, detail="No active enrollment")
-
-    if not athlete.pay:
-        raise HTTPException(status_code=400, detail="No bill amount set for this period")
 
     # Check not already paid
     period = datetime.now().strftime("%Y-%m")
@@ -130,14 +161,22 @@ async def create_pay_intent(account: Account = Depends(get_current_customer), db
             Payment.status == "paid",
         )
     )
-    if result.scalar_one_or_none():
+    if result.scalars().first():
         raise HTTPException(status_code=400, detail="Already paid for this period")
 
-    amount = Decimal(athlete.pay)
+    # Excel Pay filled = paid cash, so an unpaid athlete has no pay value.
+    # Bill amount = last prior-period payment (Excel pay kept as fallback).
+    if athlete.pay:
+        amount = Decimal(athlete.pay)
+    else:
+        amount = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
+        if amount is None:
+            raise HTTPException(status_code=400, detail="No bill amount set for this period")
+    amount = Decimal(_fmt_amount(amount))
     phone = normalize_phone(athlete.phone1)
 
-    from app.services.paymob import create_payment_intent
-    intent = await create_payment_intent(
+    from app.services.easykash import create_checkout
+    checkout = await create_checkout(
         amount_egp=amount,
         athlete_name=athlete.name,
         athlete_number=athlete.athlete_number,
@@ -147,10 +186,10 @@ async def create_pay_intent(account: Account = Depends(get_current_customer), db
         email=account.email,
     )
 
-    if not intent:
+    if not checkout:
         raise HTTPException(status_code=502, detail="Payment service unavailable")
 
-    return PaymentIntentResponse(token=intent["token"], amount=str(amount))
+    return PaymentIntentResponse(url=checkout["url"], amount=str(amount))
 
 
 @router.get("/receipts", response_model=list[ReceiptOut])
