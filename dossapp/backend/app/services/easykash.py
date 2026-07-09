@@ -93,7 +93,7 @@ async def create_checkout(
 
 
 def verify_signature(payload: dict, received: str) -> bool:
-    """Verify the Easykash callback signatureHash (HMAC-SHA256, hex).
+    """Verify the Easykash callback signatureHash (HMAC-SHA512, hex (confirmed from live callback 2026-07-09)).
 
     Field order comes from EASYKASH_SIGNATURE_FIELDS. On mismatch, logs the
     concatenated string and computed hash (never the secret) so the correct
@@ -108,7 +108,7 @@ def verify_signature(payload: dict, received: str) -> bool:
     computed = hmac.new(
         settings.easykash_hmac_secret.encode("utf-8"),
         concatenated.encode("utf-8"),
-        hashlib.sha256,
+        hashlib.sha512,
     ).hexdigest()
 
     if hmac.compare_digest(computed.lower(), received.lower()):

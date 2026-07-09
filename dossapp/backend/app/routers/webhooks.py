@@ -55,6 +55,11 @@ async def easykash_webhook(request: Request):
 
     payload = await _extract_payload(request)
     logger.info(f"Easykash callback received: {payload}")
+    return await _process_callback(payload)
+
+
+async def _process_callback(payload: dict) -> dict:
+    """Verify signature, record payment, generate receipt. Raises HTTPException on rejection."""
 
     # ── Signature verification ──
     received_sig = _get_ci(payload, "signatureHash", "signature", "hash")
@@ -151,8 +156,20 @@ success_router = APIRouter(tags=["webhooks"])
 
 
 @success_router.get("/pay/success", response_class=HTMLResponse)
-async def pay_success():
-    """Post-payment landing page (Easykash redirects the customer here)."""
+async def pay_success(request: Request):
+    """Post-payment landing page (Easykash redirects the customer here).
+
+    Easykash may append the payment result as query params on the redirect —
+    process them like a callback (best effort; the page renders regardless).
+    """
+    params = dict(request.query_params)
+    if params:
+        logger.info(f"Easykash redirect params on /pay/success: {params}")
+        try:
+            result = await _process_callback(params)
+            logger.info(f"Redirect-param payment processing result: {result}")
+        except Exception as e:
+            logger.warning(f"Redirect params not processable as payment: {e}")
     return """<!DOCTYPE html>
 <html lang="en">
 <head>

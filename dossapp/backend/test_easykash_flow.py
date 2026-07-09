@@ -67,7 +67,7 @@ def check(label, cond, extra=""):
 def sign(payload: dict) -> str:
     fields = [f.strip() for f in settings.easykash_signature_fields.split(",")]
     concatenated = "".join(str(payload.get(f, "")) for f in fields)
-    return hmac.new(b"test-hmac-secret", concatenated.encode(), hashlib.sha256).hexdigest()
+    return hmac.new(b"test-hmac-secret", concatenated.encode(), hashlib.sha512).hexdigest()
 
 
 PERIOD = datetime.now().strftime("%Y-%m")
@@ -76,13 +76,20 @@ PREV_PERIOD = f"{_now.year - 1}-12" if _now.month == 1 else f"{_now.year}-{_now.
 
 
 def callback_payload(**overrides):
+    # Mirrors the real Easykash callback shape (captured live 2026-07-09)
     payload = {
-        "Amount": "800",
-        "Currency": "EGP",
-        "PaymentMethod": "Card",
-        "easykashRef": "EK-TEST-001",
-        "customerReference": f"AQUA-1-1-{PERIOD}",
+        "ProductCode": "TST1234",
+        "Amount": 800,
+        "ProductType": "Direct Pay",
+        "PaymentMethod": "Credit & Debit Card",
+        "BuyerName": "Omar Hassan",
+        "BuyerEmail": "customer@aquaathletic.com",
+        "BuyerMobile": "+201001234567",
         "status": "PAID",
+        "voucher": "",
+        "easykashRef": "EK-TEST-001",
+        "VoucherData": "Direct Pay",
+        "customerReference": f"AQUA-1-1-{PERIOD}",
     }
     payload.update(overrides)
     payload["signatureHash"] = sign(payload)

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     easykash_api_key: str = ""  # private API key from seller dashboard (Authorization header)
     easykash_hmac_secret: str = ""  # HMAC secretKey from seller dashboard
     easykash_payment_options: str = ""  # comma-separated method codes, e.g. "2,4,6"
-    easykash_signature_fields: str = "Amount,Currency,PaymentMethod,easykashRef,customerReference"
+    easykash_signature_fields: str = "ProductCode,Amount,ProductType,PaymentMethod,status,easykashRef,customerReference"
     easykash_allow_unverified: bool = False  # dev only: accept callbacks without HMAC secret
     public_base_url: str = "https://dossapp-tau.vercel.app/api"  # for post-payment redirect
 
