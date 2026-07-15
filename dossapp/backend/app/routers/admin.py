@@ -10,9 +10,12 @@ from fastapi.responses import Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.database import get_db
 from app.models.account import Account
 from app.models.admin_user import AdminUser
+from app.models.branch import Branch
 from app.models.payment import Payment
 from app.models.receipt import Receipt
 from app.routers.deps import get_current_admin, enforce_branch_scope
@@ -34,6 +37,151 @@ router = APIRouter(tags=["admin"])
 def _get_roster_source():
     from app.main import roster_source
     return roster_source
+
+
+# ── Branch management schemas ──────────────────────────────────────────
+
+class BranchCreate(BaseModel):
+    name: str
+    display_name: str
+    drive_file_id: Optional[str] = None
+
+
+class BranchUpdate(BaseModel):
+    name: Optional[str] = None
+    display_name: Optional[str] = None
+    drive_file_id: Optional[str] = None
+
+
+class BranchOut(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    drive_file_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ── Branch management endpoints (admin-only) ──────────────────────────
+
+def _require_admin_role(admin: AdminUser):
+    if admin.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+
+@router.get("/admin/branches/manage", response_model=list[BranchOut])
+async def list_branches_manage(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all branches from DB with full config details."""
+    _require_admin_role(admin)
+    result = await db.execute(select(Branch).order_by(Branch.id))
+    return result.scalars().all()
+
+
+@router.post("/admin/branches", response_model=BranchOut, status_code=201)
+async def create_branch(
+    payload: BranchCreate,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new branch, register it in roster source, and trigger initial refresh."""
+    _require_admin_role(admin)
+
+    # Check unique name
+    existing = await db.execute(select(Branch).where(Branch.name == payload.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Branch name already exists")
+
+    branch = Branch(name=payload.name, display_name=payload.display_name, drive_file_id=payload.drive_file_id or None)
+    db.add(branch)
+    await db.commit()
+    await db.refresh(branch)
+
+    # Update roster source config and refresh (after commit so DB connection isn't held during Drive download)
+    source = _get_roster_source()
+    source.update_config(branch.id, {
+        "branch_id": branch.id,
+        "branch_name": branch.display_name,
+        "drive_file_id": branch.drive_file_id,
+    })
+    if branch.drive_file_id:
+        await source.refresh_branch(branch.id)
+
+    return branch
+
+
+@router.put("/admin/branches/{branch_id}", response_model=BranchOut)
+async def update_branch(
+    branch_id: int,
+    payload: BranchUpdate,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a branch's name, display_name, or drive_file_id."""
+    _require_admin_role(admin)
+
+    result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch = result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    old_drive_file_id = branch.drive_file_id
+
+    if payload.name is not None:
+        # Check unique name (excluding self)
+        dup = await db.execute(select(Branch).where(Branch.name == payload.name, Branch.id != branch_id))
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Branch name already exists")
+        branch.name = payload.name
+    if payload.display_name is not None:
+        branch.display_name = payload.display_name
+    if payload.drive_file_id is not None:
+        branch.drive_file_id = payload.drive_file_id or None  # empty string → NULL
+
+    db.add(branch)
+
+    await db.commit()
+    await db.refresh(branch)
+
+    # Update roster source config (after commit so DB connection isn't held during Drive download)
+    source = _get_roster_source()
+    source.update_config(branch.id, {
+        "branch_id": branch.id,
+        "branch_name": branch.display_name,
+        "drive_file_id": branch.drive_file_id,
+    })
+
+    # Refresh if drive_file_id changed
+    if branch.drive_file_id and branch.drive_file_id != old_drive_file_id:
+        await source.refresh_branch(branch.id)
+
+    return branch
+
+
+@router.delete("/admin/branches/{branch_id}")
+async def delete_branch(
+    branch_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a branch from DB and remove from roster source."""
+    _require_admin_role(admin)
+
+    result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch = result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    await db.delete(branch)
+    await db.commit()
+
+    source = _get_roster_source()
+    source.remove_config(branch_id)
+
+    return {"message": "Branch deleted"}
 
 
 @router.get("/branches")

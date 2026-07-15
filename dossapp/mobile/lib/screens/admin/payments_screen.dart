@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/shimmer_loading.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/press_feedback.dart';
 
 class PaymentsScreen extends StatefulWidget {
   final int branchId;
@@ -84,18 +87,22 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF059669), Color(0xFF047857)],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
+              gradient: AppColors.successGradient,
               borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.success.withValues(alpha: 0.25),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(formatPeriod(_currentPeriodRaw), style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                    Text(formatPeriod(_currentPeriodRaw), style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(formatMoney(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                   ],
@@ -151,19 +158,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
         // ── List ──
         if (_loading)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
+          const Expanded(child: SkeletonList(count: 5, hasAvatar: true))
         else if (_error != null)
-          Expanded(child: Center(child: Text(_error!, style: const TextStyle(color: AppColors.error))))
+          Expanded(child: ErrorState(message: _error!, onRetry: _load))
         else if (list.isEmpty)
-          Expanded(child: Center(child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.search_off, size: 48, color: AppColors.textMuted),
-              const SizedBox(height: 12),
-              Text(_search.isNotEmpty ? 'No results for "$_search"' : 'No payments for this period',
-                style: const TextStyle(color: AppColors.textSecondary)),
-            ],
-          )))
+          Expanded(
+            child: EmptyState(
+              icon: Icons.search_off_rounded,
+              title: _search.isNotEmpty ? 'No results for "$_search"' : 'No payments for this period',
+              subtitle: _search.isNotEmpty ? 'Try a different search term' : 'Payments will appear once athletes are marked as paid',
+            ),
+          )
         else
           Expanded(
             child: RefreshIndicator(
@@ -184,7 +189,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                         child: Opacity(opacity: value, child: child),
                       );
                     },
-                    child: _paymentCard(list[i]),
+                    child: PressFeedback(child: _paymentCard(list[i])),
                   );
                 },
               ),

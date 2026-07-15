@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
@@ -6,6 +7,10 @@ import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/shimmer_loading.dart';
+import '../../widgets/animated_list_item.dart';
+import '../../widgets/press_feedback.dart';
+import '../../widgets/empty_state.dart';
 import 'bill_screen.dart';
 import 'receipts_screen.dart';
 import 'notifications_screen.dart';
@@ -41,6 +46,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     );
   }
 
+  void _goToPayTab() {
+    setState(() => _currentIndex = 1);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,7 +79,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   Widget _buildCurrentTab() {
     switch (_currentIndex) {
-      case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++));
+      case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++), onGoToPay: _goToPayTab);
       case 1: return BillScreen(key: ValueKey('bill-$_refreshKey'));
       case 2: return ReceiptsScreen(key: ValueKey('rec-$_refreshKey'));
       case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread);
@@ -81,7 +90,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
 class _HomeTab extends StatefulWidget {
   final VoidCallback onRefresh;
-  const _HomeTab({super.key, required this.onRefresh});
+  final VoidCallback onGoToPay;
+  const _HomeTab({super.key, required this.onRefresh, required this.onGoToPay});
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -116,18 +126,43 @@ class _HomeTabState extends State<_HomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        body: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 200,
+              pinned: true,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Column(
+                children: const [
+                  SkeletonHero(),
+                  SkeletonList(count: 3),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: ErrorState(
+          message: _error!,
+          onRetry: _load,
+        ),
+      );
+    }
+
     return Scaffold(
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.textMuted),
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 14), textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  FilledButton(onPressed: _load, child: const Text('Retry')),
-                ]))
-              : RefreshIndicator(onRefresh: _load, child: _buildContent()),
+      body: RefreshIndicator(onRefresh: _load, child: _buildContent()),
     );
   }
 
@@ -143,12 +178,7 @@ class _HomeTabState extends State<_HomeTab> {
           pinned: true,
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.primary, Color(0xFF283593)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-              ),
+              decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
               child: SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -173,7 +203,15 @@ class _HomeTabState extends State<_HomeTab> {
                           Expanded(child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(p.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                              Text(
+                                p.name,
+                                style: GoogleFonts.barlowCondensed(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
                               const SizedBox(height: 2),
                               Text('${p.branch} \u2022 #${p.athleteNumber}', style: const TextStyle(color: Colors.white60, fontSize: 13)),
                             ],
@@ -203,36 +241,44 @@ class _HomeTabState extends State<_HomeTab> {
           sliver: SliverList(delegate: SliverChildListDelegate([
 
             // ── Class & Practice Info (most important for parents) ──
-            _classInfoCard(p),
+            AnimatedListItem(index: 0, child: _classInfoCard(p)),
 
             // ── Practice Times ──
             const SizedBox(height: 8),
-            _sectionLabel('Practice Times'),
-            if (p.schedule.isNotEmpty)
-              _scheduleCard(p.schedule)
-            else
-              _practiceFromRoster(p),
+            AnimatedListItem(index: 1, child: _sectionLabel('Practice Times')),
+            AnimatedListItem(
+              index: 2,
+              child: p.schedule.isNotEmpty
+                  ? _scheduleCard(p.schedule)
+                  : _practiceFromRoster(p),
+            ),
 
             // ── Payment Status ──
             if (b != null && !b.noEnrollment) ...[
               const SizedBox(height: 8),
-              _sectionLabel('Payment Status'),
-              _billStatusCard(b),
+              AnimatedListItem(index: 3, child: _sectionLabel('Payment Status')),
+              AnimatedListItem(
+                index: 4,
+                child: PressFeedback(
+                  onTap: widget.onGoToPay,
+                  child: _billStatusCard(b),
+                ),
+              ),
             ],
 
             // ── Athlete Details ──
             const SizedBox(height: 8),
-            _sectionLabel('Athlete Details'),
-            _detailsCard(p),
+            AnimatedListItem(index: 5, child: _sectionLabel('Athlete Details')),
+            AnimatedListItem(index: 6, child: _detailsCard(p)),
 
             // ── Enrollment Info ──
             const SizedBox(height: 8),
-            _sectionLabel('Enrollment'),
-            _enrollmentCard(p),
+            AnimatedListItem(index: 7, child: _sectionLabel('Enrollment')),
+            AnimatedListItem(index: 8, child: _enrollmentCard(p)),
 
             // ── No enrollment state ──
             if (b != null && b.noEnrollment)
-              _noEnrollmentCard(),
+              AnimatedListItem(index: 9, child: _noEnrollmentCard()),
 
             const SizedBox(height: 24),
           ])),
@@ -276,7 +322,7 @@ class _HomeTabState extends State<_HomeTab> {
                 isPaid ? 'Payment Complete' : hasBill ? 'Payment Due' : 'Bill Pending',
                 style: TextStyle(
                   fontWeight: FontWeight.w700, fontSize: 15,
-                  color: isPaid ? AppColors.success : hasBill ? const Color(0xFF92400E) : AppColors.textSecondary,
+                  color: isPaid ? AppColors.success : hasBill ? AppColors.warningDark : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -291,9 +337,11 @@ class _HomeTabState extends State<_HomeTab> {
               formatMoney(b.amountOwed),
               style: TextStyle(
                 fontSize: 18, fontWeight: FontWeight.w800,
-                color: isPaid ? AppColors.success : const Color(0xFF92400E),
+                color: isPaid ? AppColors.success : AppColors.warningDark,
               ),
             ),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
         ],
       ),
     );

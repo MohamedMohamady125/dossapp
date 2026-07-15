@@ -76,6 +76,25 @@ class ApiService {
     return resp;
   }
 
+  static Future<http.Response> _put(String path, Map<String, dynamic> body) async {
+    final resp = await http.put(
+      Uri.parse('${AppConstants.baseUrl}$path'),
+      headers: await _headers(),
+      body: jsonEncode(body),
+    );
+    if (resp.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) {
+        return http.put(
+          Uri.parse('${AppConstants.baseUrl}$path'),
+          headers: await _headers(),
+          body: jsonEncode(body),
+        );
+      }
+    }
+    return resp;
+  }
+
   static Future<bool> _tryRefresh() async {
     _refreshToken ??= await _storage.read(key: 'refresh_token');
     if (_refreshToken == null) return false;
@@ -344,6 +363,45 @@ class ApiService {
     final resp = await _get('/admin/health/excel');
     if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load health');
     return jsonDecode(resp.body);
+  }
+
+  static Future<List<Map<String, dynamic>>> getManageBranches() async {
+    final resp = await _get('/admin/branches/manage');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load branches');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<Map<String, dynamic>> createBranch({
+    required String name, required String displayName, String? driveFileId,
+  }) async {
+    final resp = await _post('/admin/branches', {
+      'name': name, 'display_name': displayName,
+      if (driveFileId != null && driveFileId.isNotEmpty) 'drive_file_id': driveFileId,
+    });
+    if (resp.statusCode != 200 && resp.statusCode != 201) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to create branch'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<Map<String, dynamic>> updateBranch(int branchId, {
+    String? displayName, String? driveFileId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (displayName != null) body['display_name'] = displayName;
+    if (driveFileId != null) body['drive_file_id'] = driveFileId;
+    final resp = await _put('/admin/branches/$branchId', body);
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to update branch'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<void> deleteBranch(int branchId) async {
+    final resp = await _delete('/admin/branches/$branchId');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to delete branch'));
+    }
   }
 }
 

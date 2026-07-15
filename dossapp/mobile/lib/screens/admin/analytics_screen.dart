@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/shimmer_loading.dart';
+import '../../widgets/empty_state.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   final int branchId;
@@ -76,9 +78,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
             ),
           ),
         if (_loading)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
+          const Expanded(child: Column(
+            children: [
+              SkeletonHero(),
+              Expanded(child: SkeletonList(count: 3)),
+            ],
+          ))
         else if (_error != null)
-          Expanded(child: Center(child: Text(_error!, style: const TextStyle(color: AppColors.error))))
+          Expanded(child: ErrorState(message: _error!, onRetry: _load))
         else
           Expanded(
             child: RefreshIndicator(
@@ -215,28 +222,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, Color(0xFF283593)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
+        gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
+          Text(title, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14, fontWeight: FontWeight.w500)),
           const SizedBox(height: 16),
           Row(
             children: stats.map((s) => Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(s.icon, color: Colors.white38, size: 20),
+                  Icon(s.icon, color: Colors.white.withValues(alpha: 0.4), size: 20),
                   const SizedBox(height: 6),
                   Text(s.value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text(s.label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  Text(s.label, style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 11)),
                 ],
               ),
             )).toList(),
@@ -252,7 +256,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       icon: Icons.compare_arrows, title: 'Branch Comparison',
       child: Column(
         children: [
-          Row(children: const [
+          const Row(children: [
             Expanded(flex: 3, child: Text('Branch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted))),
             Expanded(flex: 2, child: Text('Athletes', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.right)),
             Expanded(flex: 2, child: Text('Paid', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.right)),
@@ -385,9 +389,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       if (t > 0) ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Row(children: [
-          if (m > 0) Expanded(flex: m, child: Container(height: 32, color: const Color(0xFF3B82F6),
+          if (m > 0) Expanded(flex: m, child: Container(height: 32, color: AppColors.genderMale,
             alignment: Alignment.center, child: Text('${(m * 100 / t).round()}% M', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
-          if (f > 0) Expanded(flex: f, child: Container(height: 32, color: const Color(0xFFEC4899),
+          if (f > 0) Expanded(flex: f, child: Container(height: 32, color: AppColors.genderFemale,
             alignment: Alignment.center, child: Text('${(f * 100 / t).round()}% F', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
           if (u > 0) Expanded(flex: u, child: Container(height: 32, color: AppColors.textMuted,
             alignment: Alignment.center, child: Text('${(u * 100 / t).round()}% ?', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
@@ -395,8 +399,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       ),
       const SizedBox(height: 10),
       Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-        _genderStat('Male', m, const Color(0xFF3B82F6)),
-        _genderStat('Female', f, const Color(0xFFEC4899)),
+        _genderStat('Male', m, AppColors.genderMale),
+        _genderStat('Female', f, AppColors.genderFemale),
         if (u > 0) _genderStat('Unknown', u, AppColors.textMuted),
       ]),
     ]));
@@ -409,7 +413,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     ]);
   }
 
-  // ── GENDER × LEVEL ──
+  // ── GENDER x LEVEL ──
   Widget _genderByLevelCard(Map<String, dynamic> data) {
     final levels = ['P.p1','P.p2','St.1','St.2','St.3','St.4.1','St.5.1','St.6.1','St.7.1'].where((l) => data.containsKey(l)).toList();
     if (levels.isEmpty) return const SizedBox.shrink();
@@ -421,8 +425,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
           return Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
             SizedBox(width: 45, child: Text(lvl, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
             Expanded(child: t > 0 ? ClipRRect(borderRadius: BorderRadius.circular(3), child: Row(children: [
-              if (m > 0) Expanded(flex: m, child: Container(height: 16, color: const Color(0xFF3B82F6).withValues(alpha: 0.7))),
-              if (f > 0) Expanded(flex: f, child: Container(height: 16, color: const Color(0xFFEC4899).withValues(alpha: 0.5))),
+              if (m > 0) Expanded(flex: m, child: Container(height: 16, color: AppColors.genderMale.withValues(alpha: 0.7))),
+              if (f > 0) Expanded(flex: f, child: Container(height: 16, color: AppColors.genderFemale.withValues(alpha: 0.5))),
             ])) : const SizedBox.shrink()),
             SizedBox(width: 50, child: Text('$m / $f', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
           ]));
@@ -430,9 +434,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       ],
       const SizedBox(height: 8),
       Row(children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: const Color(0xFF3B82F6), borderRadius: BorderRadius.circular(2))),
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: AppColors.genderMale, borderRadius: BorderRadius.circular(2))),
         const Text(' Male  ', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: const Color(0xFFEC4899), borderRadius: BorderRadius.circular(2))),
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: AppColors.genderFemale, borderRadius: BorderRadius.circular(2))),
         const Text(' Female', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
       ]),
     ]));

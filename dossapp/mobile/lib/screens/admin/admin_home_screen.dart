@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
+import '../../widgets/shimmer_loading.dart';
 import 'athletes_screen.dart';
 import 'payments_screen.dart';
 import 'analytics_screen.dart';
 import 'excel_health_screen.dart';
+import 'branch_management_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -55,9 +58,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final maxIndex = auth.isAdmin ? 4 : 3;
+    if (_currentIndex > maxIndex) _currentIndex = 0;
 
     if (_loadingBranches) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SkeletonHero(),
+              const SkeletonList(count: 3, padding: EdgeInsets.symmetric(horizontal: 16)),
+            ],
+          ),
+        ),
+      );
     }
 
     // Find selected branch name
@@ -68,7 +83,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Aqua Athletic'),
+        title: Text(
+          'Aqua Athletic',
+          style: GoogleFonts.barlowCondensed(
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
+            letterSpacing: -0.3,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -102,18 +125,36 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
         ],
         bottom: selectedBranch != null ? PreferredSize(
-          preferredSize: const Size.fromHeight(36),
+          preferredSize: const Size.fromHeight(40),
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.only(left: 16, bottom: 8),
-            child: Text(
-              '${selectedBranch['name']} \u2022 ${formatNumber(selectedBranch['athlete_count'])} athletes',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            padding: const EdgeInsets.only(left: 16, bottom: 10),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.border, width: 0.5),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${selectedBranch['name']} \u2022 ${formatNumber(selectedBranch['athlete_count'])} athletes',
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
             ),
           ),
         ) : null,
       ),
-      body: _selectedBranchId == null
+      body: (_selectedBranchId == null && _currentIndex != 4)
           ? const Center(child: Text('No branches available'))
           : _buildCurrentTab(auth),
       bottomNavigationBar: Container(
@@ -123,11 +164,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         child: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) => setState(() => _currentIndex = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Athletes'),
-            NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Payments'),
-            NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Analytics'),
-            NavigationDestination(icon: Icon(Icons.monitor_heart_outlined), selectedIcon: Icon(Icons.monitor_heart), label: 'Health'),
+          destinations: [
+            const NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Athletes'),
+            const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Payments'),
+            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Analytics'),
+            const NavigationDestination(icon: Icon(Icons.monitor_heart_outlined), selectedIcon: Icon(Icons.monitor_heart), label: 'Health'),
+            if (auth.isAdmin)
+              const NavigationDestination(icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Branches'),
           ],
         ),
       ),
@@ -140,6 +183,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
       case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
       case 3: return ExcelHealthScreen(key: ValueKey('health-$_refreshKey'));
+      case 4: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'));
       default: return const SizedBox.shrink();
     }
   }

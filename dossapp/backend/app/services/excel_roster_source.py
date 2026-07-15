@@ -29,25 +29,14 @@ class ExcelRosterSource(RosterSource):
         self._initial_load_done = False
 
     async def _ensure_loaded(self):
-        """Lazy-load data on first access (needed for serverless cold starts)."""
+        """Lazy-load data on first access (needed for serverless cold starts).
+
+        Only loads Excel data — reconciliation, coach sync, and push triggers
+        run exclusively via cron endpoints to keep cold-start latency low.
+        """
         if not self._initial_load_done and self._configs:
             self._initial_load_done = True
             await self.refresh_all()
-            # Run reconciliation after loading Excel data (for serverless)
-            try:
-                await self._run_reconciliation()
-            except Exception as e:
-                logger.error(f"Post-load reconciliation error: {e}")
-            # Provision coach login accounts from parsed rosters
-            try:
-                await self._run_coach_sync()
-            except Exception as e:
-                logger.error(f"Post-load coach sync error: {e}")
-            # Push notification triggers (schedule changes, missed sessions)
-            try:
-                await self._run_push_triggers()
-            except Exception as e:
-                logger.error(f"Post-load push trigger error: {e}")
 
     async def _run_reconciliation(self):
         """Sync Excel payment data to the database."""
@@ -208,10 +197,28 @@ class ExcelRosterSource(RosterSource):
             return False
 
     async def refresh_all(self) -> dict[int, bool]:
+        # Download and parse all branches in parallel for faster cold starts
+        tasks = {bid: self.refresh_branch(bid) for bid in self._configs}
+        gathered = await asyncio.gather(*tasks.values(), return_exceptions=True)
         results = {}
-        for branch_id in self._configs:
-            results[branch_id] = await self.refresh_branch(branch_id)
+        for bid, result in zip(tasks.keys(), gathered):
+            if isinstance(result, Exception):
+                logger.error(f"Branch {bid} refresh failed: {result}")
+                results[bid] = False
+            else:
+                results[bid] = result
         return results
+
+    def update_config(self, branch_id: int, config: dict):
+        """Add or update a branch config at runtime (no restart needed)."""
+        self._configs[branch_id] = config
+
+    def remove_config(self, branch_id: int):
+        """Remove a branch config and its cached data."""
+        self._configs.pop(branch_id, None)
+        self._cache.pop(branch_id, None)
+        self._last_modified.pop(branch_id, None)
+        self._last_errors.pop(branch_id, None)
 
     def get_health(self) -> dict:
         health = {}

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../widgets/shimmer_loading.dart';
+import '../../widgets/animated_list_item.dart';
+import '../../widgets/empty_state.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final VoidCallback? onUnreadChanged;
@@ -126,35 +129,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(count: 5, hasAvatar: true);
     }
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.textMuted),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              OutlinedButton(onPressed: _load, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      );
+      return ErrorState(message: _error!, onRetry: _load);
     }
     if (_items.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.textMuted),
-            SizedBox(height: 12),
-            Text('No notifications yet', style: TextStyle(color: AppColors.textSecondary)),
-          ],
-        ),
+      return EmptyState(
+        icon: Icons.notifications_none_rounded,
+        title: 'No Notifications Yet',
+        subtitle: 'You will receive updates about schedules, payments, and more.',
       );
     }
 
@@ -170,71 +154,74 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           final isRead = item['is_read'] == true;
           final color = _colorFor(type);
 
-          return InkWell(
-            onTap: () => _markRead(item),
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isRead ? Colors.white : AppColors.primary.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isRead ? AppColors.border : AppColors.primary.withValues(alpha: 0.25),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(_iconFor(type), size: 20, color: color),
+          return AnimatedListItem(
+            index: i,
+            child: InkWell(
+              onTap: () => _markRead(item),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isRead ? Colors.white : AppColors.primary.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isRead ? AppColors.border : AppColors.primary.withValues(alpha: 0.25),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                (item['title'] ?? '') as String,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
-                                  color: AppColors.textPrimary,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(9),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(_iconFor(type), size: 20, color: color),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  (item['title'] ?? '') as String,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Text(
-                              _formatDate(item['created_at'] as String?),
-                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          (item['body'] ?? '') as String,
-                          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (!isRead)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8, top: 4),
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-                        shape: BoxShape.circle,
+                              Text(
+                                _formatDate(item['created_at'] as String?),
+                                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            (item['body'] ?? '') as String,
+                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          ),
+                        ],
                       ),
                     ),
-                ],
+                    if (!isRead)
+                      Container(
+                        margin: const EdgeInsets.only(left: 8, top: 4),
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           );

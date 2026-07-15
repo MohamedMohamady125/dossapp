@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
 import 'services/notification_service.dart';
@@ -11,6 +12,14 @@ import 'utils/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Set status bar style
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+  ));
+
   await NotificationService.init();
   runApp(
     ChangeNotifierProvider(
@@ -31,13 +40,40 @@ class AquaAthleticApp extends StatelessWidget {
       theme: appTheme(),
       home: Consumer<AuthProvider>(
         builder: (context, auth, _) {
-          if (!auth.isLoggedIn) return const LoginScreen();
-          if ((auth.isCustomer || auth.isCoach) && auth.mustChangePassword) {
-            return const ChangePasswordScreen();
+          final Widget screen;
+          if (!auth.isLoggedIn) {
+            screen = const LoginScreen();
+          } else if ((auth.isCustomer || auth.isCoach) && auth.mustChangePassword) {
+            screen = const ChangePasswordScreen();
+          } else if (auth.isCoach) {
+            screen = const CoachHomeScreen();
+          } else if (auth.isStaff) {
+            screen = const AdminHomeScreen();
+          } else {
+            screen = const CustomerHomeScreen();
           }
-          if (auth.isCoach) return const CoachHomeScreen();
-          if (auth.isStaff) return const AdminHomeScreen();
-          return const CustomerHomeScreen();
+
+          return AnimatedSwitcher(
+            duration: AppAnimation.slowDuration,
+            switchInCurve: AppAnimation.enterCurve,
+            switchOutCurve: AppAnimation.exitCurve,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 0.03),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(screen.runtimeType.toString() + auth.role),
+              child: screen,
+            ),
+          );
         },
       ),
     );

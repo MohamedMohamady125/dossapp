@@ -29,12 +29,18 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
     period = _current_period()
     created_count = 0
 
+    # Pre-fetch all account emails for this branch in one query (avoid N+1)
+    acct_result = await db.execute(
+        select(Account.athlete_number, Account.email).where(
+            Account.branch_id == roster.branch_id,
+        )
+    )
+    email_map = {row[0]: row[1] for row in acct_result.all()}
+
     for athlete in roster.athletes:
-        # pay value = paid (receipt_no is just a delayed formality)
         if not athlete.pay:
             continue
 
-        # Determine amount
         try:
             amount = Decimal(athlete.pay)
         except (InvalidOperation, ValueError):
@@ -47,18 +53,8 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
         if amount <= 0:
             continue
 
-        # Use receipt_no from Excel if available, otherwise generate from athlete number
         receipt_no = athlete.receipt_no or f"{roster.branch_id}-{athlete.athlete_number}"
-
-        # Look up account email if available
-        email = None
-        acct_result = await db.execute(
-            select(Account.email).where(
-                Account.branch_id == roster.branch_id,
-                Account.athlete_number == athlete.athlete_number,
-            )
-        )
-        email = acct_result.scalar_one_or_none()
+        email = email_map.get(athlete.athlete_number)
 
         receipt = await record_cash_payment(
             db=db,

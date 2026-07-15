@@ -188,12 +188,13 @@ async def lifespan(app: FastAPI):
     import os
     is_serverless = os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
 
-    if configs and not is_serverless:
+    # Always pre-load Excel data so the first request is fast.
+    # Reconciliation/coach sync/push triggers run only via cron.
+    if configs:
         await roster_source.refresh_all()
         logger.info(f"Initial Excel load complete ({len(configs)} branches)")
 
     # Skip background tasks in serverless (Vercel) — no long-running processes
-
     refresh_task = None
     notification_task = None
     if not is_serverless:

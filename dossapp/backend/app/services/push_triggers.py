@@ -69,6 +69,8 @@ async def check_schedule_changes(roster: BranchRoster, db: AsyncSession) -> int:
     seed_mode = len(snapshots) == 0
 
     sent = 0
+    needs_notify = []  # collect (athlete, title) pairs to notify after batch commit
+
     for athlete in roster.athletes:
         new_hash = _schedule_hash(athlete)
         snap = snapshots.get(athlete.athlete_number)
@@ -82,38 +84,34 @@ async def check_schedule_changes(roster: BranchRoster, db: AsyncSession) -> int:
                 schedule_hash=new_hash,
                 schedule_json=_schedule_json(athlete),
             ))
-            await db.commit()
-            if seed_mode:
-                continue
-            account = accounts.get(athlete.athlete_number)
-            if account:
-                ok = await send_push_to_account(
-                    db, account.id, "schedule_change",
-                    "Schedule added",
-                    _schedule_body(athlete),
-                    data={"screen": "schedule"},
-                    dedupe_key=f"sched:{roster.branch_id}:{athlete.athlete_number}:{new_hash}",
-                )
-                sent += 1 if ok else 0
+            if not seed_mode:
+                needs_notify.append((athlete, "Schedule added", new_hash))
         elif snap.schedule_hash != new_hash:
             snap.schedule_hash = new_hash
             snap.schedule_json = _schedule_json(athlete)
-            await db.commit()
-            if not athlete.schedule:
-                continue  # schedule removed — don't notify
-            account = accounts.get(athlete.athlete_number)
-            if account:
-                ok = await send_push_to_account(
-                    db, account.id, "schedule_change",
-                    "Schedule updated",
-                    _schedule_body(athlete),
-                    data={"screen": "schedule"},
-                    dedupe_key=f"sched:{roster.branch_id}:{athlete.athlete_number}:{new_hash}",
-                )
-                sent += 1 if ok else 0
+            if athlete.schedule:
+                needs_notify.append((athlete, "Schedule updated", new_hash))
+
+    # Single commit for all snapshot inserts/updates
+    await db.commit()
 
     if seed_mode:
         logger.info(f"Seeded schedule snapshots for branch {roster.branch_id} (no notifications)")
+        return 0
+
+    # Send notifications after batch commit
+    for athlete, title, new_hash in needs_notify:
+        account = accounts.get(athlete.athlete_number)
+        if account:
+            ok = await send_push_to_account(
+                db, account.id, "schedule_change",
+                title,
+                _schedule_body(athlete),
+                data={"screen": "schedule"},
+                dedupe_key=f"sched:{roster.branch_id}:{athlete.athlete_number}:{new_hash}",
+            )
+            sent += 1 if ok else 0
+
     return sent
 
 
