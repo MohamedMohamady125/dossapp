@@ -11,6 +11,7 @@ import 'payments_screen.dart';
 import 'analytics_screen.dart';
 import 'excel_health_screen.dart';
 import 'branch_management_screen.dart';
+import 'price_catalog_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -58,7 +59,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final maxIndex = auth.isAdmin ? 4 : 3;
+    final maxIndex = auth.isAdmin ? 5 : 3;
     if (_currentIndex > maxIndex) _currentIndex = 0;
 
     if (_loadingBranches) {
@@ -154,7 +155,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
         ) : null,
       ),
-      body: (_selectedBranchId == null && _currentIndex != 4)
+      body: (_selectedBranchId == null && _currentIndex < 4)
           ? const Center(child: Text('No branches available'))
           : _buildCurrentTab(auth),
       bottomNavigationBar: Container(
@@ -169,8 +170,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Payments'),
             const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Analytics'),
             const NavigationDestination(icon: Icon(Icons.monitor_heart_outlined), selectedIcon: Icon(Icons.monitor_heart), label: 'Health'),
-            if (auth.isAdmin)
+            if (auth.isAdmin) ...[
+              const NavigationDestination(icon: Icon(Icons.sell_outlined), selectedIcon: Icon(Icons.sell), label: 'Pricing'),
               const NavigationDestination(icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Branches'),
+            ],
           ],
         ),
       ),
@@ -183,7 +186,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
       case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
       case 3: return ExcelHealthScreen(key: ValueKey('health-$_refreshKey'));
-      case 4: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'));
+      case 4: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
+      case 5: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'));
       default: return const SizedBox.shrink();
     }
   }

@@ -184,6 +184,158 @@ async def delete_branch(
     return {"message": "Branch deleted"}
 
 
+# ── Price catalog schemas ─────────────────────────────────────────────
+
+class PriceCatalogCreate(BaseModel):
+    branch_id: int
+    program_name: str
+    segment: Optional[str] = None
+    sessions: Optional[str] = None
+    price: str  # Decimal as string
+
+class PriceCatalogUpdate(BaseModel):
+    program_name: Optional[str] = None
+    segment: Optional[str] = None
+    sessions: Optional[str] = None
+    price: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class PriceCatalogOut(BaseModel):
+    id: int
+    branch_id: int
+    program_name: str
+    segment: Optional[str] = None
+    sessions: Optional[str] = None
+    price: str
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+# ── Price catalog endpoints (admin-only) ──────────────────────────────
+
+@router.get("/admin/price-catalog", response_model=list[PriceCatalogOut])
+async def list_price_catalog(
+    branch_id: Optional[int] = Query(None),
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin_role(admin)
+    from app.models.price_catalog import PriceCatalog
+
+    query = select(PriceCatalog).where(PriceCatalog.is_active == True)  # noqa: E712
+    if branch_id:
+        query = query.where(PriceCatalog.branch_id == branch_id)
+    query = query.order_by(PriceCatalog.branch_id, PriceCatalog.program_name)
+
+    result = await db.execute(query)
+    entries = result.scalars().all()
+    return [
+        PriceCatalogOut(
+            id=e.id, branch_id=e.branch_id, program_name=e.program_name,
+            segment=e.segment, sessions=e.sessions,
+            price=str(e.price), is_active=e.is_active,
+        )
+        for e in entries
+    ]
+
+
+@router.post("/admin/price-catalog", status_code=201)
+async def create_price_catalog_entry(
+    payload: PriceCatalogCreate,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin_role(admin)
+    from app.models.price_catalog import PriceCatalog
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        price = Decimal(payload.price)
+    except (InvalidOperation, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid price value")
+
+    entry = PriceCatalog(
+        branch_id=payload.branch_id,
+        program_name=payload.program_name.strip(),
+        segment=payload.segment.strip() if payload.segment else None,
+        sessions=payload.sessions.strip() if payload.sessions else None,
+        price=price,
+    )
+    db.add(entry)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Duplicate catalog entry")
+    await db.refresh(entry)
+    return PriceCatalogOut(
+        id=entry.id, branch_id=entry.branch_id, program_name=entry.program_name,
+        segment=entry.segment, sessions=entry.sessions,
+        price=str(entry.price), is_active=entry.is_active,
+    )
+
+
+@router.put("/admin/price-catalog/{entry_id}")
+async def update_price_catalog_entry(
+    entry_id: int,
+    payload: PriceCatalogUpdate,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin_role(admin)
+    from app.models.price_catalog import PriceCatalog
+    from decimal import Decimal, InvalidOperation
+
+    result = await db.execute(select(PriceCatalog).where(PriceCatalog.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Catalog entry not found")
+
+    if payload.program_name is not None:
+        entry.program_name = payload.program_name.strip()
+    if payload.segment is not None:
+        entry.segment = payload.segment.strip() or None
+    if payload.sessions is not None:
+        entry.sessions = payload.sessions.strip() or None
+    if payload.price is not None:
+        try:
+            entry.price = Decimal(payload.price)
+        except (InvalidOperation, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid price value")
+    if payload.is_active is not None:
+        entry.is_active = payload.is_active
+
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+    return PriceCatalogOut(
+        id=entry.id, branch_id=entry.branch_id, program_name=entry.program_name,
+        segment=entry.segment, sessions=entry.sessions,
+        price=str(entry.price), is_active=entry.is_active,
+    )
+
+
+@router.delete("/admin/price-catalog/{entry_id}")
+async def delete_price_catalog_entry(
+    entry_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_admin_role(admin)
+    from app.models.price_catalog import PriceCatalog
+
+    result = await db.execute(select(PriceCatalog).where(PriceCatalog.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Catalog entry not found")
+
+    await db.delete(entry)
+    await db.commit()
+    return {"message": "Catalog entry deleted"}
+
+
 @router.get("/branches")
 async def list_branches(admin: AdminUser = Depends(get_current_admin)):
     source = _get_roster_source()
@@ -453,10 +605,20 @@ async def mark_athlete_paid(
     if not athlete:
         raise HTTPException(status_code=404, detail="Athlete not found in roster")
 
-    if not athlete.pay:
-        raise HTTPException(status_code=400, detail="No bill amount set for this athlete")
-
     period = datetime.now().strftime("%Y-%m")
+
+    # Determine bill amount from catalog, then Excel pay, then fail
+    from app.services.price_resolver import resolve_price
+    catalog_price = await resolve_price(
+        db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+    )
+
+    if catalog_price is not None:
+        bill_amount = catalog_price
+    elif athlete.pay:
+        bill_amount = Decimal(athlete.pay)
+    else:
+        raise HTTPException(status_code=400, detail="No bill amount set for this athlete")
 
     from app.services.payment_service import record_manual_payment
     receipt = await record_manual_payment(
@@ -464,8 +626,8 @@ async def mark_athlete_paid(
         branch_id=branch_id,
         athlete_number=athlete_number,
         period=period,
-        amount_paid=Decimal(athlete.pay),
-        amount_owed=Decimal(athlete.pay),
+        amount_paid=bill_amount,
+        amount_owed=bill_amount,
         athlete_name=athlete.name,
         branch_name=roster.branch_name,
         level=athlete.step,

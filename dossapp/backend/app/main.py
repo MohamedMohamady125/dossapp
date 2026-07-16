@@ -167,6 +167,81 @@ async def _auto_seed():
     except Exception as e:
         logger.error(f"Auto-seed error: {e}")
 
+    # Seed price catalog (idempotent — skips if entries exist)
+    await _seed_price_catalog()
+
+
+async def _seed_price_catalog():
+    """Seed price catalog from the official pricing PDF. Idempotent."""
+    from app.models.price_catalog import PriceCatalog
+    from decimal import Decimal
+
+    try:
+        async with async_session() as db:
+            existing = await db.execute(select(PriceCatalog).limit(1))
+            if existing.scalars().first():
+                return  # Already seeded
+
+            entries = []
+
+            # ── Branch 1: Rehab (GEMS) — flat pricing ──
+            for prog, price in [
+                ("Level One", 1500), ("Group Training", 1250),
+                ("Semi-Private Training", 2200), ("Private Training", 3500),
+            ]:
+                entries.append(PriceCatalog(branch_id=1, program_name=prog, price=Decimal(price)))
+
+            # ── Branch 4: Madinaty (BISM) — same flat pricing ──
+            for prog, price in [
+                ("Level One", 1500), ("Group Training", 1250),
+                ("Semi-Private Training", 2200), ("Private Training", 3500),
+            ]:
+                entries.append(PriceCatalog(branch_id=4, program_name=prog, price=Decimal(price)))
+
+            # ── Branch 2: Choueifat Cairo (New Cairo) — student vs outsider ──
+            nc_prices = [
+                ("Group Training",          1100, 1300),
+                ("Adult Training",          1250, 1500),
+                ("Pre-Team",                1600, 1800),
+                ("Private Training",        3000, 3300),
+                ("Semi-Private 2",          2000, 2300),
+                ("Semi-Private 3",          1500, 1750),
+                ("Baby Classes - Group",    1500, 1750),
+                ("Baby Classes - Private",  3000, 3500),
+            ]
+            for prog, student, outsider in nc_prices:
+                entries.append(PriceCatalog(branch_id=2, program_name=prog, segment="Student", price=Decimal(student)))
+                entries.append(PriceCatalog(branch_id=2, program_name=prog, segment="Outsider", price=Decimal(outsider)))
+
+            # ── Branch 3: Choueifat (October) — student vs outsider + sessions ──
+            oct_prices = [
+                ("Step 1-6",        "1 Session",  160,  180),
+                ("Step 1-6",        "8 Sessions", 1100, 1250),
+                ("Adult Training",  "1 Session",  200,  200),
+                ("Adult Training",  "8 Sessions", 1450, 1450),
+                ("Pre-Team",        "1 Week",     450,  500),
+                ("Pre-Team",        "4 Weeks",    1500, 1700),
+                ("Junior Team",     "1 Week",     500,  600),
+                ("Junior Team",     "4 Weeks",    1800, 2000),
+                ("Elite Team",      "1 Week",     700,  800),
+                ("Elite Team",      "4 Weeks",    2500, 2800),
+                ("Private 1-to-1",  "1 Session",  340,  375),
+                ("Private 1-to-1",  "8 Sessions", 2700, 3000),
+                ("Semi-Private 2",  "1 Session",  250,  290),
+                ("Semi-Private 2",  "8 Sessions", 2000, 2300),
+                ("Semi-Private 3",  "1 Session",  190,  225),
+                ("Semi-Private 3",  "8 Sessions", 1500, 1800),
+            ]
+            for prog, sess, student, outsider in oct_prices:
+                entries.append(PriceCatalog(branch_id=3, program_name=prog, segment="Student", sessions=sess, price=Decimal(student)))
+                entries.append(PriceCatalog(branch_id=3, program_name=prog, segment="Outsider", sessions=sess, price=Decimal(outsider)))
+
+            db.add_all(entries)
+            await db.commit()
+            logger.info(f"Seeded {len(entries)} price catalog entries")
+    except Exception as e:
+        logger.error(f"Price catalog seed error: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

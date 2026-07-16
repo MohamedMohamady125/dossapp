@@ -115,13 +115,20 @@ async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSe
         )
         receipt_number = receipt_result.scalar_one_or_none()
 
-    # Excel Pay filled = already paid (cash). For unpaid athletes fall back to
-    # the last prior-period payment so online checkout has an amount to charge.
-    amount_owed = athlete.pay
-    if not amount_owed and not payment:
+    # Primary: price catalog lookup based on athlete's type/step/segment
+    from app.services.price_resolver import resolve_price
+    catalog_price = await resolve_price(
+        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+    )
+
+    if catalog_price is not None:
+        amount_owed = _fmt_amount(catalog_price)
+    elif not payment:
+        # Fallback: last prior-period payment amount
         last = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
-        if last is not None:
-            amount_owed = _fmt_amount(last)
+        amount_owed = _fmt_amount(last) if last is not None else None
+    else:
+        amount_owed = None
 
     return BillResponse(
         period=period,
@@ -164,11 +171,15 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Already paid for this period")
 
-    # Excel Pay filled = paid cash, so an unpaid athlete has no pay value.
-    # Bill amount = last prior-period payment (Excel pay kept as fallback).
-    if athlete.pay:
-        amount = Decimal(athlete.pay)
+    # Primary: price catalog lookup
+    from app.services.price_resolver import resolve_price
+    catalog_price = await resolve_price(
+        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+    )
+    if catalog_price is not None:
+        amount = catalog_price
     else:
+        # Fallback: last prior-period payment
         amount = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
         if amount is None:
             raise HTTPException(status_code=400, detail="No bill amount set for this period")

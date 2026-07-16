@@ -403,6 +403,53 @@ class ApiService {
       throw ApiException(resp.statusCode, _extractError(resp, 'Failed to delete branch'));
     }
   }
+
+  // ── Price Catalog ──
+
+  static Future<List<Map<String, dynamic>>> getPriceCatalog({int? branchId}) async {
+    final path = branchId != null ? '/admin/price-catalog?branch_id=$branchId' : '/admin/price-catalog';
+    final resp = await _get(path);
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load price catalog');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<Map<String, dynamic>> createPriceCatalogEntry({
+    required int branchId, required String programName, required String price,
+    String? segment, String? sessions,
+  }) async {
+    final resp = await _post('/admin/price-catalog', {
+      'branch_id': branchId, 'program_name': programName, 'price': price,
+      if (segment != null && segment.isNotEmpty) 'segment': segment,
+      if (sessions != null && sessions.isNotEmpty) 'sessions': sessions,
+    });
+    if (resp.statusCode != 201) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to create catalog entry'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<Map<String, dynamic>> updatePriceCatalogEntry(int entryId, {
+    String? programName, String? segment, String? sessions, String? price, bool? isActive,
+  }) async {
+    final body = <String, dynamic>{};
+    if (programName != null) body['program_name'] = programName;
+    if (segment != null) body['segment'] = segment;
+    if (sessions != null) body['sessions'] = sessions;
+    if (price != null) body['price'] = price;
+    if (isActive != null) body['is_active'] = isActive;
+    final resp = await _put('/admin/price-catalog/$entryId', body);
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to update catalog entry'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<void> deletePriceCatalogEntry(int entryId) async {
+    final resp = await _delete('/admin/price-catalog/$entryId');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to delete catalog entry'));
+    }
+  }
 }
 
 class ApiException implements Exception {

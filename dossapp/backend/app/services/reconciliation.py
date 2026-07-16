@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import Account
 from app.services.roster_source import BranchRoster
 from app.services.payment_service import record_cash_payment
+from app.services.price_resolver import resolve_price
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,18 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
         receipt_no = athlete.receipt_no or f"{roster.branch_id}-{athlete.athlete_number}"
         email = email_map.get(athlete.athlete_number)
 
+        # Use catalog price for amount_owed; athlete.pay is the actual cash collected
+        catalog_price = await resolve_price(
+            db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+        )
+
         receipt = await record_cash_payment(
             db=db,
             branch_id=roster.branch_id,
             athlete_number=athlete.athlete_number,
             period=period,
             amount_paid=amount,
-            amount_owed=amount,
+            amount_owed=catalog_price if catalog_price is not None else amount,
             excel_receipt_no=receipt_no,
             athlete_name=athlete.name,
             branch_name=roster.branch_name,
