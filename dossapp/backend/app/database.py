@@ -3,7 +3,15 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 
-_is_sqlite = settings.database_url.startswith("sqlite")
+# Auto-fix DATABASE_URL: ensure async driver prefix no matter what the user pastes
+_db_url = settings.database_url
+if _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+_is_sqlite = _db_url.startswith("sqlite")
+_is_neon = "neon" in _db_url
 
 engine_kwargs: dict = {"echo": False}
 if _is_sqlite:
@@ -11,10 +19,11 @@ if _is_sqlite:
 else:
     engine_kwargs["pool_size"] = 5
     engine_kwargs["max_overflow"] = 5
-    # asyncpg requires ssl=True for Neon/cloud PostgreSQL
-    engine_kwargs["connect_args"] = {"ssl": True}
+    # Only Neon/cloud PostgreSQL needs ssl=True; Railway internal Postgres does not
+    if _is_neon:
+        engine_kwargs["connect_args"] = {"ssl": True}
 
-engine = create_async_engine(settings.database_url, **engine_kwargs)
+engine = create_async_engine(_db_url, **engine_kwargs)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
