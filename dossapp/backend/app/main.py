@@ -49,7 +49,7 @@ async def _load_branch_configs() -> list[dict]:
             4: "Madinaty", 5: "Branch 5", 6: "Branch 6", 7: "Branch 7",
         }
         for i in range(1, 8):
-            file_id = getattr(settings, f"drive_file_id_branch_{i}", "")
+            file_id = getattr(settings, f"drive_file_id_branch_{i}", "").strip()
             if file_id:
                 configs.append({
                     "branch_id": i,
@@ -145,7 +145,7 @@ async def _auto_seed():
                 ("branch_7", "Branch 7"),
             ]
             for i, (name, display_name) in enumerate(branch_defs, 1):
-                drive_id = getattr(settings, f"drive_file_id_branch_{i}", "")
+                drive_id = getattr(settings, f"drive_file_id_branch_{i}", "").strip()
                 branch = Branch(
                     name=name,
                     display_name=display_name,
@@ -250,8 +250,8 @@ async def _sync_drive_file_ids():
             result = await db.execute(select(Branch))
             branches = result.scalars().all()
             for branch in branches:
-                env_file_id = getattr(settings, f"drive_file_id_branch_{branch.id}", "")
-                if env_file_id and env_file_id != branch.drive_file_id:
+                env_file_id = getattr(settings, f"drive_file_id_branch_{branch.id}", "").strip()
+                if env_file_id and env_file_id != (branch.drive_file_id or "").strip():
                     branch.drive_file_id = env_file_id
                     logger.info(f"Updated drive_file_id for branch {branch.id} ({branch.display_name})")
             await db.commit()
