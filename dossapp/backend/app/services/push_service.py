@@ -49,7 +49,10 @@ def _load_fcm_credentials():
             with open(creds_value) as f:
                 info = json.load(f)
         else:
-            info = json.loads(creds_value)
+            try:
+                info = json.loads(creds_value)
+            except json.JSONDecodeError:
+                info = json.loads(creds_value, strict=False)
 
         _credentials = service_account.Credentials.from_service_account_info(info, scopes=[FCM_SCOPE])
         _project_id = settings.firebase_project_id.strip() or info.get("project_id")

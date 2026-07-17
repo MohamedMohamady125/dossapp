@@ -32,12 +32,15 @@ def _get_drive_service():
         raise RuntimeError("GOOGLE_DRIVE_CREDENTIALS_JSON not configured")
 
     # Support both file path (local dev) and inline JSON (Vercel/cloud)
-    import os
+    import os, json
     if os.path.isfile(creds_value):
         creds = service_account.Credentials.from_service_account_file(creds_value, scopes=SCOPES)
     else:
-        import json
-        info = json.loads(creds_value)
+        try:
+            info = json.loads(creds_value)
+        except json.JSONDecodeError:
+            # Railway/Vercel may mangle literal \n in private_key; try strict=False
+            info = json.loads(creds_value, strict=False)
         creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
 
     return build("drive", "v3", credentials=creds, cache_discovery=False)
