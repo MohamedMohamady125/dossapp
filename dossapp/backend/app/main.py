@@ -243,6 +243,22 @@ async def _seed_price_catalog():
         logger.error(f"Price catalog seed error: {e}")
 
 
+async def _sync_drive_file_ids():
+    """Update branch drive_file_id from env vars on every startup."""
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(Branch))
+            branches = result.scalars().all()
+            for branch in branches:
+                env_file_id = getattr(settings, f"drive_file_id_branch_{branch.id}", "")
+                if env_file_id and env_file_id != branch.drive_file_id:
+                    branch.drive_file_id = env_file_id
+                    logger.info(f"Updated drive_file_id for branch {branch.id} ({branch.display_name})")
+            await db.commit()
+    except Exception as e:
+        logger.error(f"Sync drive file IDs error: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global roster_source
@@ -255,6 +271,9 @@ async def lifespan(app: FastAPI):
 
     # Auto-seed admin user and branches if DB is empty (needed for Vercel /tmp SQLite)
     await _auto_seed()
+
+    # Sync drive file IDs from env vars into DB branches (in case they changed)
+    await _sync_drive_file_ids()
 
     # Load branch configs from DB
     configs = await _load_branch_configs()
