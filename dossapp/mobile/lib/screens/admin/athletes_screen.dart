@@ -135,7 +135,8 @@ class _AthletesScreenState extends State<AthletesScreen> {
       subtitle: Text([
         if (a.level != null) a.level!,
         if (a.type != null) a.type!,
-        if (a.pay != null) formatMoney(a.pay),
+        if (a.bill != null) 'Bill: ${formatMoney(a.bill)}',
+        if (a.pay != null) 'Paid: ${formatMoney(a.pay)}',
       ].join(' \u2022 '), style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -323,7 +324,8 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
         _infoRow(Icons.date_range_rounded, 'Days', athlete.days),
         _infoRow(Icons.event_repeat_rounded, 'Sessions', athlete.sessions),
         _infoRow(Icons.hub_rounded, 'Segment', athlete.segment),
-        _infoRow(Icons.payments_rounded, 'Pay', athlete.pay != null ? formatMoney(athlete.pay) : null),
+        _infoRow(Icons.receipt_rounded, 'Bill', athlete.bill != null ? formatMoney(athlete.bill) : null),
+        _infoRow(Icons.payments_rounded, 'Paid', athlete.pay != null ? formatMoney(athlete.pay) : null),
         _infoRow(Icons.receipt_long_rounded, 'Receipt No.', athlete.receiptNo),
         _infoRow(Icons.comment_rounded, 'Comment', athlete.comment),
 
@@ -396,7 +398,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
         ],
 
         // ── Mark as Paid ──
-        if (athlete.pay != null) ...[
+        if (athlete.bill != null || athlete.pay != null) ...[
           const SizedBox(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -435,7 +437,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     icon: _markingPaid
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.paid_rounded),
-                    label: Text(_markingPaid ? 'Marking...' : 'Mark as Paid (${formatMoney(athlete.pay)})'),
+                    label: Text(_markingPaid ? 'Marking...' : 'Mark as Paid (${formatMoney(athlete.bill ?? athlete.pay)})'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.success,
                       minimumSize: const Size(double.infinity, 52),

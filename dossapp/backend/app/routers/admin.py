@@ -396,8 +396,12 @@ async def list_athletes(
     )
     provisioned = {row[0] for row in result.all()}
 
-    return [
-        AthleteDetail(
+    # Resolve bills from price catalog
+    from app.services.price_resolver import resolve_price
+    athletes_out = []
+    for a in roster.athletes:
+        bill = await resolve_price(db, branch_id, a.type, a.step, a.segment, a.sessions)
+        athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
             branch_id=branch_id,
             athlete_number=a.athlete_number,
@@ -411,6 +415,7 @@ async def list_athletes(
             sessions=a.sessions,
             segment=a.segment,
             pay=a.pay,
+            bill=str(bill) if bill else None,
             phone1=a.phone1,
             phone2=a.phone2,
             comment=a.comment,
@@ -420,9 +425,8 @@ async def list_athletes(
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
                 for s in a.schedule
             ],
-        )
-        for a in roster.athletes
-    ]
+        ))
+    return athletes_out
 
 
 @router.get("/branches/{branch_id}/athletes/{athlete_number}", response_model=AthleteDetail)
