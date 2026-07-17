@@ -251,7 +251,7 @@ async def _sync_drive_file_ids():
             branches = result.scalars().all()
             for branch in branches:
                 env_file_id = getattr(settings, f"drive_file_id_branch_{branch.id}", "").strip()
-                if env_file_id and env_file_id != (branch.drive_file_id or "").strip():
+                if env_file_id and env_file_id != branch.drive_file_id:
                     branch.drive_file_id = env_file_id
                     logger.info(f"Updated drive_file_id for branch {branch.id} ({branch.display_name})")
             await db.commit()
