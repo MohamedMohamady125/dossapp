@@ -187,7 +187,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
       case 3: return ExcelHealthScreen(key: ValueKey('health-$_refreshKey'));
       case 4: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
-      case 5: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'));
+      case 5: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'), onBranchesChanged: _refreshAll);
       default: return const SizedBox.shrink();
     }
   }
