@@ -244,16 +244,21 @@ async def _seed_price_catalog():
 
 
 async def _sync_drive_file_ids():
-    """Update branch drive_file_id from env vars on every startup."""
+    """Seed branch drive_file_id from env vars only if DB value is empty.
+
+    Never overwrite admin-set values — the DB is the source of truth once set.
+    """
     try:
         async with async_session() as db:
             result = await db.execute(select(Branch))
             branches = result.scalars().all()
             for branch in branches:
                 env_file_id = getattr(settings, f"drive_file_id_branch_{branch.id}", "").strip()
-                if env_file_id and env_file_id != branch.drive_file_id:
+                current = (branch.drive_file_id or "").strip()
+                # Only fill in if DB is empty and env var has a value
+                if env_file_id and not current:
                     branch.drive_file_id = env_file_id
-                    logger.info(f"Updated drive_file_id for branch {branch.id} ({branch.display_name})")
+                    logger.info(f"Seeded drive_file_id for branch {branch.id} ({branch.display_name})")
             await db.commit()
     except Exception as e:
         logger.error(f"Sync drive file IDs error: {e}")
