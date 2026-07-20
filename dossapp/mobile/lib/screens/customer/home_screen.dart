@@ -60,7 +60,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) {
             setState(() => _currentIndex = i);
-            _loadUnread();
+            // Only refresh unread count when leaving notifications tab
+            if (i != 3) _loadUnread();
           },
           destinations: [
             const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),

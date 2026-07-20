@@ -105,15 +105,41 @@ def _normalize_sessions(sessions: Optional[str]) -> Optional[str]:
 
 # ── Catalog lookup ────────────────────────────────────────────────────────
 
-async def resolve_price(
-    db: AsyncSession,
-    branch_id: int,
+# Type alias for pre-loaded catalog lookup dict
+CatalogLookup = dict[tuple, Decimal]
+
+
+async def load_branch_catalog(db: AsyncSession, branch_id: int) -> CatalogLookup:
+    """Pre-load all active catalog entries for a branch into a lookup dict.
+
+    Use this when resolving prices for many athletes to avoid repeated DB queries.
+    """
+    result = await db.execute(
+        select(PriceCatalog).where(
+            PriceCatalog.branch_id == branch_id,
+            PriceCatalog.is_active == True,  # noqa: E712
+        )
+    )
+    entries = result.scalars().all()
+    lookup: CatalogLookup = {}
+    for e in entries:
+        key = (
+            e.program_name.strip().lower(),
+            e.segment.strip().lower() if e.segment else None,
+            e.sessions.strip().lower() if e.sessions else None,
+        )
+        lookup[key] = e.price
+    return lookup
+
+
+def resolve_price_from_catalog(
+    catalog: CatalogLookup,
     athlete_type: Optional[str],
     athlete_step: Optional[str],
     athlete_segment: Optional[str],
     athlete_sessions: Optional[str],
 ) -> Optional[Decimal]:
-    """Look up the catalog price for an athlete. Returns None if no match."""
+    """Pure function: resolve price from a pre-loaded catalog. No DB queries."""
 
     candidates = _normalize_program_name(athlete_type, athlete_step)
     if not candidates:
@@ -122,48 +148,35 @@ async def resolve_price(
     segment = _normalize_segment(athlete_segment)
     sessions = _normalize_sessions(athlete_sessions)
 
-    # Fetch all active catalog entries for this branch
-    result = await db.execute(
-        select(PriceCatalog).where(
-            PriceCatalog.branch_id == branch_id,
-            PriceCatalog.is_active == True,  # noqa: E712
-        )
-    )
-    entries = result.scalars().all()
-    if not entries:
+    if not catalog:
         return None
-
-    # Build lookup dict: (program_name_lower, segment, sessions) → price
-    lookup: dict[tuple, Decimal] = {}
-    for e in entries:
-        key = (
-            e.program_name.strip().lower(),
-            e.segment.strip().lower() if e.segment else None,
-            e.sessions.strip().lower() if e.sessions else None,
-        )
-        lookup[key] = e.price
 
     seg_lower = segment.lower() if segment else None
     sess_lower = sessions.lower() if sessions else None
 
-    # Try each candidate program name in priority order
     for candidate in candidates:
         c = candidate.strip().lower()
 
-        # Priority 1: exact match (program + segment + sessions)
-        if (c, seg_lower, sess_lower) in lookup:
-            return lookup[(c, seg_lower, sess_lower)]
-
-        # Priority 2: program + segment, no sessions
-        if (c, seg_lower, None) in lookup:
-            return lookup[(c, seg_lower, None)]
-
-        # Priority 3: program + sessions, no segment
-        if (c, None, sess_lower) in lookup:
-            return lookup[(c, None, sess_lower)]
-
-        # Priority 4: program only (flat pricing)
-        if (c, None, None) in lookup:
-            return lookup[(c, None, None)]
+        if (c, seg_lower, sess_lower) in catalog:
+            return catalog[(c, seg_lower, sess_lower)]
+        if (c, seg_lower, None) in catalog:
+            return catalog[(c, seg_lower, None)]
+        if (c, None, sess_lower) in catalog:
+            return catalog[(c, None, sess_lower)]
+        if (c, None, None) in catalog:
+            return catalog[(c, None, None)]
 
     return None
+
+
+async def resolve_price(
+    db: AsyncSession,
+    branch_id: int,
+    athlete_type: Optional[str],
+    athlete_step: Optional[str],
+    athlete_segment: Optional[str],
+    athlete_sessions: Optional[str],
+) -> Optional[Decimal]:
+    """Look up the catalog price for an athlete. Convenience wrapper for single lookups."""
+    catalog = await load_branch_catalog(db, branch_id)
+    return resolve_price_from_catalog(catalog, athlete_type, athlete_step, athlete_segment, athlete_sessions)

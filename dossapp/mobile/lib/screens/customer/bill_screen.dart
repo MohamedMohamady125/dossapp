@@ -57,10 +57,28 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
     setState(() => _paying = true);
     try {
       final intent = await ApiService.createPaymentIntent();
-      // Open Easykash hosted checkout in browser
-      final url = Uri.parse(intent['url'] as String);
+      final urlStr = intent['url'] as String?;
+      if (urlStr == null || urlStr.isEmpty) {
+        throw ApiException(0, 'Payment is not available at the moment. Please try again later.');
+      }
+      final url = Uri.parse(urlStr);
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open payment page. Please try again.')),
+          );
+        }
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        final msg = e.isServer
+            ? 'Payment service is temporarily unavailable. Please try again later.'
+            : e.isNetwork
+                ? e.message
+                : 'Payment error: ${e.message}';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (mounted) {

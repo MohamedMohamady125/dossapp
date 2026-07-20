@@ -50,19 +50,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       await ApiService.markNotificationRead(item['id'] as int);
       widget.onUnreadChanged?.call();
-    } catch (_) {}
+    } catch (e) {
+      // Revert optimistic update on failure
+      if (mounted) {
+        setState(() => item['is_read'] = false);
+      }
+    }
   }
 
   Future<void> _markAllRead() async {
+    final previousStates = {for (final item in _items) item['id']: item['is_read']};
+    setState(() {
+      for (final item in _items) {
+        item['is_read'] = true;
+      }
+    });
     try {
       await ApiService.markAllNotificationsRead();
-      setState(() {
-        for (final item in _items) {
-          item['is_read'] = true;
-        }
-      });
       widget.onUnreadChanged?.call();
-    } catch (_) {}
+    } catch (e) {
+      // Revert optimistic update on failure
+      if (mounted) {
+        setState(() {
+          for (final item in _items) {
+            item['is_read'] = previousStates[item['id']] ?? false;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    }
   }
 
   IconData _iconFor(String type) {

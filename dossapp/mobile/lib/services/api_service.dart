@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/constants.dart';
@@ -10,6 +12,7 @@ class ApiService {
   static const _storage = FlutterSecureStorage();
   static String? _accessToken;
   static String? _refreshToken;
+  static const _timeout = Duration(seconds: 15);
 
   // ── Auth ──
 
@@ -23,73 +26,88 @@ class ApiService {
     };
   }
 
+  /// Wraps network exceptions into user-friendly ApiException.
+  static Future<http.Response> _safeRequest(Future<http.Response> Function() request) async {
+    try {
+      return await request().timeout(_timeout);
+    } on SocketException {
+      throw ApiException(0, 'No internet connection. Check your network and try again.');
+    } on TimeoutException {
+      throw ApiException(0, 'Server is taking too long to respond. Please try again.');
+    } on HttpException {
+      throw ApiException(0, 'Could not connect to the server. Please try again later.');
+    } on HandshakeException {
+      throw ApiException(0, 'Secure connection failed. Please try again later.');
+    }
+  }
+
   static Future<http.Response> _get(String path) async {
-    final resp = await http.get(
+    final resp = await _safeRequest(() async => http.get(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
-    );
+    ));
     if (resp.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        return http.get(
+        return _safeRequest(() async => http.get(
           Uri.parse('${AppConstants.baseUrl}$path'),
           headers: await _headers(),
-        );
+        ));
       }
     }
     return resp;
   }
 
   static Future<http.Response> _post(String path, Map<String, dynamic> body) async {
-    final resp = await http.post(
+    final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
       body: jsonEncode(body),
-    );
+    ));
     if (resp.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        return http.post(
+        return _safeRequest(() async => http.post(
           Uri.parse('${AppConstants.baseUrl}$path'),
           headers: await _headers(),
           body: jsonEncode(body),
-        );
+        ));
       }
     }
     return resp;
   }
 
   static Future<http.Response> _delete(String path) async {
-    final resp = await http.delete(
+    final resp = await _safeRequest(() async => http.delete(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
-    );
+    ));
     if (resp.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        return http.delete(
+        return _safeRequest(() async => http.delete(
           Uri.parse('${AppConstants.baseUrl}$path'),
           headers: await _headers(),
-        );
+        ));
       }
     }
     return resp;
   }
 
   static Future<http.Response> _put(String path, Map<String, dynamic> body) async {
-    final resp = await http.put(
+    final resp = await _safeRequest(() async => http.put(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
       body: jsonEncode(body),
-    );
+    ));
     if (resp.statusCode == 401) {
       final refreshed = await _tryRefresh();
       if (refreshed) {
-        return http.put(
+        return _safeRequest(() async => http.put(
           Uri.parse('${AppConstants.baseUrl}$path'),
           headers: await _headers(),
           body: jsonEncode(body),
-        );
+        ));
       }
     }
     return resp;
@@ -99,20 +117,22 @@ class ApiService {
     _refreshToken ??= await _storage.read(key: 'refresh_token');
     if (_refreshToken == null) return false;
 
-    final resp = await http.post(
-      Uri.parse('${AppConstants.baseUrl}/auth/refresh'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'refresh_token': _refreshToken}),
-    );
+    try {
+      final resp = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': _refreshToken}),
+      ).timeout(_timeout);
 
-    if (resp.statusCode == 200) {
-      final data = jsonDecode(resp.body);
-      _accessToken = data['access_token'];
-      _refreshToken = data['refresh_token'];
-      await _storage.write(key: 'access_token', value: _accessToken!);
-      await _storage.write(key: 'refresh_token', value: _refreshToken!);
-      return true;
-    }
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        _accessToken = data['access_token'];
+        _refreshToken = data['refresh_token'];
+        await _storage.write(key: 'access_token', value: _accessToken!);
+        await _storage.write(key: 'refresh_token', value: _refreshToken!);
+        return true;
+      }
+    } catch (_) {}
     return false;
   }
 
@@ -456,6 +476,11 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
   ApiException(this.statusCode, this.message);
+
+  bool get isNetwork => statusCode == 0;
+  bool get isAuth => statusCode == 401 || statusCode == 403;
+  bool get isServer => statusCode >= 500;
+  bool get isNotFound => statusCode == 404;
 
   @override
   String toString() => message;

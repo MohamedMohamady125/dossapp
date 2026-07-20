@@ -130,6 +130,32 @@ def _normalize_gender(raw: str) -> Optional[str]:
     return raw.strip() or None
 
 
+def _clean_phone(raw) -> Optional[str]:
+    """Clean phone value from Excel — handles float numbers, leading zero restoration."""
+    if raw is None:
+        return None
+    # If openpyxl gives us a float (e.g. 1273604569.0), convert to int first
+    if isinstance(raw, float):
+        raw = str(int(raw))
+    s = str(raw).strip()
+    if not s:
+        return None
+    # Strip trailing .0 from string representation
+    if s.endswith(".0"):
+        s = s[:-2]
+    # Remove non-digit characters except leading +
+    if s.startswith("+"):
+        digits = "+" + re.sub(r"[^\d]", "", s[1:])
+    else:
+        digits = re.sub(r"[^\d]", "", s)
+    if not digits or len(digits) < 7:
+        return None
+    # Egyptian numbers: if 10 digits starting with 1 (missing leading 0), add it
+    if len(digits) == 10 and digits.startswith("1"):
+        digits = "0" + digits
+    return digits
+
+
 def _clean_pay(raw: str) -> Optional[str]:
     """Clean pay value — return numeric string or None."""
     if not raw:
@@ -258,6 +284,10 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
             elif seg_lower in ("non member", "outsider"):
                 segment_raw = "Outsider"
 
+        # Phone: read raw cell value to handle float numbers properly
+        phone1_raw = ws.cell(row=row_idx, column=col_map["phone1"]).value if "phone1" in col_map else None
+        phone2_raw = ws.cell(row=row_idx, column=col_map["phone2"]).value if "phone2" in col_map else None
+
         athlete = Athlete(
             branch=branch_name,
             branch_id=branch_id,
@@ -271,8 +301,8 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
             days=cell("days") or None,
             sessions=cell("sessions") or None,
             pay=pay_val,
-            phone1=cell("phone1") or None,
-            phone2=cell("phone2") or None,
+            phone1=_clean_phone(phone1_raw),
+            phone2=_clean_phone(phone2_raw),
             segment=segment_raw or None,
             comment=cell("comment") or None,
             receipt_no=cell("receipt_no") or None,

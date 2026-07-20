@@ -5,7 +5,6 @@ import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
-import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
 
 class AthletesScreen extends StatefulWidget {
@@ -108,10 +107,8 @@ class _AthletesScreenState extends State<AthletesScreen> {
                   )
                 : ListView.builder(
                     itemCount: list.length,
-                    itemBuilder: (ctx, i) => AnimatedListItem(
-                      index: i,
-                      child: _buildAthleteRow(list[i]),
-                    ),
+                    // No AnimatedListItem here — causes jank on fast scroll with 1500+ athletes
+                    itemBuilder: (ctx, i) => _buildAthleteRow(list[i]),
                   ),
           ),
         ),

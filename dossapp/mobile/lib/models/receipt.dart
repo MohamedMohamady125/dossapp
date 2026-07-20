@@ -30,7 +30,9 @@ class Receipt {
       period: json['period'] ?? '',
       amountPaid: json['amount_paid'] ?? '',
       paymentChannel: json['payment_channel'] ?? '',
-      issuedAt: DateTime.parse(json['issued_at']),
+      issuedAt: json['issued_at'] != null
+          ? DateTime.tryParse(json['issued_at']) ?? DateTime.now()
+          : DateTime.now(),
       athleteName: json['athlete_name'] ?? '',
       branchName: json['branch_name'] ?? '',
       level: json['level'],

@@ -396,11 +396,12 @@ async def list_athletes(
     )
     provisioned = {row[0] for row in result.all()}
 
-    # Resolve bills from price catalog
-    from app.services.price_resolver import resolve_price
+    # Resolve bills from price catalog (single DB query for entire branch)
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog
+    catalog = await load_branch_catalog(db, branch_id)
     athletes_out = []
     for a in roster.athletes:
-        bill = await resolve_price(db, branch_id, a.type, a.step, a.segment, a.sessions)
+        bill = resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
         athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
             branch_id=branch_id,
