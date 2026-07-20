@@ -284,13 +284,14 @@ async def _send_receipt_notifications(
 ):
     """Enqueue receipt notifications across all available channels."""
     body = (
-        f"Aqua Athletic Academy - Payment Receipt\n"
+        f"Aquathletic Swimming Academy - Payment Receipt\n"
         f"Receipt #{receipt.receipt_number}\n"
+        f"Branch: {receipt.branch_name}\n"
         f"Athlete: {receipt.athlete_name}\n"
         f"Period: {receipt.period}\n"
         f"Amount: {receipt.amount_paid} EGP\n"
-        f"Status: PAID\n"
-        f"Thank you!"
+        f"Status: PAID ✓\n\n"
+        f"Thank you for choosing Aquathletic!"
     )
 
     if phone:

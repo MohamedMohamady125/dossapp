@@ -213,9 +213,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                 label: 'Share',
                 onPressed: () {
                   SharePlus.instance.share(
-                    ShareParams(text: 'Aqua Athletic Receipt ${receipt.receiptNumber}\n'
+                    ShareParams(text: 'Aquathletic Swimming Academy\n'
+                        'Receipt: ${receipt.receiptNumber}\n'
                         'Amount: ${formatMoney(receipt.amountPaid)}\n'
-                        'Period: ${formatPeriod(receipt.period)}'),
+                        'Period: ${formatPeriod(receipt.period)}\n'
+                        'Status: PAID ✓'),
                   );
                 },
               ),
