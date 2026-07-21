@@ -78,6 +78,13 @@ def _normalize_program_name(athlete_type: Optional[str], athlete_step: Optional[
     if athlete_type and athlete_type.strip():
         candidates.append(athlete_type.strip())
 
+    # Ultimate fallback: try Group Training / Level One so athletes on branches
+    # with flat pricing (Rehab, Madinaty) always get a bill even if their type
+    # (e.g. "Pre Team", "Junior Teams") doesn't have a specific catalog entry.
+    for fb in ("Group Training", "Step 1-6", "Level One"):
+        if fb not in candidates:
+            candidates.append(fb)
+
     return candidates
 
 
