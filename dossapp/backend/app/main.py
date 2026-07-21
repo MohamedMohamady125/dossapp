@@ -169,6 +169,7 @@ async def _auto_seed():
 
     # Seed price catalog (idempotent — skips if entries exist)
     await _seed_price_catalog()
+    await _patch_missing_catalog_entries()
 
 
 async def _seed_price_catalog():
@@ -187,14 +188,18 @@ async def _seed_price_catalog():
             # ── Branch 1: Rehab (GEMS) — flat pricing ──
             for prog, price in [
                 ("Level One", 1500), ("Group Training", 1250),
-                ("Semi-Private Training", 2200), ("Private Training", 3500),
+                ("Adult Training", 1250), ("Pre-Team", 1700),
+                ("Semi-Private Training", 2200), ("Semi-Private 2", 2200), ("Semi-Private 3", 2200),
+                ("Private Training", 3500), ("Private 1-to-1", 3500),
             ]:
                 entries.append(PriceCatalog(branch_id=1, program_name=prog, price=Decimal(price)))
 
             # ── Branch 4: Madinaty (BISM) — same flat pricing ──
             for prog, price in [
                 ("Level One", 1500), ("Group Training", 1250),
-                ("Semi-Private Training", 2200), ("Private Training", 3500),
+                ("Adult Training", 1250), ("Pre-Team", 1700),
+                ("Semi-Private Training", 2200), ("Semi-Private 2", 2200), ("Semi-Private 3", 2200),
+                ("Private Training", 3500), ("Private 1-to-1", 3500),
             ]:
                 entries.append(PriceCatalog(branch_id=4, program_name=prog, price=Decimal(price)))
 
@@ -241,6 +246,62 @@ async def _seed_price_catalog():
             logger.info(f"Seeded {len(entries)} price catalog entries")
     except Exception as e:
         logger.error(f"Price catalog seed error: {e}")
+
+
+async def _patch_missing_catalog_entries():
+    """Add catalog entries that were missing from the initial seed."""
+    from app.models.price_catalog import PriceCatalog
+    from decimal import Decimal
+
+    # (branch_id, program_name, segment, sessions, price)
+    patches = [
+        # Branch 1 (Rehab) — missing programs
+        (1, "Adult Training", None, None, 1250),
+        (1, "Pre-Team", None, None, 1700),
+        (1, "Semi-Private 2", None, None, 2200),
+        (1, "Semi-Private 3", None, None, 2200),
+        (1, "Private 1-to-1", None, None, 3500),
+        # Branch 4 (Madinaty) — same missing programs
+        (4, "Adult Training", None, None, 1250),
+        (4, "Pre-Team", None, None, 1700),
+        (4, "Semi-Private 2", None, None, 2200),
+        (4, "Semi-Private 3", None, None, 2200),
+        (4, "Private 1-to-1", None, None, 3500),
+    ]
+
+    try:
+        async with async_session() as db:
+            added = 0
+            for branch_id, prog, seg, sess, price in patches:
+                # Check if entry already exists
+                q = select(PriceCatalog).where(
+                    PriceCatalog.branch_id == branch_id,
+                    PriceCatalog.program_name == prog,
+                )
+                if seg is not None:
+                    q = q.where(PriceCatalog.segment == seg)
+                else:
+                    q = q.where(PriceCatalog.segment.is_(None))
+                if sess is not None:
+                    q = q.where(PriceCatalog.sessions == sess)
+                else:
+                    q = q.where(PriceCatalog.sessions.is_(None))
+
+                result = await db.execute(q)
+                if result.scalar_one_or_none():
+                    continue
+
+                db.add(PriceCatalog(
+                    branch_id=branch_id, program_name=prog,
+                    segment=seg, sessions=sess, price=Decimal(price),
+                ))
+                added += 1
+
+            if added:
+                await db.commit()
+                logger.info(f"Patched {added} missing price catalog entries")
+    except Exception as e:
+        logger.error(f"Patch catalog error: {e}")
 
 
 async def _sync_drive_file_ids():
