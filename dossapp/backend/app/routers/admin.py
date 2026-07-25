@@ -336,6 +336,51 @@ async def delete_price_catalog_entry(
     return {"message": "Catalog entry deleted"}
 
 
+@router.get("/admin/price-catalog/missing")
+async def list_missing_prices(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Find athlete programs that have no matching price catalog entry."""
+    _require_admin_role(admin)
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, _normalize_program_name
+
+    source = _get_roster_source()
+    rosters = await source.get_all_rosters()
+
+    missing = []  # [{branch_id, branch_name, program_name, athlete_count, sample_athletes}]
+
+    for bid, roster in rosters.items():
+        catalog = await load_branch_catalog(db, bid)
+
+        # Group athletes by their resolved program name
+        unpriced: dict[str, list[str]] = {}  # program_name -> [athlete names]
+        for a in roster.athletes:
+            bill = resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
+            if bill is not None:
+                continue
+            # Find what program name would match
+            candidates = _normalize_program_name(a.type, a.step)
+            label = candidates[0] if candidates else (a.type or "Unknown")
+            # Include type + step info for context
+            detail = f"{a.type or '—'} / {a.step or '—'}"
+            key = f"{label} ({detail})" if detail != "— / —" else label
+            unpriced.setdefault(key, []).append(a.name)
+
+        for program_key, names in unpriced.items():
+            missing.append({
+                "branch_id": bid,
+                "branch_name": roster.branch_name,
+                "program_label": program_key,
+                "athlete_count": len(names),
+                "sample_athletes": names[:5],
+            })
+
+    # Sort by branch then by athlete count descending
+    missing.sort(key=lambda x: (x["branch_id"], -x["athlete_count"]))
+    return missing
+
+
 @router.get("/branches")
 async def list_branches(admin: AdminUser = Depends(get_current_admin)):
     source = _get_roster_source()

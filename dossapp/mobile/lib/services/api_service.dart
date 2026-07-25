@@ -426,6 +426,12 @@ class ApiService {
 
   // ── Price Catalog ──
 
+  static Future<List<Map<String, dynamic>>> getMissingPrices() async {
+    final resp = await _get('/admin/price-catalog/missing');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load missing prices');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
   static Future<List<Map<String, dynamic>>> getPriceCatalog({int? branchId}) async {
     final path = branchId != null ? '/admin/price-catalog?branch_id=$branchId' : '/admin/price-catalog';
     final resp = await _get(path);
