@@ -520,6 +520,7 @@ async def get_athlete_detail(
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
             for s in athlete.schedule
         ],
+        attendance=athlete.attendance,
     )
 
 
