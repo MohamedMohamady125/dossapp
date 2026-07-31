@@ -249,6 +249,7 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
             else:
                 del col_map["sessions"]
 
+    consecutive_empty = 0
     for row_idx in range(header_row + 1, (ws.max_row or 0) + 1):
         def cell(field: str) -> str:
             col = col_map.get(field)
@@ -259,8 +260,13 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
         id_val = cell("id")
         athlete_number = _parse_athlete_number(id_val)
         if athlete_number is None:
+            consecutive_empty += 1
+            # Stop after 50 consecutive empty rows — avoids scanning 50k empty rows
+            if consecutive_empty > 50:
+                break
             continue
 
+        consecutive_empty = 0
         name = cell("name")
         if not name:
             continue
@@ -317,6 +323,9 @@ class AttendanceExtra:
     pay: Optional[str] = None
     receipt_no: Optional[str] = None
     comment: Optional[str] = None
+    type: Optional[str] = None
+    step: Optional[str] = None
+    sessions: Optional[str] = None
 
 
 # Attendance mark classification (lowercased). Any other non-empty mark
@@ -407,7 +416,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
         return schedule_map, extras_map, attendance_map, errors
 
     # Detect column layout from first header-like row
-    coach_col: Optional[int] = None
+    all_coach_cols: list[int] = []
     id_col: Optional[int] = None
     name_col: Optional[int] = None
     pay_col: Optional[int] = None
@@ -419,8 +428,8 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
     for scan_row in range(1, min(6, max_row + 1)):
         for col in range(1, min(40, max_col + 1)):
             val = _clean(ws.cell(row=scan_row, column=col).value).lower().strip()
-            if val == "coach" and coach_col is None:
-                coach_col = col
+            if val == "coach":
+                all_coach_cols.append(col)
             elif val == "id" and id_col is None:
                 id_col = col
             elif val == "name" and name_col is None:
@@ -429,12 +438,21 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                 pay_col = col
             elif val == "type" and type_col is None:
                 type_col = col
-            elif val in ("st.", "step") and step_col is None:
+            elif val in ("st.", "st", "step") and step_col is None:
                 step_col = col
             elif val in ("comment", "comments") and comment_col is None:
                 comment_col = col
             elif val in ("pr.", "pr", "receipt", "receipt num", "receipt no.") and pr_col is None:
                 pr_col = col
+
+    # Use the coach column closest to (just before) the Type or ID column —
+    # attendance sheets often have multiple "Coach" headers (spare coach, attendance, actual coach)
+    coach_col: Optional[int] = None
+    if all_coach_cols:
+        ref_col = type_col or id_col or 999
+        # Prefer the coach column immediately before Type/ID
+        before = [c for c in all_coach_cols if c < ref_col]
+        coach_col = max(before) if before else all_coach_cols[-1]
 
     if id_col is None and name_col is None:
         return schedule_map, extras_map, attendance_map, errors
@@ -494,6 +512,18 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                 if mark:
                     attendance_map.setdefault(athlete_num, {})[iso_date] = mark
 
+            # Extract type/step from attendance row
+            type_raw = None
+            if type_col:
+                tv = _clean(ws.cell(row=row_idx, column=type_col).value)
+                if tv and tv.lower() not in ("type", ""):
+                    type_raw = tv
+            step_raw = None
+            if step_col:
+                sv = _clean(ws.cell(row=row_idx, column=step_col).value)
+                if sv and sv.lower() not in ("st.", "st", "step", "level", ""):
+                    step_raw = sv
+
             # Extract pay/receipt/comment extras
             pay_raw = None
             if pay_col:
@@ -509,7 +539,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                 if cv and cv.lower() not in ("comment", "comments"):
                     comment_raw = cv
 
-            if pay_raw or receipt_raw or comment_raw:
+            if pay_raw or receipt_raw or comment_raw or type_raw or step_raw:
                 existing = extras_map.get(athlete_num, AttendanceExtra())
                 if pay_raw:
                     existing.pay = pay_raw
@@ -517,6 +547,10 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                     existing.receipt_no = receipt_raw
                 if comment_raw:
                     existing.comment = comment_raw
+                if type_raw and not existing.type:
+                    existing.type = type_raw
+                if step_raw and not existing.step:
+                    existing.step = step_raw
                 extras_map[athlete_num] = existing
 
     return schedule_map, extras_map, attendance_map, errors
@@ -627,6 +661,11 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
                         a.receipt_no = extra.receipt_no
                     if extra.comment and not a.comment:
                         a.comment = extra.comment
+                    # Fill in type/step from attendance if roster is missing them
+                    if extra.type and not a.type:
+                        a.type = extra.type
+                    if extra.step and not a.step:
+                        a.step = extra.step
 
             sched_count = sum(len(v) for v in schedule_map.values())
             if sched_count > 0:
