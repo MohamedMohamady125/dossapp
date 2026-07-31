@@ -1134,14 +1134,16 @@ async def debug_excel_raw(
         for sn in wb.sheetnames:
             if _is_attendance_sheet(sn):
                 ws = wb[sn]
-                _, extras_map, _, _ = parse_attendance_sheet(ws, sn.strip())
+                sched_map, extras_map, _, _ = parse_attendance_sheet(ws, sn.strip())
                 with_type = sum(1 for e in extras_map.values() if e.type)
                 with_step = sum(1 for e in extras_map.values() if e.step)
                 diag[sn] = {
+                    "total_schedule": len(sched_map),
                     "total_extras": len(extras_map),
                     "with_type": with_type,
                     "with_step": with_step,
-                    "sample": {str(k): {"type": v.type, "step": v.step, "pay": v.pay} for k, v in list(extras_map.items())[:5]},
+                    "max_row": ws.max_row,
+                    "sample_extras": {str(k): {"type": v.type, "step": v.step} for k, v in list(extras_map.items())[:3]},
                 }
         result["attendance_diagnostic"] = diag
 
