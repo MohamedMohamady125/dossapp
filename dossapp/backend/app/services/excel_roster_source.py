@@ -196,7 +196,10 @@ class ExcelRosterSource(RosterSource):
             self._last_errors[branch_id] = [f"Parse error: {e}"]
             return False
 
-    async def refresh_all(self) -> dict[int, bool]:
+    async def refresh_all(self, force: bool = False) -> dict[int, bool]:
+        if force:
+            # Clear cached modification times to force re-download + re-parse
+            self._last_modified.clear()
         # Download and parse all branches in parallel for faster cold starts
         tasks = {bid: self.refresh_branch(bid) for bid in self._configs}
         gathered = await asyncio.gather(*tasks.values(), return_exceptions=True)

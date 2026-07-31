@@ -40,13 +40,13 @@ def _get_roster_source():
 
 
 @router.get("/notifications")
-async def cron_notifications(authorization: Optional[str] = Header(None)):
+async def cron_notifications(force: bool = False, authorization: Optional[str] = Header(None)):
     """Refresh rosters and run schedule-change + missed-session triggers."""
     _authorize(authorization)
     from app.services.push_triggers import run_roster_triggers
 
     source = _get_roster_source()
-    await source.refresh_all()
+    await source.refresh_all(force=force)
     rosters = await source.get_all_rosters()
 
     totals = {"schedule": 0, "missed": 0}
