@@ -1066,3 +1066,73 @@ async def test_send_notification(
 
     await send_push_to_account(db, account.id, "test", payload.title, payload.body)
     return {"dry_run": False, "message": "Notification sent"}
+
+
+@router.get("/admin/debug/excel-raw/{branch_id}")
+async def debug_excel_raw(
+    branch_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Temporary debug: dump raw Excel cells for inspection."""
+    from app.main import roster_source
+    config = roster_source._configs.get(branch_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Branch not configured")
+
+    import asyncio, os
+    drive_file_id = config.get("drive_file_id")
+    local_path = config.get("local_file_path")
+
+    if drive_file_id:
+        from app.services.drive_reader import download_file
+        tmp_path = await asyncio.to_thread(download_file, drive_file_id)
+        if not tmp_path:
+            raise HTTPException(status_code=500, detail="Download failed")
+    elif local_path:
+        tmp_path = local_path
+    else:
+        raise HTTPException(status_code=400, detail="No file source")
+
+    from openpyxl import load_workbook
+    try:
+        wb = load_workbook(tmp_path, read_only=False, data_only=True)
+        result = {"sheets": []}
+        for sn in wb.sheetnames:
+            ws = wb[sn]
+            sheet_data = {
+                "name": sn,
+                "max_row": ws.max_row,
+                "max_column": ws.max_column,
+                "rows": [],
+            }
+            # First 5 rows for all sheets, plus sample data rows for reg sheet
+            max_dump = 8 if "reg" in sn.lower() else 5
+            for row in range(1, min(max_dump + 1, (ws.max_row or 0) + 1)):
+                cells = {}
+                for col in range(1, min(30, (ws.max_column or 0) + 1)):
+                    val = ws.cell(row=row, column=col).value
+                    if val is not None:
+                        cells[f"C{col}"] = repr(val)
+                sheet_data["rows"].append({"row": row, "cells": cells})
+
+            # For reg sheet, also dump rows 50, 100, 500 to see data patterns
+            if "reg" in sn.lower():
+                for row in [20, 50, 100, 200, 500, 1000]:
+                    if row <= (ws.max_row or 0):
+                        cells = {}
+                        for col in range(1, min(30, (ws.max_column or 0) + 1)):
+                            val = ws.cell(row=row, column=col).value
+                            if val is not None:
+                                cells[f"C{col}"] = repr(val)
+                        sheet_data["rows"].append({"row": row, "cells": cells})
+
+            result["sheets"].append(sheet_data)
+        wb.close()
+    finally:
+        if drive_file_id and tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    return result
