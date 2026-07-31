@@ -994,38 +994,6 @@ async def excel_health(admin: AdminUser = Depends(get_current_admin)):
     return source.get_health()
 
 
-@router.get("/admin/debug/attendance/{branch_id}")
-async def debug_attendance(
-    branch_id: int,
-    admin: AdminUser = Depends(get_current_admin),
-):
-    """Inspect parsed attendance marks per athlete — for tuning the date-column heuristic."""
-    enforce_branch_scope(admin, branch_id)
-    source = _get_roster_source()
-    roster = await source.get_branch_roster(branch_id)
-    if not roster:
-        raise HTTPException(status_code=404, detail="Branch data not available")
-
-    athletes_with_marks = [a for a in roster.athletes if a.attendance]
-    sample = [
-        {
-            "athlete_number": a.athlete_number,
-            "name": a.name,
-            "attendance": dict(sorted(a.attendance.items())),
-        }
-        for a in athletes_with_marks[:50]
-    ]
-    all_dates = sorted({d for a in athletes_with_marks for d in a.attendance})
-    return {
-        "branch_id": branch_id,
-        "branch_name": roster.branch_name,
-        "athletes_total": len(roster.athletes),
-        "athletes_with_attendance": len(athletes_with_marks),
-        "detected_dates": all_dates,
-        "sample": sample,
-    }
-
-
 @router.post("/admin/notifications/test-send")
 async def test_send_notification(
     payload: TestSendRequest,
