@@ -1115,16 +1115,18 @@ async def debug_excel_raw(
                         cells[f"C{col}"] = repr(val)
                 sheet_data["rows"].append({"row": row, "cells": cells})
 
-            # For reg sheet, also dump rows 50, 100, 500 to see data patterns
-            if "reg" in sn.lower():
-                for row in [20, 50, 100, 200, 500, 1000]:
+            # For reg sheet and Mon.Thu, dump extra sample rows
+            if "reg" in sn.lower() or "mon" in sn.lower():
+                sample_rows = [10, 15, 20, 30, 50, 100, 200, 300, 500, 700, 1000]
+                for row in sample_rows:
                     if row <= (ws.max_row or 0):
                         cells = {}
                         for col in range(1, min(30, (ws.max_column or 0) + 1)):
                             val = ws.cell(row=row, column=col).value
                             if val is not None:
                                 cells[f"C{col}"] = repr(val)
-                        sheet_data["rows"].append({"row": row, "cells": cells})
+                        if cells:
+                            sheet_data["rows"].append({"row": row, "cells": cells})
 
             result["sheets"].append(sheet_data)
 
