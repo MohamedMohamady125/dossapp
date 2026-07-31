@@ -454,13 +454,32 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
         before = [c for c in all_coach_cols if c < ref_col]
         coach_col = max(before) if before else all_coach_cols[-1]
 
+    logger.info(f"  Attendance '{day_pair}': layout id_col={id_col} name_col={name_col} coach_col={coach_col} type_col={type_col} step_col={step_col} pay_col={pay_col} max_row={max_row} max_col={max_col}")
+
     if id_col is None and name_col is None:
+        logger.warning(f"  Attendance '{day_pair}': NO id or name column found — skipping")
+        # Dump first 3 rows to help debug
+        for r in range(1, min(4, max_row + 1)):
+            cells = {col: repr(ws.cell(row=r, column=col).value) for col in range(1, min(20, max_col + 1)) if ws.cell(row=r, column=col).value is not None}
+            logger.warning(f"    Row {r}: {cells}")
         return schedule_map, extras_map, attendance_map, errors
 
     # Detect per-session date columns (attendance marks live under them)
     known_cols = {c for c in (coach_col, id_col, name_col, pay_col, type_col, step_col, comment_col, pr_col) if c}
     date_cols = _detect_date_columns(ws, max_col, known_cols)
-    if date_cols:
+
+    # Log date detection details — dump header cells beyond known columns for debugging
+    if not date_cols:
+        logger.warning(f"  Attendance '{day_pair}': NO date columns detected! Dumping header cells:")
+        for r in range(1, min(6, max_row + 1)):
+            cells = {}
+            for col in range(1, min(60, max_col + 1)):
+                v = ws.cell(row=r, column=col).value
+                if v is not None and col not in known_cols:
+                    cells[col] = f"{type(v).__name__}:{repr(v)}"
+            if cells:
+                logger.warning(f"    Row {r} non-header cells: {cells}")
+    else:
         logger.info(f"  Attendance '{day_pair}': detected {len(date_cols)} date columns: {sorted(date_cols.values())}")
 
     current_time_block: Optional[str] = None
@@ -553,6 +572,9 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
                     existing.step = step_raw
                 extras_map[athlete_num] = existing
 
+    total_marks = sum(len(v) for v in attendance_map.values())
+    logger.info(f"  Attendance '{day_pair}' result: {len(schedule_map)} athletes scheduled, {len(attendance_map)} with marks, {total_marks} total marks")
+
     return schedule_map, extras_map, attendance_map, errors
 
 
@@ -624,6 +646,9 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
             skills_sheet = wb[sheet_name]
         elif _is_attendance_sheet(sheet_name):
             attendance_sheets.append((wb[sheet_name], sheet_name.strip()))
+
+    logger.info(f"Workbook sheets: {wb.sheetnames}")
+    logger.info(f"  Roster: {roster_sheet.title if roster_sheet else 'NONE'}, Attendance: {[dp for _, dp in attendance_sheets]}, Skills: {skills_sheet.title if skills_sheet else 'NONE'}")
 
     if roster_sheet is None:
         errors.append("No roster sheet found (expected sheet with 'Reg' in name)")
