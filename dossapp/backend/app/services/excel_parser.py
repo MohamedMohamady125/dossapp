@@ -1,4 +1,4 @@
-"""Parse Aqua Athletic Excel workbooks into Athlete objects.  v2-merge-fix
+"""Parse Aqua Athletic Excel workbooks into Athlete objects.
 
 Universal parser — handles all branch format variations:
 - Rehab/Madinaty: 19-col layout with M Code + visa, M-prefix IDs, M/F gender

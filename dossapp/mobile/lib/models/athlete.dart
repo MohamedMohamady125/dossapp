@@ -28,6 +28,7 @@ class AthleteProfile {
   final String? sessions;
   final String? segment;
   final List<ScheduleSlot> schedule;
+  final Map<String, String> attendance; // ISO date -> 'P' | 'A'
 
   AthleteProfile({
     required this.branch,
@@ -43,6 +44,7 @@ class AthleteProfile {
     this.sessions,
     this.segment,
     this.schedule = const [],
+    this.attendance = const {},
   });
 
   factory AthleteProfile.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,9 @@ class AthleteProfile {
               ?.map((s) => ScheduleSlot.fromJson(s))
               .toList() ??
           [],
+      attendance: (json['attendance'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v.toString())) ??
+          {},
     );
   }
 }

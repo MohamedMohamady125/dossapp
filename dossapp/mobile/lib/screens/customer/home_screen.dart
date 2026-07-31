@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
@@ -34,8 +35,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Future<void> _loadUnread() async {
-    final count = await ApiService.getUnreadCount();
-    if (mounted) setState(() => _unreadCount = count);
+    try {
+      final count = await ApiService.getUnreadCount();
+      if (mounted) setState(() => _unreadCount = count);
+    } catch (_) {
+      // Silently fail — badge count is non-critical
+    }
   }
 
   Widget _bellIcon(IconData icon) {
@@ -122,7 +127,7 @@ class _HomeTabState extends State<_HomeTab> {
     } catch (e) {
       _error = e.toString();
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -254,12 +259,19 @@ class _HomeTabState extends State<_HomeTab> {
                   : _practiceFromRoster(p),
             ),
 
+            // ── Attendance ──
+            if (p.attendance.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              AnimatedListItem(index: 3, child: _sectionLabel('Attendance')),
+              AnimatedListItem(index: 4, child: _attendanceCard(p.attendance)),
+            ],
+
             // ── Payment Status ──
             if (b != null && !b.noEnrollment) ...[
               const SizedBox(height: 8),
-              AnimatedListItem(index: 3, child: _sectionLabel('Payment Status')),
+              AnimatedListItem(index: 5, child: _sectionLabel('Payment Status')),
               AnimatedListItem(
-                index: 4,
+                index: 6,
                 child: PressFeedback(
                   onTap: widget.onGoToPay,
                   child: _billStatusCard(b),
@@ -269,17 +281,17 @@ class _HomeTabState extends State<_HomeTab> {
 
             // ── Athlete Details ──
             const SizedBox(height: 8),
-            AnimatedListItem(index: 5, child: _sectionLabel('Athlete Details')),
-            AnimatedListItem(index: 6, child: _detailsCard(p)),
+            AnimatedListItem(index: 7, child: _sectionLabel('Athlete Details')),
+            AnimatedListItem(index: 8, child: _detailsCard(p)),
 
             // ── Enrollment Info ──
             const SizedBox(height: 8),
-            AnimatedListItem(index: 7, child: _sectionLabel('Enrollment')),
-            AnimatedListItem(index: 8, child: _enrollmentCard(p)),
+            AnimatedListItem(index: 9, child: _sectionLabel('Enrollment')),
+            AnimatedListItem(index: 10, child: _enrollmentCard(p)),
 
             // ── No enrollment state ──
             if (b != null && b.noEnrollment)
-              AnimatedListItem(index: 9, child: _noEnrollmentCard()),
+              AnimatedListItem(index: 11, child: _noEnrollmentCard()),
 
             const SizedBox(height: 24),
           ])),
@@ -646,6 +658,114 @@ class _HomeTabState extends State<_HomeTab> {
         ],
       ),
     );
+  }
+
+  // ── ATTENDANCE CARD ──
+  Widget _attendanceCard(Map<String, String> attendance) {
+    // Sort dates chronologically
+    final sortedDates = attendance.keys.toList()..sort();
+    final present = attendance.values.where((v) => v == 'P').length;
+    final absent = attendance.values.where((v) => v == 'A').length;
+    final total = present + absent;
+    final pct = total > 0 ? (present / total * 100).round() : 0;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Summary row
+            Row(
+              children: [
+                _attendanceStat('$pct%', 'Rate', AppColors.primary),
+                _attendanceDivider(),
+                _attendanceStat('$present', 'Present', AppColors.success),
+                _attendanceDivider(),
+                _attendanceStat('$absent', 'Absent', AppColors.error),
+                _attendanceDivider(),
+                _attendanceStat('$total', 'Total', AppColors.textSecondary),
+              ],
+            ),
+            if (sortedDates.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 14),
+              // Date-by-date grid
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: sortedDates.map((date) {
+                  final isPresent = attendance[date] == 'P';
+                  final parsed = DateTime.tryParse(date);
+                  final label = parsed != null ? DateFormat('d MMM').format(parsed) : date;
+                  final dayName = parsed != null ? DateFormat('E').format(parsed) : '';
+
+                  return Container(
+                    width: 64,
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: isPresent
+                          ? AppColors.success.withValues(alpha: 0.08)
+                          : AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isPresent
+                            ? AppColors.success.withValues(alpha: 0.2)
+                            : AppColors.error.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          isPresent ? Icons.check_circle : Icons.cancel,
+                          size: 18,
+                          color: isPresent ? AppColors.success : AppColors.error,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isPresent ? AppColors.success : AppColors.error,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        if (dayName.isNotEmpty)
+                          Text(
+                            dayName,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: (isPresent ? AppColors.success : AppColors.error).withValues(alpha: 0.7),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _attendanceStat(String value, String label, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
+          const SizedBox(height: 2),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+
+  Widget _attendanceDivider() {
+    return Container(width: 1, height: 32, color: AppColors.border);
   }
 
   Widget _sectionLabel(String text) {

@@ -81,6 +81,7 @@ async def get_profile(account: Account = Depends(get_current_customer)):
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
             for s in athlete.schedule
         ],
+        attendance=athlete.attendance,
     )
 
 

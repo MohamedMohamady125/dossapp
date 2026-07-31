@@ -23,6 +23,7 @@ class AthleteProfile(BaseModel):
     sessions: Optional[str] = None
     segment: Optional[str] = None  # f column
     schedule: list[ScheduleSlot] = []
+    attendance: dict[str, str] = {}  # ISO date -> 'P' | 'A'
 
 
 class AthleteDetail(AthleteProfile):
