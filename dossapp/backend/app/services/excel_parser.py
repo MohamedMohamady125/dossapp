@@ -344,8 +344,12 @@ def _classify_attendance_mark(raw) -> Optional[str]:
     return "P"
 
 
-def _header_cell_to_date(val, default_year: int) -> Optional[str]:
-    """Interpret a header cell as a session date. Returns ISO date or None."""
+def _header_cell_to_date(val, default_year: int, default_month: Optional[int] = None) -> Optional[str]:
+    """Interpret a header cell as a session date. Returns ISO date or None.
+
+    Handles: datetime objects, Excel serial numbers, d/m/y strings, d/m strings,
+    and bare day-of-month numbers (1-31) when default_month is provided.
+    """
     if val is None:
         return None
     if isinstance(val, datetime):
@@ -355,11 +359,18 @@ def _header_cell_to_date(val, default_year: int) -> Optional[str]:
     s = str(val).strip()
     if not s:
         return None
-    # Excel serial number (roughly 2005–2060)
+    # Try as a number first
     try:
         num = float(s)
+        # Excel serial number (roughly 2005–2060)
         if 38000 < num < 60000:
             return (EXCEL_EPOCH + timedelta(days=num)).strftime("%Y-%m-%d")
+        # Day-of-month number (1–31) — needs a default_month context
+        if default_month and 1 <= num <= 31 and num == int(num):
+            try:
+                return datetime(default_year, default_month, int(num)).strftime("%Y-%m-%d")
+            except ValueError:
+                return None
         return None
     except (ValueError, TypeError, OverflowError):
         pass
@@ -384,7 +395,7 @@ def _header_cell_to_date(val, default_year: int) -> Optional[str]:
     return None
 
 
-def _detect_date_columns(ws: Worksheet, max_col: int, known_cols: set[int]) -> dict[int, str]:
+def _detect_date_columns(ws: Worksheet, max_col: int, known_cols: set[int], default_month: Optional[int] = None) -> dict[int, str]:
     """Find per-session date columns in the header area. Returns {col: ISO date}."""
     default_year = datetime.now().year
     date_cols: dict[int, str] = {}
@@ -393,13 +404,13 @@ def _detect_date_columns(ws: Worksheet, max_col: int, known_cols: set[int]) -> d
         for col in range(1, min(60, max_col + 1)):
             if col in known_cols or col in date_cols:
                 continue
-            iso = _header_cell_to_date(ws.cell(row=scan_row, column=col).value, default_year)
+            iso = _header_cell_to_date(ws.cell(row=scan_row, column=col).value, default_year, default_month)
             if iso:
                 date_cols[col] = iso
     return date_cols
 
 
-def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list[ScheduleEntry]], dict[int, AttendanceExtra], dict[int, dict[str, str]], list[str]]:
+def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional[int] = None) -> tuple[dict[int, list[ScheduleEntry]], dict[int, AttendanceExtra], dict[int, dict[str, str]], list[str]]:
     """Parse attendance sheet — handles all layout variations.
 
     Returns (schedule_map, extras_map, attendance_map, errors) where
@@ -466,7 +477,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str) -> tuple[dict[int, list
 
     # Detect per-session date columns (attendance marks live under them)
     known_cols = {c for c in (coach_col, id_col, name_col, pay_col, type_col, step_col, comment_col, pr_col) if c}
-    date_cols = _detect_date_columns(ws, max_col, known_cols)
+    date_cols = _detect_date_columns(ws, max_col, known_cols, default_month=default_month)
 
     # Log date detection details — dump header cells beyond known columns for debugging
     if not date_cols:
@@ -609,6 +620,22 @@ def parse_skills_sheet(ws: Worksheet) -> tuple[dict, list[str], list[str]]:
     return price_matrix, coaches, errors
 
 
+_MONTH_NAMES = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6,
+    "jul": 7, "july": 7, "aug": 8, "august": 8, "sep": 9, "september": 9,
+    "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+
+
+def _detect_month_from_name(name: str) -> Optional[int]:
+    """Extract month number from a sheet name like 'July. Reg' or 'August Reg'."""
+    for word in re.split(r"[\s.\-_]+", name.strip().lower()):
+        if word in _MONTH_NAMES:
+            return _MONTH_NAMES[word]
+    return None
+
+
 def _is_attendance_sheet(name: str) -> bool:
     """Check if a sheet name looks like an attendance/schedule sheet."""
     n = name.strip().lower()
@@ -647,7 +674,9 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
         elif _is_attendance_sheet(sheet_name):
             attendance_sheets.append((wb[sheet_name], sheet_name.strip()))
 
-    logger.info(f"Workbook sheets: {wb.sheetnames}")
+    # Detect month from roster sheet name (e.g., "July. Reg" → 7)
+    roster_month = _detect_month_from_name(roster_sheet.title if roster_sheet else "")
+    logger.info(f"Workbook sheets: {wb.sheetnames}, detected month: {roster_month}")
     logger.info(f"  Roster: {roster_sheet.title if roster_sheet else 'NONE'}, Attendance: {[dp for _, dp in attendance_sheets]}, Skills: {skills_sheet.title if skills_sheet else 'NONE'}")
 
     if roster_sheet is None:
@@ -666,7 +695,7 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
     # Parse attendance sheets — merge schedule + extras
     for ws, day_pair in attendance_sheets:
         try:
-            schedule_map, extras_map, attendance_map, att_errors = parse_attendance_sheet(ws, day_pair)
+            schedule_map, extras_map, attendance_map, att_errors = parse_attendance_sheet(ws, day_pair, default_month=roster_month)
             errors.extend(att_errors)
 
             for num, entries in schedule_map.items():

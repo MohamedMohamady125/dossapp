@@ -308,7 +308,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
 
         // ── Personal Section ──
         _sectionHeader('Personal'),
-        _infoRow(Icons.school_rounded, 'Level', athlete.level),
+        _infoRow(Icons.school_rounded, 'Step', athlete.level),
         _infoRow(Icons.category_rounded, 'Type', athlete.type),
         _infoRow(Icons.cake_rounded, 'Age', athlete.age?.toStringAsFixed(1)),
         _infoRow(Icons.calendar_month_rounded, 'DOB', athlete.dateOfBirth),
