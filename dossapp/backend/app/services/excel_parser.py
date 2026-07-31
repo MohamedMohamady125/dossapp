@@ -537,10 +537,16 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
             schedule_map.setdefault(athlete_num, []).append(entry)
 
             # Attendance marks under date columns
+            # Blank cell = absent (session happened but athlete didn't attend)
+            # Only mark absent for dates that have already passed
+            today_iso = datetime.now().strftime("%Y-%m-%d")
             for col, iso_date in date_cols.items():
                 mark = _classify_attendance_mark(ws.cell(row=row_idx, column=col).value)
                 if mark:
                     attendance_map.setdefault(athlete_num, {})[iso_date] = mark
+                elif iso_date <= today_iso:
+                    # No mark and date has passed → absent
+                    attendance_map.setdefault(athlete_num, {})[iso_date] = "A"
 
             # Extract type/step from attendance row
             type_raw = None
