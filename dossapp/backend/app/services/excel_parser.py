@@ -1,4 +1,4 @@
-"""Parse Aqua Athletic Excel workbooks into Athlete objects.
+"""Parse Aqua Athletic Excel workbooks into Athlete objects.  v2-merge-fix
 
 Universal parser — handles all branch format variations:
 - Rehab/Madinaty: 19-col layout with M Code + visa, M-prefix IDs, M/F gender
@@ -652,6 +652,10 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
                 if num in athlete_by_num:
                     athlete_by_num[num].attendance.update(marks)
 
+            # Count how many type/step values will be filled from attendance
+            will_merge_type = sum(1 for n, e in extras_map.items() if n in athlete_by_num and e.type and not athlete_by_num[n].type)
+            will_merge_step = sum(1 for n, e in extras_map.items() if n in athlete_by_num and e.step and not athlete_by_num[n].step)
+
             for num, extra in extras_map.items():
                 if num in athlete_by_num:
                     a = athlete_by_num[num]
@@ -668,8 +672,8 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
                         a.step = extra.step
 
             sched_count = sum(len(v) for v in schedule_map.values())
-            if sched_count > 0:
-                logger.info(f"  Attendance '{day_pair}': {sched_count} schedule entries, {len(extras_map)} extras")
+            if sched_count > 0 or will_merge_type or will_merge_step:
+                logger.info(f"  Attendance '{day_pair}': {sched_count} schedule, {len(extras_map)} extras, will_merge type={will_merge_type} step={will_merge_step}")
         except Exception as e:
             errors.append(f"Error parsing attendance sheet '{day_pair}': {e}")
 

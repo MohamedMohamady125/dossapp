@@ -1149,6 +1149,10 @@ async def debug_excel_raw(
                 }
         result["attendance_diagnostic"] = diag
 
+        # Version check — verify deployed code
+        import app.services.excel_parser as ep
+        result["parser_version"] = ep.__doc__[:60] if ep.__doc__ else "no doc"
+
         wb.close()
     finally:
         if drive_file_id and tmp_path:
