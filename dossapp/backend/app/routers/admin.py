@@ -1059,10 +1059,18 @@ async def debug_attendance(branch_id: int, admin: AdminUser = Depends(get_curren
         raise HTTPException(status_code=400, detail="No file source")
 
     from openpyxl import load_workbook
-    from app.services.excel_parser import _is_attendance_sheet, parse_attendance_sheet
+    from app.services.excel_parser import _is_attendance_sheet, parse_attendance_sheet, _detect_month_from_name, _detect_date_columns
     try:
         wb = load_workbook(tmp_path, read_only=False, data_only=True)
-        result = {"sheets": wb.sheetnames, "attendance_sheets": []}
+
+        # Detect month from roster sheet name
+        roster_month = None
+        for sn in wb.sheetnames:
+            if "reg" in sn.strip().lower():
+                roster_month = _detect_month_from_name(sn)
+                break
+
+        result = {"sheets": wb.sheetnames, "detected_month": roster_month, "attendance_sheets": []}
 
         for sn in wb.sheetnames:
             is_att = _is_attendance_sheet(sn)
@@ -1079,8 +1087,8 @@ async def debug_attendance(branch_id: int, admin: AdminUser = Depends(get_curren
                         cells[f"C{col}"] = f"{type(v).__name__}:{repr(v)}"
                 headers.append({"row": r, "cells": cells})
 
-            # Parse it
-            sched_map, extras_map, att_map, errs = parse_attendance_sheet(ws, sn.strip())
+            # Parse it with month context
+            sched_map, extras_map, att_map, errs = parse_attendance_sheet(ws, sn.strip(), default_month=roster_month)
 
             # Sample athlete rows (first 3 data rows after headers)
             sample_rows = []
