@@ -24,6 +24,7 @@ class AthleteProfile(BaseModel):
     segment: Optional[str] = None  # f column
     schedule: list[ScheduleSlot] = []
     attendance: dict[str, str] = {}  # ISO date -> 'P' | 'A'
+    account_status: str = "active"  # active | suspended
 
 
 class AthleteDetail(AthleteProfile):
@@ -43,6 +44,7 @@ class BillResponse(BaseModel):
     is_paid: bool = False
     receipt_number: Optional[str] = None
     no_enrollment: bool = False
+    is_suspended: bool = False
     # Store-acceptance framing: show branch, coach, class time
     branch_name: Optional[str] = None
     schedule: list[ScheduleSlot] = []

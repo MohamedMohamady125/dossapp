@@ -638,10 +638,15 @@ async def reprovision_account(
     )
 
 
+class MarkPaidBody(BaseModel):
+    payment_method: str = "cash"  # "cash" | "card"
+
+
 @router.post("/branches/{branch_id}/athletes/{athlete_number}/mark-paid")
 async def mark_athlete_paid(
     branch_id: int,
     athlete_number: int,
+    body: MarkPaidBody = MarkPaidBody(),
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -684,12 +689,13 @@ async def mark_athlete_paid(
         level=athlete.step,
         athlete_type=athlete.type,
         phone=athlete.phone1,
+        payment_method=body.payment_method,
     )
 
     if not receipt:
         raise HTTPException(status_code=400, detail="Already paid for this period")
 
-    return {"message": "Marked as paid", "receipt_number": receipt.receipt_number}
+    return {"message": "Marked as paid", "receipt_number": receipt.receipt_number, "receipt_id": receipt.id}
 
 
 @router.get("/branches/{branch_id}/payments", response_model=list[PaymentOut])
@@ -717,22 +723,52 @@ async def list_payments(
     roster = await source.get_branch_roster(branch_id)
     athlete_map = {a.athlete_number: a for a in roster.athletes} if roster else {}
 
-    return [
-        PaymentOut(
+    # Batch-fetch receipts for all payments
+    payment_ids = [p.id for p in payments]
+    receipt_map = {}
+    if payment_ids:
+        receipt_result = await db.execute(
+            select(Receipt).where(Receipt.payment_id.in_(payment_ids))
+        )
+        receipt_map = {r.payment_id: r for r in receipt_result.scalars().all()}
+
+    out = []
+    for p in payments:
+        athlete = athlete_map.get(p.athlete_number)
+        receipt = receipt_map.get(p.id)
+
+        # Extract coach + training time from first schedule slot
+        coach_name = None
+        training_time = None
+        if athlete and athlete.schedule:
+            slot = athlete.schedule[0]
+            coach_name = slot.coach
+            parts = []
+            if slot.day_pair:
+                parts.append(slot.day_pair)
+            if slot.time_block:
+                parts.append(slot.time_block)
+            training_time = " ".join(parts) if parts else None
+
+        out.append(PaymentOut(
             id=p.id,
             branch_id=p.branch_id,
             athlete_number=p.athlete_number,
-            athlete_name=athlete_map[p.athlete_number].name if p.athlete_number in athlete_map else f"Athlete #{p.athlete_number}",
-            level=athlete_map[p.athlete_number].step if p.athlete_number in athlete_map else None,
-            athlete_type=athlete_map[p.athlete_number].type if p.athlete_number in athlete_map else None,
+            athlete_name=athlete.name if athlete else f"Athlete #{p.athlete_number}",
+            level=athlete.step if athlete else None,
+            athlete_type=athlete.type if athlete else None,
             period=p.period,
             source=p.source,
             amount_paid=str(p.amount_paid),
             status=p.status,
             paid_at=p.paid_at,
-        )
-        for p in payments
-    ]
+            payment_channel=receipt.payment_channel if receipt else None,
+            receipt_number=receipt.receipt_number if receipt else None,
+            receipt_id=receipt.id if receipt else None,
+            coach=coach_name,
+            training_time=training_time,
+        ))
+    return out
 
 
 @router.post("/admin/receipts/{receipt_id}/resend")
@@ -1037,4 +1073,154 @@ async def test_send_notification(
     return {"dry_run": False, "message": "Notification sent"}
 
 
+# ── Reinstatement Requests ──
+
+
+class DeclineBody(BaseModel):
+    admin_note: Optional[str] = None
+
+
+@router.get("/admin/reinstatement-requests")
+async def list_reinstatement_requests(
+    status_filter: Optional[str] = Query("pending"),
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List reinstatement requests with athlete context."""
+    from app.models.reinstatement_request import ReinstatementRequest
+
+    query = select(ReinstatementRequest)
+    if status_filter:
+        query = query.where(ReinstatementRequest.status == status_filter)
+    # Scope assistants to their branch
+    if admin.role != "admin" and admin.assigned_branch_id:
+        query = query.where(ReinstatementRequest.branch_id == admin.assigned_branch_id)
+    query = query.order_by(ReinstatementRequest.created_at.desc())
+
+    result = await db.execute(query)
+    requests = result.scalars().all()
+
+    source = _get_roster_source()
+    items = []
+    for req in requests:
+        roster = await source.get_branch_roster(req.branch_id)
+        athlete = None
+        if roster:
+            athlete = next((a for a in roster.athletes if a.athlete_number == req.athlete_number), None)
+
+        # Check payment status
+        from app.models.payment import Payment
+        period = datetime.now().strftime("%Y-%m")
+        paid_result = await db.execute(
+            select(Payment.id).where(
+                Payment.branch_id == req.branch_id,
+                Payment.athlete_number == req.athlete_number,
+                Payment.period == period,
+                Payment.status == "paid",
+            )
+        )
+        is_paid = paid_result.scalar_one_or_none() is not None
+
+        items.append({
+            "id": req.id,
+            "account_id": req.account_id,
+            "branch_id": req.branch_id,
+            "branch_name": roster.branch_name if roster else f"Branch {req.branch_id}",
+            "athlete_number": req.athlete_number,
+            "athlete_name": athlete.name if athlete else "Unknown",
+            "status": req.status,
+            "message": req.message,
+            "admin_note": req.admin_note,
+            "created_at": req.created_at.isoformat() if req.created_at else None,
+            "reviewed_at": req.reviewed_at.isoformat() if req.reviewed_at else None,
+            "attendance": dict(sorted(athlete.attendance.items())) if athlete and athlete.attendance else {},
+            "sessions": athlete.sessions if athlete else None,
+            "is_paid": is_paid,
+        })
+
+    return items
+
+
+@router.post("/admin/reinstatement-requests/{request_id}/approve")
+async def approve_reinstatement(
+    request_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.reinstatement_request import ReinstatementRequest
+
+    result = await db.execute(select(ReinstatementRequest).where(ReinstatementRequest.id == request_id))
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    enforce_branch_scope(admin, req.branch_id)
+
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Request already {req.status}")
+
+    req.status = "approved"
+    req.reviewed_by = admin.id
+    req.reviewed_at = datetime.now()
+
+    # Reactivate account
+    acc_result = await db.execute(select(Account).where(Account.id == req.account_id))
+    account = acc_result.scalar_one_or_none()
+    if account:
+        account.status = "active"
+        db.add(account)
+
+    db.add(req)
+    await db.commit()
+
+    # Notify user
+    if account:
+        from app.services.push_service import send_push_to_account
+        await send_push_to_account(
+            db, account.id, "reinstatement_approved",
+            "Reinstatement Approved",
+            "Your reinstatement request has been approved! You can now use the app normally.",
+            data={"screen": "home"},
+        )
+
+    return {"message": "Reinstatement approved"}
+
+
+@router.post("/admin/reinstatement-requests/{request_id}/decline")
+async def decline_reinstatement(
+    request_id: int,
+    body: DeclineBody,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.reinstatement_request import ReinstatementRequest
+
+    result = await db.execute(select(ReinstatementRequest).where(ReinstatementRequest.id == request_id))
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    enforce_branch_scope(admin, req.branch_id)
+
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Request already {req.status}")
+
+    req.status = "declined"
+    req.admin_note = body.admin_note or "Your spot has been taken because you didn't show up and didn't pay."
+    req.reviewed_by = admin.id
+    req.reviewed_at = datetime.now()
+    db.add(req)
+    await db.commit()
+
+    # Notify user
+    acc_result = await db.execute(select(Account).where(Account.id == req.account_id))
+    account = acc_result.scalar_one_or_none()
+    if account:
+        from app.services.push_service import send_push_to_account
+        await send_push_to_account(
+            db, account.id, "reinstatement_declined",
+            "Reinstatement Declined",
+            req.admin_note,
+            data={"screen": "home"},
+        )
+
+    return {"message": "Reinstatement declined"}
 

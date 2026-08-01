@@ -31,6 +31,31 @@ async def get_current_customer(
     if account.status == "identity_mismatch":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Identity mismatch — contact admin")
 
+    if account.status == "suspended":
+        raise HTTPException(status_code=423, detail="Account suspended")
+
+    return account
+
+
+async def get_current_customer_allow_suspended(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> Account:
+    """Like get_current_customer but allows suspended accounts through."""
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access" or payload.get("role") != "customer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    account_id = payload.get("sub")
+    result = await db.execute(select(Account).where(Account.id == int(account_id)))
+    account = result.scalar_one_or_none()
+
+    if not account or account.status == "disabled":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found or disabled")
+
+    if account.status == "identity_mismatch":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Identity mismatch — contact admin")
+
     return account
 
 

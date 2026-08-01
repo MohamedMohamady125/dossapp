@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -12,7 +13,8 @@ from app.database import get_db
 from app.models.account import Account
 from app.models.payment import Payment
 from app.models.receipt import Receipt
-from app.routers.deps import get_current_customer
+from pydantic import BaseModel as PydanticBaseModel
+from app.routers.deps import get_current_customer, get_current_customer_allow_suspended
 from app.schemas.athlete import AthleteProfile, BillResponse, ScheduleSlot
 from app.schemas.payment import PaymentIntentResponse, ReceiptOut
 from app.services.notifications import enqueue_notification
@@ -49,7 +51,7 @@ async def _last_paid_amount(db: AsyncSession, branch_id: int, athlete_number: in
 
 
 @router.get("/", response_model=AthleteProfile)
-async def get_profile(account: Account = Depends(get_current_customer)):
+async def get_profile(account: Account = Depends(get_current_customer_allow_suspended)):
     source = _get_roster_source()
     roster = await source.get_branch_roster(account.branch_id)
     if not roster:
@@ -62,6 +64,7 @@ async def get_profile(account: Account = Depends(get_current_customer)):
             branch_id=account.branch_id,
             athlete_number=account.athlete_number,
             name=account.name_at_creation,
+            account_status=account.status,
         )
 
     return AthleteProfile(
@@ -82,11 +85,12 @@ async def get_profile(account: Account = Depends(get_current_customer)):
             for s in athlete.schedule
         ],
         attendance=athlete.attendance,
+        account_status=account.status,
     )
 
 
 @router.get("/bill", response_model=BillResponse)
-async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+async def get_bill(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     source = _get_roster_source()
     roster = await source.get_branch_roster(account.branch_id)
     period = datetime.now().strftime("%Y-%m")
@@ -136,6 +140,7 @@ async def get_bill(account: Account = Depends(get_current_customer), db: AsyncSe
         amount_owed=amount_owed,
         is_paid=payment is not None,
         receipt_number=receipt_number,
+        is_suspended=account.status == "suspended",
         branch_name=roster.branch_name,
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
@@ -276,3 +281,62 @@ async def resend_receipt(receipt_id: int, account: Account = Depends(get_current
         await enqueue_notification("whatsapp", receipt.phone, f"Receipt {receipt.receipt_number}: {receipt.amount_paid} EGP PAID", attachment=receipt.pdf_data, receipt_id=receipt.id)
 
     return {"message": "Receipt resend queued"}
+
+
+# ── Reinstatement ──
+
+class ReinstatementRequestBody(PydanticBaseModel):
+    message: Optional[str] = None
+
+
+@router.get("/reinstatement")
+async def get_reinstatement_status(
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.reinstatement_request import ReinstatementRequest
+    result = await db.execute(
+        select(ReinstatementRequest)
+        .where(ReinstatementRequest.account_id == account.id)
+        .order_by(ReinstatementRequest.created_at.desc())
+        .limit(1)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        return {"status": "none"}
+    return {
+        "status": req.status,
+        "created_at": req.created_at.isoformat() if req.created_at else None,
+        "admin_note": req.admin_note,
+    }
+
+
+@router.post("/reinstatement")
+async def request_reinstatement(
+    body: ReinstatementRequestBody,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    if account.status != "suspended":
+        raise HTTPException(status_code=400, detail="Account is not suspended")
+
+    from app.models.reinstatement_request import ReinstatementRequest
+    # Check no pending request exists
+    existing = await db.execute(
+        select(ReinstatementRequest).where(
+            ReinstatementRequest.account_id == account.id,
+            ReinstatementRequest.status == "pending",
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="A reinstatement request is already pending")
+
+    req = ReinstatementRequest(
+        account_id=account.id,
+        branch_id=account.branch_id,
+        athlete_number=account.athlete_number,
+        message=body.message,
+    )
+    db.add(req)
+    await db.commit()
+    return {"message": "Reinstatement request submitted"}

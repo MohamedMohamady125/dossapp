@@ -129,10 +129,34 @@ def _current_absence_streak(athlete: Athlete, today: str) -> tuple[int, str]:
     return streak, start
 
 
+def _parse_sessions_count(sessions_str: str | None) -> int | None:
+    """Parse '8 Sessions' → 8. Returns None if unparseable."""
+    if not sessions_str:
+        return None
+    import re
+    m = re.search(r"(\d+)", sessions_str)
+    return int(m.group(1)) if m else None
+
+
 async def check_missed_sessions(roster: BranchRoster, db: AsyncSession) -> int:
-    """Notify customers whose athlete missed their last 2 recorded sessions."""
+    """Notify customers whose athlete missed their last 2 recorded sessions.
+
+    If athlete has < 8 sessions AND is unpaid AND missed 2+ consecutive → suspend account.
+    If athlete paid but missed sessions → just send 'We miss you' (no suspension).
+    """
     accounts = await _active_accounts(db, roster.branch_id)
     today = date.today().isoformat()
+    period = date.today().strftime("%Y-%m")
+
+    # Pre-fetch paid athletes for this branch+period
+    result = await db.execute(
+        select(Payment.athlete_number).where(
+            Payment.branch_id == roster.branch_id,
+            Payment.period == period,
+            Payment.status == "paid",
+        )
+    )
+    paid_numbers = {row[0] for row in result.all()}
 
     sent = 0
     for athlete in roster.athletes:
@@ -144,14 +168,38 @@ async def check_missed_sessions(roster: BranchRoster, db: AsyncSession) -> int:
         account = accounts.get(athlete.athlete_number)
         if not account:
             continue
-        ok = await send_push_to_account(
-            db, account.id, "missed_sessions",
-            "We miss you!",
-            f"{athlete.name} has missed {streak} sessions. Are you okay?",
-            data={"screen": "schedule"},
-            dedupe_key=f"missed:{roster.branch_id}:{athlete.athlete_number}:{streak_start}",
-        )
-        sent += 1 if ok else 0
+
+        is_paid = athlete.athlete_number in paid_numbers
+        sessions_count = _parse_sessions_count(athlete.sessions)
+
+        # Suspension: unpaid + missed 2+ + less than 8 sessions
+        if not is_paid and sessions_count is not None and sessions_count < 8:
+            account.status = "suspended"
+            db.add(account)
+            await db.commit()
+
+            ok = await send_push_to_account(
+                db, account.id, "account_suspended",
+                "Account Suspended",
+                f"{athlete.name}'s account has been suspended due to missing "
+                f"{streak} consecutive sessions while payment is unpaid. "
+                f"Open the app to request reinstatement.",
+                data={"screen": "suspended"},
+                dedupe_key=f"suspended:{roster.branch_id}:{athlete.athlete_number}:{streak_start}",
+            )
+            sent += 1 if ok else 0
+            logger.info(f"Suspended account for athlete {athlete.athlete_number} "
+                        f"(streak={streak}, sessions={sessions_count}, unpaid)")
+        else:
+            # Paid or >= 8 sessions — just notify, no suspension
+            ok = await send_push_to_account(
+                db, account.id, "missed_sessions",
+                "We miss you!",
+                f"{athlete.name} has missed {streak} sessions. Are you okay?",
+                data={"screen": "schedule"},
+                dedupe_key=f"missed:{roster.branch_id}:{athlete.athlete_number}:{streak_start}",
+            )
+            sent += 1 if ok else 0
     return sent
 
 

@@ -7,9 +7,10 @@ from app.models.notification_log import NotificationLog
 from app.models.roster_snapshot import RosterSnapshot
 from app.models.push import DeviceToken, InboxNotification, ScheduleSnapshot, NotificationDedupe
 from app.models.price_catalog import PriceCatalog
+from app.models.reinstatement_request import ReinstatementRequest
 
 __all__ = [
     "Branch", "AdminUser", "Account", "Payment", "Receipt", "NotificationLog", "RosterSnapshot",
     "DeviceToken", "InboxNotification", "ScheduleSnapshot", "NotificationDedupe",
-    "PriceCatalog",
+    "PriceCatalog", "ReinstatementRequest",
 ]

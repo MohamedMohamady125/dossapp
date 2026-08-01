@@ -21,6 +21,11 @@ class PaymentOut(BaseModel):
     amount_paid: str
     status: str
     paid_at: Optional[datetime] = None
+    payment_channel: Optional[str] = None
+    receipt_number: Optional[str] = None
+    receipt_id: Optional[int] = None
+    coach: Optional[str] = None
+    training_time: Optional[str] = None
 
 
 class ReceiptOut(BaseModel):

@@ -212,6 +212,7 @@ async def record_manual_payment(
     athlete_type: Optional[str] = None,
     phone: Optional[str] = None,
     email: Optional[str] = None,
+    payment_method: str = "cash",
 ) -> Optional[Receipt]:
     """Record a manual (admin-marked) payment and generate receipt. Idempotent."""
 
@@ -230,7 +231,7 @@ async def record_manual_payment(
         branch_id=branch_id,
         athlete_number=athlete_number,
         period=period,
-        source="cash",
+        source=payment_method,
         amount_owed_snapshot=amount_owed,
         amount_paid=amount_paid,
         currency="EGP",
@@ -243,6 +244,7 @@ async def record_manual_payment(
     seq = await get_next_receipt_sequence(db)
     receipt_number = f"M-{seq:06d}"
 
+    channel = "Cash" if payment_method == "cash" else "Card"
     normalized_phone = normalize_phone(phone)
     pdf_data = generate_receipt_pdf(
         receipt_number=receipt_number,
@@ -254,7 +256,7 @@ async def record_manual_payment(
         phone=normalized_phone,
         period=period,
         amount_paid=str(amount_paid),
-        payment_channel="Manual",
+        payment_channel=channel,
     )
 
     receipt = Receipt(
@@ -269,7 +271,7 @@ async def record_manual_payment(
         phone=normalized_phone,
         period=period,
         amount_paid=str(amount_paid),
-        payment_channel="Manual",
+        payment_channel=channel,
         send_status={"sms": "pending", "email": "pending", "whatsapp": "pending"},
     )
     db.add(receipt)
