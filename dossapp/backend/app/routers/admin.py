@@ -1031,52 +1031,6 @@ async def excel_health(admin: AdminUser = Depends(get_current_admin)):
     return source.get_health()
 
 
-@router.get("/admin/debug/price-matrix/{branch_id}")
-async def debug_price_matrix(
-    branch_id: int,
-    admin: AdminUser = Depends(get_current_admin),
-):
-    """Temporary: dump raw SK sheet content for a branch."""
-    source = _get_roster_source()
-    roster = await source.get_branch_roster(branch_id)
-    if not roster:
-        raise HTTPException(status_code=404, detail="Branch not found")
-
-    # Also dump raw SK sheet
-    raw_rows = []
-    try:
-        from app.services.drive_reader import download_file
-        from app.models.branch import Branch
-        from sqlalchemy import select as sa_select
-        import openpyxl
-
-        # Get branch drive file id
-        file_id = None
-        from app.database import async_session
-        async with async_session() as db:
-            r = await db.execute(sa_select(Branch).where(Branch.id == branch_id))
-            b = r.scalar_one_or_none()
-            file_id = b.drive_file_id if b else None
-
-        if file_id:
-            path = download_file(file_id)
-            if path:
-                wb = openpyxl.load_workbook(path, data_only=True)
-                for name in wb.sheetnames:
-                    if name.lower().startswith("sk"):
-                        ws = wb[name]
-                        for row in ws.iter_rows(min_row=1, max_row=min(50, ws.max_row or 0), max_col=min(15, ws.max_column or 0)):
-                            row_data = []
-                            for cell in row:
-                                row_data.append({"col": cell.column, "val": str(cell.value) if cell.value is not None else None})
-                            if any(c["val"] is not None for c in row_data):
-                                raw_rows.append({"row": row[0].row, "cells": [c for c in row_data if c["val"] is not None]})
-    except Exception as e:
-        raw_rows = [{"error": str(e)}]
-
-    return {"branch": roster.branch_name, "price_matrix": roster.price_matrix, "raw_sk_rows": raw_rows}
-
-
 @router.post("/admin/notifications/test-send")
 async def test_send_notification(
     payload: TestSendRequest,
