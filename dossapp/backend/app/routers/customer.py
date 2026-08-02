@@ -34,21 +34,6 @@ def _fmt_amount(amount) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
-async def _last_paid_amount(db: AsyncSession, branch_id: int, athlete_number: int, before_period: str):
-    """Most recent prior-period payment amount — used as this month's bill when Excel Pay is empty."""
-    result = await db.execute(
-        select(Payment.amount_paid)
-        .where(
-            Payment.branch_id == branch_id,
-            Payment.athlete_number == athlete_number,
-            Payment.period < before_period,
-            Payment.status == "paid",
-        )
-        .order_by(Payment.period.desc())
-        .limit(1)
-    )
-    return result.scalar_one_or_none()
-
 
 @router.get("/", response_model=AthleteProfile)
 async def get_profile(account: Account = Depends(get_current_customer_allow_suspended)):
@@ -126,14 +111,7 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
     )
 
-    if catalog_price is not None:
-        amount_owed = _fmt_amount(catalog_price)
-    elif not payment:
-        # Fallback: last prior-period payment amount
-        last = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
-        amount_owed = _fmt_amount(last) if last is not None else None
-    else:
-        amount_owed = None
+    amount_owed = _fmt_amount(catalog_price) if catalog_price is not None else None
 
     return BillResponse(
         period=period,
@@ -182,14 +160,9 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
     catalog_price = await resolve_price(
         db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
     )
-    if catalog_price is not None:
-        amount = catalog_price
-    else:
-        # Fallback: last prior-period payment
-        amount = await _last_paid_amount(db, account.branch_id, account.athlete_number, period)
-        if amount is None:
-            raise HTTPException(status_code=400, detail="No bill amount set for this period")
-    amount = Decimal(_fmt_amount(amount))
+    if catalog_price is None:
+        raise HTTPException(status_code=400, detail="No price set in the pricing list for your program")
+    amount = Decimal(_fmt_amount(catalog_price))
     phone = normalize_phone(athlete.phone1)
 
     from app.services.easykash import create_checkout

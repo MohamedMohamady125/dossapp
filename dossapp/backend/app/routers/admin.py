@@ -669,12 +669,9 @@ async def mark_athlete_paid(
         db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
     )
 
-    if catalog_price is not None:
-        bill_amount = catalog_price
-    elif athlete.pay:
-        bill_amount = Decimal(athlete.pay)
-    else:
-        raise HTTPException(status_code=400, detail="No bill amount set for this athlete")
+    if catalog_price is None:
+        raise HTTPException(status_code=400, detail="No price set in the pricing list for this athlete's program")
+    bill_amount = catalog_price
 
     from app.services.payment_service import record_manual_payment
     receipt = await record_manual_payment(
