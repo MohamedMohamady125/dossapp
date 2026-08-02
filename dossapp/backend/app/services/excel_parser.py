@@ -603,19 +603,60 @@ def parse_skills_sheet(ws: Worksheet) -> tuple[dict, list[str], list[str]]:
     max_row = ws.max_row or 0
     max_col = ws.max_column or 0
 
-    for row_idx in range(1, min(15, max_row + 1)):
-        row_label = _clean(ws.cell(row=row_idx, column=1).value)
-        if row_label and any(kw in row_label.lower() for kw in ["class", "private", "semi", "team", "elite"]):
-            prices = {}
-            for col_idx in range(2, min(12, max_col + 1)):
-                val = _clean(ws.cell(row=row_idx, column=col_idx).value)
-                if val and re.match(r"^\d+", val):
-                    header = _clean(ws.cell(row=1, column=col_idx).value)
-                    if header:
-                        prices[header] = val
-            if prices:
-                price_matrix[row_label] = prices
+    # ── Step 1: Auto-detect the header row ──
+    # Look for a row containing session-count patterns like "8 x", "7x", "Sessions"
+    header_row = None
+    for row_idx in range(1, min(10, max_row + 1)):
+        for col_idx in range(1, min(20, max_col + 1)):
+            val = _clean(ws.cell(row=row_idx, column=col_idx).value)
+            if val and re.search(r"\d\s*x", val.lower()):
+                header_row = row_idx
+                break
+        if header_row:
+            break
 
+    if not header_row:
+        errors.append("SK tab: could not find header row with session columns")
+        # Fall back to row 2 (common pattern: row 1 is title, row 2 is headers)
+        header_row = 2
+
+    # ── Step 2: Read column headers from the header row ──
+    col_headers: dict[int, str] = {}
+    for col_idx in range(2, max_col + 1):
+        val = _clean(ws.cell(row=header_row, column=col_idx).value)
+        if val:
+            col_headers[col_idx] = val
+
+    # ── Step 3: Read price rows (every row after header with a label and at least one number) ──
+    for row_idx in range(header_row + 1, min(30, max_row + 1)):
+        row_label = _clean(ws.cell(row=row_idx, column=1).value)
+        if not row_label:
+            continue
+        # Skip clearly non-price rows
+        if row_label.lower() in ("total", "notes", "note", "coach", "coaches"):
+            continue
+
+        prices = {}
+        for col_idx, header in col_headers.items():
+            cell_val = ws.cell(row=row_idx, column=col_idx).value
+            # Accept numeric cells directly (openpyxl may return int/float)
+            if isinstance(cell_val, (int, float)) and cell_val > 0:
+                prices[header] = str(int(cell_val)) if cell_val == int(cell_val) else str(cell_val)
+            else:
+                val = _clean(cell_val)
+                if val and re.match(r"^\d+", val):
+                    prices[header] = val
+
+        if prices:
+            price_matrix[row_label] = prices
+            logger.info(f"  SK price row: '{row_label}' → {prices}")
+
+    if not price_matrix:
+        errors.append("SK tab: no price rows found")
+    else:
+        logger.info(f"  SK tab: parsed {len(price_matrix)} price rows from header row {header_row}")
+
+    # ── Step 4: Extract coach names from far-right columns ──
     for col_idx in range(18, min(25, max_col + 1)):
         for row_idx in range(1, max_row + 1):
             val = _clean(ws.cell(row=row_idx, column=col_idx).value)

@@ -187,3 +187,120 @@ async def resolve_price(
     """Look up the catalog price for an athlete. Convenience wrapper for single lookups."""
     catalog = await load_branch_catalog(db, branch_id)
     return resolve_price_from_catalog(catalog, athlete_type, athlete_step, athlete_segment, athlete_sessions)
+
+
+# ── SK tab → Price Catalog sync ─────────────────────────────────────────
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+_SK_ROW_MAP: list[tuple[list[str], str, Optional[str]]] = [
+    # (keywords_in_row_label, program_name, segment)
+    # Order: most specific first
+    (["private", "1/1"], "Private 1-to-1", None),
+    (["private", "1-to-1"], "Private 1-to-1", None),
+    (["private", "1:1"], "Private 1-to-1", None),
+    (["semi", "4"], "Semi-Private 4", None),
+    (["semi", "3"], "Semi-Private 3", None),
+    (["semi", "2"], "Semi-Private 2", None),
+    (["semi"], "Semi-Private Training", None),
+    (["elite"], "Elite Team", None),
+    (["junior"], "Junior Team", None),
+    (["pre-team"], "Pre-Team", None),
+    (["pre team"], "Pre-Team", None),
+    (["baby"], "Baby Classes - Group", None),
+    (["adult"], "Adult Training", None),
+    (["all"], "Group Training", None),
+    (["class", "gems"], "Group Training", "Student"),
+    (["class", "regular"], "Group Training", None),
+    (["class", "sch"], "Group Training", "Student"),
+    (["class", "outsider"], "Group Training", "Outsider"),
+    (["class"], "Group Training", None),
+    (["st.1"], "Level One", None),
+    (["step 1"], "Level One", None),
+    (["level 1"], "Level One", None),
+    (["group"], "Group Training", None),
+]
+
+
+def _map_sk_row_to_program(row_label: str) -> tuple[str, Optional[str]]:
+    """Map an SK tab row label to (program_name, segment).
+
+    Returns the raw label as program_name if no mapping matches.
+    """
+    label = row_label.lower().strip()
+    for keywords, program, segment in _SK_ROW_MAP:
+        if all(kw in label for kw in keywords):
+            return program, segment
+    # Fallback: use the raw label as program name
+    return row_label.strip(), None
+
+
+def _normalize_sk_sessions(header: str) -> Optional[str]:
+    """Map SK tab column header like '8 x' or '8x' to '8 Sessions'."""
+    m = re.match(r"(\d+)\s*x", header.strip(), re.IGNORECASE)
+    if m:
+        return f"{m.group(1)} Sessions"
+    # Try plain number
+    m = re.match(r"^(\d+)$", header.strip())
+    if m:
+        return f"{m.group(1)} Sessions"
+    return header.strip() if header.strip() else None
+
+
+async def sync_price_matrix_to_catalog(
+    db: AsyncSession, branch_id: int, price_matrix: dict
+) -> int:
+    """Upsert SK tab price_matrix entries into the price_catalog table.
+
+    Returns the number of entries upserted.
+    """
+    if not price_matrix:
+        return 0
+
+    count = 0
+    for row_label, prices in price_matrix.items():
+        program_name, segment = _map_sk_row_to_program(row_label)
+
+        for header, price_str in prices.items():
+            sessions = _normalize_sk_sessions(header)
+            # Extract numeric price
+            m = re.match(r"(\d+(?:\.\d+)?)", str(price_str))
+            if not m:
+                continue
+            price = Decimal(m.group(1))
+
+            # Upsert: check if entry exists
+            result = await db.execute(
+                select(PriceCatalog).where(
+                    PriceCatalog.branch_id == branch_id,
+                    PriceCatalog.program_name == program_name,
+                    PriceCatalog.segment == segment,
+                    PriceCatalog.sessions == sessions,
+                )
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                if existing.price != price:
+                    existing.price = price
+                    existing.is_active = True
+                    count += 1
+                    logger.info(f"  Updated price: {program_name}/{segment}/{sessions} → {price}")
+            else:
+                entry = PriceCatalog(
+                    branch_id=branch_id,
+                    program_name=program_name,
+                    segment=segment,
+                    sessions=sessions,
+                    price=price,
+                    is_active=True,
+                )
+                db.add(entry)
+                count += 1
+                logger.info(f"  New price: {program_name}/{segment}/{sessions} → {price}")
+
+    await db.commit()
+    logger.info(f"Price catalog sync: {count} entries upserted for branch {branch_id}")
+    return count

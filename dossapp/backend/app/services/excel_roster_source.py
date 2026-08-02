@@ -143,6 +143,19 @@ class ExcelRosterSource(RosterSource):
                     logger.warning(f"Branch {branch_id} parsed with {len(errors)} warnings: {errors[:3]}")
 
                 logger.info(f"Branch {branch_id}: loaded {len(athletes)} athletes")
+
+                # Auto-sync SK tab prices to the DB catalog
+                if price_matrix:
+                    try:
+                        from app.database import async_session
+                        from app.services.price_resolver import sync_price_matrix_to_catalog
+                        async with async_session() as db:
+                            synced = await sync_price_matrix_to_catalog(db, branch_id, price_matrix)
+                            if synced:
+                                logger.info(f"Branch {branch_id}: synced {synced} prices from SK tab")
+                    except Exception as e:
+                        logger.error(f"Branch {branch_id}: price catalog sync failed: {e}")
+
                 return True
 
             finally:
@@ -190,6 +203,19 @@ class ExcelRosterSource(RosterSource):
                 self._last_errors[branch_id] = errors
 
             logger.info(f"Branch {branch_id} (local): loaded {len(athletes)} athletes")
+
+            # Auto-sync SK tab prices to the DB catalog
+            if price_matrix:
+                try:
+                    from app.database import async_session
+                    from app.services.price_resolver import sync_price_matrix_to_catalog
+                    async with async_session() as db:
+                        synced = await sync_price_matrix_to_catalog(db, branch_id, price_matrix)
+                        if synced:
+                            logger.info(f"Branch {branch_id} (local): synced {synced} prices from SK tab")
+                except Exception as e:
+                    logger.error(f"Branch {branch_id} (local): price catalog sync failed: {e}")
+
             return True
         except Exception as e:
             logger.error(f"Failed to parse local file for branch {branch_id}: {e}")
