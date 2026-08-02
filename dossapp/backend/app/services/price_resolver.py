@@ -2,9 +2,29 @@
 
 Maps Excel roster fields (type, step, segment, sessions) to a canonical
 program_name, then looks up the most specific matching catalog entry.
+
+SK Tab price rows → catalog program names:
+  "Class (Regular)"  → "Class"          segment=None
+  "Class (GEMS)"     → "Class"          segment="Student"
+  "Private 1:1"      → "Private 1-to-1" segment=None
+  "Semi Priv 1:2"    → "Semi-Private 2" segment=None
+  "Semi Priv 1:3"    → "Semi-Private 3" segment=None
+  "ALL"              → "All Levels"     segment=None   (catch-all for teams/Pre Team)
+  "Junior Teams"     → "Junior Team"    segment=None
+  "Elite Team"       → "Elite Team"     segment=None
+  "st.1"             → "Step 1"         segment=None
+
+Roster athlete types → candidate program names:
+  Type="Class"               → ["Class", "Step 1", "All Levels"]
+  Type="Private.1"           → ["Private 1-to-1", "All Levels"]
+  Type="Private.2"/"Semi"    → ["Semi-Private 2", "Semi-Private 3", "All Levels"]
+  Type="Pre Team"            → ["All Levels", "Junior Team"]
+  Type="Junior Team"         → ["Junior Team", "All Levels"]
+  Type="Elite Team"          → ["Elite Team", "All Levels"]
 """
 
 import re
+import logging
 from decimal import Decimal
 from typing import Optional
 
@@ -13,77 +33,67 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.price_catalog import PriceCatalog
 
+logger = logging.getLogger(__name__)
+
 
 # ── Excel → Catalog mapping ──────────────────────────────────────────────
 
 def _normalize_program_name(athlete_type: Optional[str], athlete_step: Optional[str]) -> list[str]:
-    """Return candidate program names (most specific first) from Excel fields."""
+    """Return candidate program names (most specific first) from Excel fields.
+
+    Must match program names produced by _map_sk_row_to_program().
+    """
     t = (athlete_type or "").strip().lower()
     s = (athlete_step or "").strip().lower()
 
     candidates: list[str] = []
 
-    # Private variants
+    # Private 1-to-1 (Type="Private.1", "Private 1", etc.)
     if "private" in t and "semi" not in t:
         candidates.append("Private 1-to-1")
-        candidates.append("Private Training")
 
-    # Semi-private variants
+    # Semi-private (Type="Semi Private.2", "Semi Priv 1:2", etc.)
     elif "semi" in t:
-        # Extract the number (e.g., "Semi-Private.2" → "2")
         m = re.search(r"(\d)", t)
         if m:
-            n = m.group(1)
-            candidates.append(f"Semi-Private {n}")
-            candidates.append(f"Semi-Private ({n} Students)")
-        candidates.append("Semi-Private Training")
+            candidates.append(f"Semi-Private {m.group(1)}")
+        # Try both sizes as fallback
+        candidates.append("Semi-Private 2")
+        candidates.append("Semi-Private 3")
 
     # Elite team
     elif "elite" in t or "elite" in s:
         candidates.append("Elite Team")
 
-    # Junior team
+    # Junior team (Type or Step contains "Junior")
     elif "junior" in t or "junior" in s:
         candidates.append("Junior Team")
 
-    # Pre-team
+    # Pre-team → uses "All Levels" (same pricing as Junior Teams in SK tab)
     elif "pre" in t or "pre" in s:
-        candidates.append("Pre-Team")
+        candidates.append("All Levels")
+        candidates.append("Junior Team")
 
     # Baby classes
     elif "baby" in t or "baby" in s:
-        if "private" in t:
-            candidates.append("Baby Classes - Private")
-        else:
-            candidates.append("Baby Classes - Group")
+        candidates.append("Baby Classes")
 
-    # Class/group — differentiate by step
+    # Class/group (Type="Class")
     elif t in ("class", "group", "") or "class" in t:
-        # Adult
-        if "adult" in s:
-            candidates.append("Adult Training")
-        # Level One / Beginners (Step 1)
-        elif s in ("st.1", "step 1", "level 1", "l1", "1"):
-            candidates.append("Level One")
-            candidates.append("Step 1-6")
-            candidates.append("Group Training")
-        # Higher steps → Group Training (or Step 1-6 for October)
-        else:
-            # Steps 2-9 map to either "Group Training" or "Step 1-6"
-            candidates.append("Group Training")
-            candidates.append("Step 1-6")
-            candidates.append("Level One")
+        # Step 1 has its own higher pricing in SK tab ("st.1" row)
+        if s in ("st.1", "step 1", "level 1", "l1", "1"):
+            candidates.append("Step 1")
+        candidates.append("Class")
 
-    # Fallback: try the raw type as program name
+    # Fallback: try the raw type as-is
     if athlete_type and athlete_type.strip():
-        candidates.append(athlete_type.strip())
+        raw = athlete_type.strip()
+        if raw not in candidates:
+            candidates.append(raw)
 
-    # Ultimate fallback: try Group Training / Level One so athletes on branches
-    # with flat pricing (Rehab, Madinaty) always get a bill even if their type
-    # (e.g. "Pre Team", "Junior Teams") doesn't have a specific catalog entry.
-    for fb in ("Group Training", "Step 1-6", "Level One"):
-        if fb not in candidates:
-            candidates.append(fb)
+    # Ultimate catch-all: "All Levels" (from SK "ALL" row)
+    if "All Levels" not in candidates:
+        candidates.append("All Levels")
 
     return candidates
 
@@ -165,17 +175,19 @@ def resolve_price_from_catalog(
     seg_lower = segment.lower() if segment else None
     sess_lower = sessions.lower() if sessions else None
 
+    # If athlete has no sessions specified, default to "8 Sessions" (standard monthly)
+    if sess_lower is None:
+        sess_lower = "8 sessions"
+
     for candidate in candidates:
         c = candidate.strip().lower()
 
+        # Exact match: program + segment + sessions
         if (c, seg_lower, sess_lower) in catalog:
             return catalog[(c, seg_lower, sess_lower)]
-        if (c, seg_lower, None) in catalog:
-            return catalog[(c, seg_lower, None)]
-        if (c, None, sess_lower) in catalog:
+        # Try without segment (e.g., no GEMS/Outsider distinction)
+        if seg_lower and (c, None, sess_lower) in catalog:
             return catalog[(c, None, sess_lower)]
-        if (c, None, None) in catalog:
-            return catalog[(c, None, None)]
 
     return None
 
@@ -195,36 +207,46 @@ async def resolve_price(
 
 # ── SK tab → Price Catalog sync ─────────────────────────────────────────
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 _SK_ROW_MAP: list[tuple[list[str], str, Optional[str]]] = [
     # (keywords_in_row_label, program_name, segment)
-    # Order: most specific first
+    # Order: most specific first — must match _normalize_program_name() output
+    #
+    # Real SK tab rows from Rehab branch:
+    #   "Class (Regular)" → Class / None
+    #   "Class (GEMS)"    → Class / Student
+    #   "Private 1:1"     → Private 1-to-1 / None
+    #   "Semi Priv 1:2"   → Semi-Private 2 / None
+    #   "Semi Priv 1:3"   → Semi-Private 3 / None
+    #   "ALL"             → All Levels / None  (catch-all, must NOT collide with Class)
+    #   "Junior Teams"    → Junior Team / None
+    #   "Elite Team"      → Elite Team / None
+    #   "st.1"            → Step 1 / None
     (["private", "1/1"], "Private 1-to-1", None),
     (["private", "1-to-1"], "Private 1-to-1", None),
     (["private", "1:1"], "Private 1-to-1", None),
+    (["semi", "1:4"], "Semi-Private 4", None),
+    (["semi", "1:3"], "Semi-Private 3", None),
+    (["semi", "1:2"], "Semi-Private 2", None),
     (["semi", "4"], "Semi-Private 4", None),
     (["semi", "3"], "Semi-Private 3", None),
     (["semi", "2"], "Semi-Private 2", None),
-    (["semi"], "Semi-Private Training", None),
+    (["semi"], "Semi-Private 2", None),
     (["elite"], "Elite Team", None),
     (["junior"], "Junior Team", None),
-    (["pre-team"], "Pre-Team", None),
-    (["pre team"], "Pre-Team", None),
-    (["baby"], "Baby Classes - Group", None),
+    (["pre-team"], "All Levels", None),
+    (["pre team"], "All Levels", None),
+    (["baby"], "Baby Classes", None),
     (["adult"], "Adult Training", None),
-    (["all"], "Group Training", None),
-    (["class", "gems"], "Group Training", "Student"),
-    (["class", "regular"], "Group Training", None),
-    (["class", "sch"], "Group Training", "Student"),
-    (["class", "outsider"], "Group Training", "Outsider"),
-    (["class"], "Group Training", None),
-    (["st.1"], "Level One", None),
-    (["step 1"], "Level One", None),
-    (["level 1"], "Level One", None),
-    (["group"], "Group Training", None),
+    (["class", "gems"], "Class", "Student"),
+    (["class", "sch"], "Class", "Student"),
+    (["class", "outsider"], "Class", "Outsider"),
+    (["class", "regular"], "Class", None),
+    (["class"], "Class", None),
+    (["st.1"], "Step 1", None),
+    (["step 1"], "Step 1", None),
+    (["level 1"], "Step 1", None),
+    (["all"], "All Levels", None),
+    (["group"], "Class", None),
 ]
 
 
@@ -264,22 +286,14 @@ async def sync_price_matrix_to_catalog(
     if not price_matrix:
         return 0
 
-    # Clean up bad entries from previous syncs (non-session values, tiny prices)
-    all_entries = await db.execute(
-        select(PriceCatalog).where(
-            PriceCatalog.branch_id == branch_id,
-            PriceCatalog.is_active == True,  # noqa: E712
-        )
+    # Wipe all existing auto-synced entries for this branch and rebuild fresh.
+    # This prevents stale data from old program-name mappings lingering.
+    old_entries = await db.execute(
+        select(PriceCatalog).where(PriceCatalog.branch_id == branch_id)
     )
-    for entry in all_entries.scalars().all():
-        is_bad = False
-        if entry.price < 50:
-            is_bad = True
-        if entry.sessions and not re.match(r"^\d+ Sessions$", entry.sessions):
-            is_bad = True
-        if is_bad:
-            logger.info(f"  Removing bad entry: {entry.program_name}/{entry.segment}/{entry.sessions} = {entry.price}")
-            await db.delete(entry)
+    for entry in old_entries.scalars().all():
+        await db.delete(entry)
+    await db.flush()
 
     count = 0
     for row_label, prices in price_matrix.items():
