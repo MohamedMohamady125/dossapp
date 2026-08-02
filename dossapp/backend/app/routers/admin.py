@@ -705,23 +705,35 @@ async def mark_athlete_paid(
         pay_str = str(bill_amount).rstrip("0").rstrip(".")
 
         # Write Pay + Receipt back to the Google Drive Excel sheet (best-effort)
+        excel_written = False
+        excel_error = None
         try:
             import asyncio
             branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
             branch_obj = branch_result.scalar_one_or_none()
             if branch_obj and branch_obj.drive_file_id:
                 from app.services.drive_writer import update_athlete_payment
-                await asyncio.to_thread(
+                excel_written = await asyncio.to_thread(
                     update_athlete_payment,
                     branch_obj.drive_file_id,
                     athlete_number,
                     pay_str,
                     receipt_number,
                 )
+            else:
+                excel_error = f"No drive_file_id for branch {branch_id}" if not branch_obj else "Branch not found in DB"
         except Exception as e:
-            logger.warning(f"Failed to write payment to Excel: {e}")
+            import traceback as tb
+            logger.warning(f"Failed to write payment to Excel: {e}\n{tb.format_exc()}")
+            excel_error = str(e)
 
-        return {"message": "Marked as paid", "receipt_number": receipt_number, "receipt_id": receipt_id}
+        return {
+            "message": "Marked as paid",
+            "receipt_number": receipt_number,
+            "receipt_id": receipt_id,
+            "excel_written": excel_written,
+            "excel_error": excel_error,
+        }
 
     except HTTPException:
         raise
