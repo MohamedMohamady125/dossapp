@@ -769,7 +769,7 @@ async def debug_sheet_inspect(
 
         result = sheets.spreadsheets().values().get(
             spreadsheetId=branch_obj.drive_file_id,
-            range=f"'{sheet_name}'!A1:Z20",
+            range=f"'{sheet_name}'!A1:Z500",
             valueRenderOption="UNFORMATTED_VALUE",
         ).execute()
         rows = result.get("values", [])
@@ -816,13 +816,24 @@ async def debug_sheet_inspect(
         ).execute()
         wide_header = (wide_result.get("values") or [[]])[0]
 
+        # Collect all existing receipt numbers
+        receipt_col = col_map.get("receipt_no")
+        existing_receipts = []
+        if receipt_col is not None:
+            for i in range(header_row_idx + 1, len(rows)):
+                row = rows[i]
+                if receipt_col < len(row):
+                    val = str(row[receipt_col]).strip()
+                    if val and val != "None" and val != "":
+                        existing_receipts.append(val)
+
         return {
             "sheet_name": sheet_name,
             "header_row_idx": header_row_idx,
-            "header_row_narrow_A_Z": rows[header_row_idx] if header_row_idx < len(rows) else None,
-            "header_row_wide_A_BZ": wide_header,
             "col_map": col_map,
             "athlete": athlete_data,
+            "existing_receipts": existing_receipts,
+            "total_rows": len(rows),
         }
 
     return await asyncio.to_thread(_inspect)
