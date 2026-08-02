@@ -1,7 +1,10 @@
 """Admin/Assistant endpoints — branches, athletes, provisioning, payments, analytics, health."""
 
+import logging
 import re
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -691,6 +694,23 @@ async def mark_athlete_paid(
 
     if not receipt:
         raise HTTPException(status_code=400, detail="Already paid for this period")
+
+    # Write Pay + Receipt back to the Google Drive Excel sheet
+    import asyncio
+    branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch_obj = branch_result.scalar_one_or_none()
+    if branch_obj and branch_obj.drive_file_id:
+        try:
+            from app.services.drive_writer import update_athlete_payment
+            await asyncio.to_thread(
+                update_athlete_payment,
+                branch_obj.drive_file_id,
+                athlete_number,
+                str(int(bill_amount)) if bill_amount == int(bill_amount) else str(bill_amount),
+                receipt.receipt_number,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to write payment to Excel: {e}")
 
     return {"message": "Marked as paid", "receipt_number": receipt.receipt_number, "receipt_id": receipt.id}
 
