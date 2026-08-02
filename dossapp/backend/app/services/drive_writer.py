@@ -121,21 +121,22 @@ def read_existing_receipts(drive_file_id: str) -> list[str]:
     ).execute()
     rows = result.get("values", [])
 
-    # Find receipt column
+    # Find header row and receipt column
     receipt_col = None
     header_row_idx = None
     for i, row in enumerate(rows):
+        has_id = False
+        has_name = False
         for j, cell in enumerate(row):
             cell_clean = str(cell).strip().lower()
-            if cell_clean in _RECEIPT_HEADERS:
-                receipt_col = j
             if cell_clean in ("id", "no", "no."):
                 has_id = True
-            if cell_clean == "name":
-                if receipt_col is not None:
-                    header_row_idx = i
-                    break
-        if header_row_idx is not None:
+            elif cell_clean == "name":
+                has_name = True
+            elif cell_clean in _RECEIPT_HEADERS:
+                receipt_col = j
+        if has_id and has_name and receipt_col is not None:
+            header_row_idx = i
             break
 
     if receipt_col is None or header_row_idx is None:
