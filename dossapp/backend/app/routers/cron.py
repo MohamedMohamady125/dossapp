@@ -81,3 +81,98 @@ async def cron_payment_reminders(
 
     logger.info(f"Cron payment reminders: sent={sent}")
     return {"branches": len(rosters), "sent": sent}
+
+
+@router.get("/debug-excel-structure")
+async def debug_excel_structure(
+    branch_id: int = 1,
+    authorization: Optional[str] = Header(None),
+):
+    """Temporary debug endpoint: dump raw Excel structure for a branch."""
+    _authorize(authorization)
+
+    import asyncio
+    import os
+
+    # Get the branch config from the roster source
+    source = _get_roster_source()
+    config = source._configs.get(branch_id)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"No config for branch {branch_id}")
+
+    # Download the file
+    local_path = config.get("local_file_path")
+    if local_path:
+        tmp_path = local_path
+        cleanup = False
+    else:
+        drive_file_id = config.get("drive_file_id")
+        if not drive_file_id:
+            raise HTTPException(status_code=400, detail="No drive_file_id configured")
+        from app.services.drive_reader import download_file
+        tmp_path = await asyncio.to_thread(download_file, drive_file_id)
+        if not tmp_path:
+            raise HTTPException(status_code=500, detail="Failed to download Excel file")
+        cleanup = True
+
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(tmp_path, data_only=True)
+        result = {"branch_id": branch_id, "branch_name": config.get("branch_name"), "sheets": []}
+
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            max_row = ws.max_row or 0
+            max_col = ws.max_column or 0
+
+            # Determine how many rows to dump
+            dump_rows = min(20, max_row) if max_row else 0
+
+            # For the roster sheet ("Reg"), also flag it
+            is_roster = "reg" in sheet_name.lower()
+
+            cells = []
+            for row_idx in range(1, dump_rows + 1):
+                for col_idx in range(1, max_col + 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    val = cell.value
+                    cells.append({
+                        "row": row_idx,
+                        "col": col_idx,
+                        "value": str(val) if val is not None else None,
+                        "type": type(val).__name__ if val is not None else "NoneType",
+                    })
+
+            sheet_info = {
+                "sheet_name": sheet_name,
+                "max_row": max_row,
+                "max_column": max_col,
+                "is_roster_sheet": is_roster,
+                "dumped_rows": dump_rows,
+                "cells": cells,
+            }
+
+            # For roster sheet, dump the full header row even if > 20 cols
+            if is_roster and max_row >= 1:
+                header_row = []
+                for col_idx in range(1, max_col + 1):
+                    cell = ws.cell(row=1, column=col_idx)
+                    val = cell.value
+                    header_row.append({
+                        "col": col_idx,
+                        "value": str(val) if val is not None else None,
+                    })
+                sheet_info["full_header_row"] = header_row
+
+            result["sheets"].append(sheet_info)
+
+        wb.close()
+        return result
+
+    finally:
+        if cleanup:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
