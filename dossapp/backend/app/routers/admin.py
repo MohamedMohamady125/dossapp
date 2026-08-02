@@ -721,7 +721,7 @@ async def mark_athlete_paid(
                     receipt_number,
                 )
             else:
-                excel_error = f"No drive_file_id for branch {branch_id}" if not branch_obj else "Branch not found in DB"
+                excel_error = "Branch not found in DB" if not branch_obj else f"No drive_file_id for branch {branch_id}"
         except Exception as e:
             import traceback as tb
             logger.warning(f"Failed to write payment to Excel: {e}\n{tb.format_exc()}")

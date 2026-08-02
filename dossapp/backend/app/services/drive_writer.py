@@ -73,30 +73,22 @@ def update_athlete_payment(
     Finds the roster sheet (tab with 'Reg' in name), locates the athlete by ID,
     and updates the Pay and Receipt columns.
 
-    Returns True if successful.
+    Returns True if successful. Raises on error so caller can capture the message.
     """
     if not _HAS_GOOGLE:
-        logger.warning("Google libraries not installed — cannot write to Drive")
-        return False
+        raise RuntimeError("Google libraries not installed — cannot write to Drive")
 
-    try:
-        creds = _get_credentials()
+    creds = _get_credentials()
 
-        # Check file type
-        drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
-        file_meta = drive_service.files().get(fileId=drive_file_id, fields="mimeType").execute()
-        mime = file_meta.get("mimeType", "")
+    # Check file type
+    drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    file_meta = drive_service.files().get(fileId=drive_file_id, fields="mimeType").execute()
+    mime = file_meta.get("mimeType", "")
 
-        if mime == "application/vnd.google-apps.spreadsheet":
-            return _update_google_sheet(creds, drive_file_id, athlete_number, pay_value, receipt_number)
-        else:
-            return _update_xlsx_on_drive(creds, drive_service, drive_file_id, athlete_number, pay_value, receipt_number)
-
-    except Exception as e:
-        logger.error(f"Failed to write payment to Drive file {drive_file_id}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
+    if mime == "application/vnd.google-apps.spreadsheet":
+        return _update_google_sheet(creds, drive_file_id, athlete_number, pay_value, receipt_number)
+    else:
+        return _update_xlsx_on_drive(creds, drive_service, drive_file_id, athlete_number, pay_value, receipt_number)
 
 
 def _find_roster_sheet_name(sheets_service, spreadsheet_id: str) -> Optional[str]:
@@ -121,8 +113,7 @@ def _update_google_sheet(
     # Find roster sheet
     sheet_name = _find_roster_sheet_name(sheets, spreadsheet_id)
     if not sheet_name:
-        logger.error(f"No roster sheet ('Reg') found in spreadsheet {spreadsheet_id}")
-        return False
+        raise RuntimeError(f"No roster sheet ('Reg') found in spreadsheet {spreadsheet_id}")
 
     # Read all data to find header row and athlete row
     result = sheets.spreadsheets().values().get(
@@ -133,8 +124,7 @@ def _update_google_sheet(
     rows = result.get("values", [])
 
     if not rows:
-        logger.error("Roster sheet is empty")
-        return False
+        raise RuntimeError("Roster sheet is empty")
 
     # Find header row (first row with 'id' and 'name' columns)
     header_row_idx = None
@@ -157,16 +147,14 @@ def _update_google_sheet(
             break
 
     if header_row_idx is None:
-        logger.error("Could not find header row with ID and Name columns")
-        return False
+        raise RuntimeError("Could not find header row with ID and Name columns")
 
     id_col = col_map["id"]
     pay_col = col_map.get("pay")
     receipt_col = col_map.get("receipt_no")
 
     if pay_col is None and receipt_col is None:
-        logger.error("No Pay or Receipt column found in roster sheet")
-        return False
+        raise RuntimeError("No Pay or Receipt column found in roster sheet")
 
     # Find the athlete's row by athlete number
     athlete_row_idx = None
@@ -182,8 +170,7 @@ def _update_google_sheet(
             break
 
     if athlete_row_idx is None:
-        logger.error(f"Athlete #{athlete_number} not found in roster sheet")
-        return False
+        raise RuntimeError(f"Athlete #{athlete_number} not found in roster sheet")
 
     # Sheets API uses 1-based rows, 0-based columns for A1 notation
     sheet_row = athlete_row_idx + 1  # Convert to 1-based
