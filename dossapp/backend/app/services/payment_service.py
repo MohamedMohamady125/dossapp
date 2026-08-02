@@ -17,11 +17,10 @@ from app.utils.phone import normalize_phone
 logger = logging.getLogger(__name__)
 
 
-async def get_next_receipt_sequence(db: AsyncSession) -> int:
-    """Get the next P- receipt sequence number."""
-    # Count existing P- receipts + 1 (safe under single-process; use DB sequence in production)
+async def get_next_receipt_sequence(db: AsyncSession, prefix: str = "P") -> int:
+    """Get the next receipt sequence number for a given prefix (P- or M-)."""
     result = await db.execute(
-        select(func.count()).where(Receipt.receipt_number.like("P-%"))
+        select(func.count()).where(Receipt.receipt_number.like(f"{prefix}-%"))
     )
     count = result.scalar() or 0
     return count + 1
@@ -241,7 +240,7 @@ async def record_manual_payment(
     db.add(payment)
     await db.flush()
 
-    seq = await get_next_receipt_sequence(db)
+    seq = await get_next_receipt_sequence(db, prefix="M")
     receipt_number = f"M-{seq:06d}"
 
     channel = "Cash" if payment_method == "cash" else "Card"
