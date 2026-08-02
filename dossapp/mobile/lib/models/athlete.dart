@@ -29,6 +29,7 @@ class AthleteProfile {
   final String? segment;
   final List<ScheduleSlot> schedule;
   final Map<String, String> attendance; // ISO date -> 'P' | 'A'
+  final String accountStatus; // active | suspended
 
   AthleteProfile({
     required this.branch,
@@ -45,6 +46,7 @@ class AthleteProfile {
     this.segment,
     this.schedule = const [],
     this.attendance = const {},
+    this.accountStatus = 'active',
   });
 
   factory AthleteProfile.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,7 @@ class AthleteProfile {
       attendance: (json['attendance'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, v.toString())) ??
           {},
+      accountStatus: json['account_status'] ?? 'active',
     );
   }
 }
@@ -80,6 +83,7 @@ class AthleteDetail extends AthleteProfile {
   final String? comment;
   final String? receiptNo;
   final bool hasAccount;
+  final bool isPaid;
 
   AthleteDetail({
     required super.branch,
@@ -102,6 +106,7 @@ class AthleteDetail extends AthleteProfile {
     this.comment,
     this.receiptNo,
     this.hasAccount = false,
+    this.isPaid = false,
   });
 
   factory AthleteDetail.fromJson(Map<String, dynamic> json) {
@@ -125,6 +130,7 @@ class AthleteDetail extends AthleteProfile {
       comment: json['comment'],
       receiptNo: json['receipt_no'],
       hasAccount: json['has_account'] ?? false,
+      isPaid: json['is_paid'] ?? false,
       schedule: (json['schedule'] as List?)
               ?.map((s) => ScheduleSlot.fromJson(s))
               .toList() ??

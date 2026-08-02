@@ -36,6 +36,7 @@ class AthleteDetail(AthleteProfile):
     comment: Optional[str] = None
     receipt_no: Optional[str] = None
     has_account: bool = False
+    is_paid: bool = False  # True only when BOTH pay and receipt_no exist in Excel
 
 
 class BillResponse(BaseModel):

@@ -133,12 +133,12 @@ class _AthletesScreenState extends State<AthletesScreen> {
         if (a.level != null) a.level!,
         if (a.type != null) a.type!,
         if (a.bill != null) 'Bill: ${formatMoney(a.bill)}',
-        if (a.pay != null) 'Paid: ${formatMoney(a.pay)}',
+        if (a.isPaid) 'Paid: ${formatMoney(a.pay)}',
       ].join(' \u2022 '), style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (a.receiptNo != null)
+          if (a.isPaid)
             const Icon(Icons.check_circle, color: AppColors.success, size: 20),
           if (a.hasAccount)
             Padding(
@@ -189,10 +189,71 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
   bool _markedPaid = false;
   String? _receiptNumber;
 
-  Future<void> _markAsPaid() async {
+  Future<void> _showPaymentMethodDialog() async {
+    final method = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('How did they pay?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        content: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () => Navigator.pop(ctx, 'cash'),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  decoration: BoxDecoration(
+                    color: AppColors.successLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.money_rounded, size: 36, color: AppColors.success),
+                      SizedBox(height: 8),
+                      Text('Cash', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.success)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: InkWell(
+                onTap: () => Navigator.pop(ctx, 'card'),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: const Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.credit_card_rounded, size: 36, color: AppColors.primary),
+                      SizedBox(height: 8),
+                      Text('Card', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (method != null) {
+      _markAsPaid(method);
+    }
+  }
+
+  Future<void> _markAsPaid(String paymentMethod) async {
     setState(() => _markingPaid = true);
     try {
-      final result = await ApiService.markAsPaid(widget.athlete.branchId, widget.athlete.athleteNumber);
+      final result = await ApiService.markAsPaid(widget.athlete.branchId, widget.athlete.athleteNumber, paymentMethod: paymentMethod);
       if (mounted) {
         setState(() {
           _markedPaid = true;
@@ -399,7 +460,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           const SizedBox(height: 24),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _markedPaid
+            child: (athlete.isPaid || _markedPaid)
                 ? Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -421,16 +482,18 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                         Expanded(child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Marked as Paid', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 16)),
+                            Text('Paid${athlete.pay != null ? " - ${formatMoney(athlete.pay)}" : ""}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 16)),
                             if (_receiptNumber != null)
-                              Text('Receipt: $_receiptNumber', style: const TextStyle(color: AppColors.success, fontSize: 13)),
+                              Text('Receipt: $_receiptNumber', style: const TextStyle(color: AppColors.success, fontSize: 13))
+                            else if (athlete.receiptNo != null)
+                              Text('Receipt: ${athlete.receiptNo}', style: const TextStyle(color: AppColors.success, fontSize: 13)),
                           ],
                         )),
                       ],
                     ),
                   )
                 : FilledButton.icon(
-                    onPressed: _markingPaid ? null : _markAsPaid,
+                    onPressed: _markingPaid ? null : _showPaymentMethodDialog,
                     icon: _markingPaid
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.paid_rounded),

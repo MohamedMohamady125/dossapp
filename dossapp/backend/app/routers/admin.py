@@ -470,6 +470,7 @@ async def list_athletes(
             comment=a.comment,
             receipt_no=a.receipt_no,
             has_account=a.athlete_number in provisioned,
+            is_paid=bool(a.pay and a.receipt_no),
             schedule=[
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
                 for s in a.schedule
@@ -519,6 +520,7 @@ async def get_athlete_detail(
         comment=athlete.comment,
         receipt_no=athlete.receipt_no,
         has_account=has_account,
+        is_paid=bool(athlete.pay and athlete.receipt_no),
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
             for s in athlete.schedule
