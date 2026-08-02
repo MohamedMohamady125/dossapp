@@ -246,7 +246,8 @@ def _normalize_sk_sessions(header: str) -> Optional[str]:
     m = re.match(r"^(\d+)$", header.strip())
     if m:
         return f"{m.group(1)} Sessions"
-    return header.strip() if header.strip() else None
+    # Unrecognized header — not a session column, skip it
+    return None
 
 
 async def sync_price_matrix_to_catalog(
@@ -259,17 +260,38 @@ async def sync_price_matrix_to_catalog(
     if not price_matrix:
         return 0
 
+    # Clean up bad entries from previous syncs (non-session values, tiny prices)
+    all_entries = await db.execute(
+        select(PriceCatalog).where(
+            PriceCatalog.branch_id == branch_id,
+            PriceCatalog.is_active == True,  # noqa: E712
+        )
+    )
+    for entry in all_entries.scalars().all():
+        is_bad = False
+        if entry.price < 50:
+            is_bad = True
+        if entry.sessions and not re.match(r"^\d+ Sessions$", entry.sessions):
+            is_bad = True
+        if is_bad:
+            logger.info(f"  Removing bad entry: {entry.program_name}/{entry.segment}/{entry.sessions} = {entry.price}")
+            await db.delete(entry)
+
     count = 0
     for row_label, prices in price_matrix.items():
         program_name, segment = _map_sk_row_to_program(row_label)
 
         for header, price_str in prices.items():
             sessions = _normalize_sk_sessions(header)
+            if not sessions:
+                continue  # Skip non-session columns (times, coach names, etc.)
             # Extract numeric price
             m = re.match(r"(\d+(?:\.\d+)?)", str(price_str))
             if not m:
                 continue
             price = Decimal(m.group(1))
+            if price < 50:
+                continue  # Skip unrealistic prices (likely time floats like 4.15)
 
             # Upsert: check if entry exists
             result = await db.execute(

@@ -621,10 +621,11 @@ def parse_skills_sheet(ws: Worksheet) -> tuple[dict, list[str], list[str]]:
         header_row = 2
 
     # ── Step 2: Read column headers from the header row ──
+    # Only accept headers that look like session counts: "8 x", "7x", "3", etc.
     col_headers: dict[int, str] = {}
     for col_idx in range(2, max_col + 1):
         val = _clean(ws.cell(row=header_row, column=col_idx).value)
-        if val:
+        if val and re.match(r"^\d+\s*x?\s*$", val.strip(), re.IGNORECASE):
             col_headers[col_idx] = val
 
     # ── Step 3: Read price rows (every row after header with a label and at least one number) ──
