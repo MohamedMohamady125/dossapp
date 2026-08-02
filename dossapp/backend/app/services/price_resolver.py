@@ -101,12 +101,16 @@ def _normalize_segment(segment: Optional[str]) -> Optional[str]:
 
 
 def _normalize_sessions(sessions: Optional[str]) -> Optional[str]:
-    """Keep sessions as-is if present, normalize formatting."""
+    """Normalize sessions to 'N Sessions' format to match catalog entries."""
     if not sessions:
         return None
     s = sessions.strip()
     if not s:
         return None
+    # Extract the number and normalize to "N Sessions"
+    m = re.match(r"^(\d+)", s)
+    if m:
+        return f"{m.group(1)} Sessions"
     return s
 
 
