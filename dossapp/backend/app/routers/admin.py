@@ -743,6 +743,91 @@ async def mark_athlete_paid(
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
+@router.get("/debug/sheet-inspect/{branch_id}/{athlete_number}")
+async def debug_sheet_inspect(
+    branch_id: int,
+    athlete_number: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Temporary debug: read the sheet to show headers, athlete row, and column positions."""
+    import asyncio, re as _re
+    branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
+    branch_obj = branch_result.scalar_one_or_none()
+    if not branch_obj or not branch_obj.drive_file_id:
+        return {"error": "No drive_file_id"}
+
+    def _inspect():
+        from app.services.drive_writer import _get_credentials, _find_roster_sheet_name
+        from googleapiclient.discovery import build as _build
+
+        creds = _get_credentials()
+        sheets = _build("sheets", "v4", credentials=creds, cache_discovery=False)
+        sheet_name = _find_roster_sheet_name(sheets, branch_obj.drive_file_id)
+        if not sheet_name:
+            return {"error": "No roster sheet found"}
+
+        result = sheets.spreadsheets().values().get(
+            spreadsheetId=branch_obj.drive_file_id,
+            range=f"'{sheet_name}'!A1:Z20",
+            valueRenderOption="UNFORMATTED_VALUE",
+        ).execute()
+        rows = result.get("values", [])
+
+        # Find header row
+        header_row_idx = None
+        col_map = {}
+        for i, row in enumerate(rows):
+            for j, cell in enumerate(row):
+                cell_clean = str(cell).strip().lower()
+                if cell_clean in ("id", "no", "no."):
+                    col_map["id"] = j
+                elif cell_clean == "name":
+                    col_map["name"] = j
+                elif cell_clean in ("pay", "fees", "amount"):
+                    col_map["pay"] = j
+                elif "receipt" in cell_clean:
+                    col_map["receipt_no"] = j
+            if "id" in col_map and "name" in col_map:
+                header_row_idx = i
+                break
+
+        if header_row_idx is None:
+            return {"error": "No header row found", "first_10_rows": rows[:10]}
+
+        # Find athlete row
+        id_col = col_map["id"]
+        athlete_data = None
+        for i in range(header_row_idx + 1, len(rows)):
+            row = rows[i]
+            if id_col >= len(row):
+                continue
+            cell_val = str(row[id_col]).strip()
+            num_match = _re.search(r"(\d+)", cell_val)
+            if num_match and int(num_match.group(1)) == athlete_number:
+                athlete_data = {"row_idx": i, "row": row}
+                break
+
+        # Read wider range to check if pay/receipt cols are beyond Z
+        wide_result = sheets.spreadsheets().values().get(
+            spreadsheetId=branch_obj.drive_file_id,
+            range=f"'{sheet_name}'!A{header_row_idx+1}:BZ{header_row_idx+1}",
+            valueRenderOption="UNFORMATTED_VALUE",
+        ).execute()
+        wide_header = (wide_result.get("values") or [[]])[0]
+
+        return {
+            "sheet_name": sheet_name,
+            "header_row_idx": header_row_idx,
+            "header_row_narrow_A_Z": rows[header_row_idx] if header_row_idx < len(rows) else None,
+            "header_row_wide_A_BZ": wide_header,
+            "col_map": col_map,
+            "athlete": athlete_data,
+        }
+
+    return await asyncio.to_thread(_inspect)
+
+
 @router.get("/branches/{branch_id}/payments", response_model=list[PaymentOut])
 async def list_payments(
     branch_id: int,
