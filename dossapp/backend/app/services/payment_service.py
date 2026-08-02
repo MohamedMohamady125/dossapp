@@ -21,28 +21,30 @@ async def get_next_receipt_number(db: AsyncSession, excel_receipts: Optional[lis
     """Get the next receipt number as a plain integer continuing the Excel sequence.
 
     Combines max from DB receipts and the Excel sheet's existing receipts,
-    then returns max + 1 as a plain string (e.g. "1521").
+    then returns max + 1. Ensures the number doesn't collide with any existing receipt.
     """
     import re
-    # Max from DB
+    # Collect all existing receipt number strings
     result = await db.execute(select(Receipt.receipt_number))
-    all_numbers = result.scalars().all()
+    db_numbers = set(rn for rn in result.scalars().all() if rn)
+    excel_set = set(str(rn).strip() for rn in (excel_receipts or []) if rn)
+    all_existing = db_numbers | excel_set
+
+    # Find max numeric value across all receipts
     max_num = 0
-    for rn in all_numbers:
-        m = re.search(r"(\d+)", rn or "")
-        if m:
-            num = int(m.group(1))
-            if num > max_num:
-                max_num = num
-    # Max from Excel sheet receipts
-    for rn in (excel_receipts or []):
+    for rn in all_existing:
         for part in str(rn).split("/"):  # handle "787/973" style
             m = re.search(r"(\d+)", part)
             if m:
                 num = int(m.group(1))
                 if num > max_num:
                     max_num = num
-    return str(max_num + 1)
+
+    # Pick next number, skip if it somehow already exists
+    candidate = max_num + 1
+    while str(candidate) in all_existing:
+        candidate += 1
+    return str(candidate)
 
 
 async def record_online_payment(
