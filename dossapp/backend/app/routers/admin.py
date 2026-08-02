@@ -679,6 +679,20 @@ async def mark_athlete_paid(
             )
         bill_amount = catalog_price
 
+        # Read existing Excel receipt numbers to continue the same sequence
+        import asyncio
+        excel_receipts = []
+        branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
+        branch_obj = branch_result.scalar_one_or_none()
+        if branch_obj and branch_obj.drive_file_id:
+            try:
+                from app.services.drive_writer import read_existing_receipts
+                excel_receipts = await asyncio.to_thread(
+                    read_existing_receipts, branch_obj.drive_file_id
+                )
+            except Exception as e:
+                logger.warning(f"Could not read Excel receipts: {e}")
+
         from app.services.payment_service import record_manual_payment
         receipt = await record_manual_payment(
             db=db,
@@ -693,6 +707,7 @@ async def mark_athlete_paid(
             athlete_type=athlete.type,
             phone=athlete.phone1,
             payment_method=body.payment_method,
+            excel_receipts=excel_receipts,
         )
 
         if not receipt:
@@ -707,11 +722,8 @@ async def mark_athlete_paid(
         # Write Pay + Receipt back to the Google Drive Excel sheet (best-effort)
         excel_written = False
         excel_error = None
-        try:
-            import asyncio
-            branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
-            branch_obj = branch_result.scalar_one_or_none()
-            if branch_obj and branch_obj.drive_file_id:
+        if branch_obj and branch_obj.drive_file_id:
+            try:
                 from app.services.drive_writer import update_athlete_payment
                 excel_written = await asyncio.to_thread(
                     update_athlete_payment,
@@ -720,12 +732,12 @@ async def mark_athlete_paid(
                     pay_str,
                     receipt_number,
                 )
-            else:
-                excel_error = "Branch not found in DB" if not branch_obj else f"No drive_file_id for branch {branch_id}"
-        except Exception as e:
-            import traceback as tb
-            logger.warning(f"Failed to write payment to Excel: {e}\n{tb.format_exc()}")
-            excel_error = str(e)
+            except Exception as e:
+                import traceback as tb
+                logger.warning(f"Failed to write payment to Excel: {e}\n{tb.format_exc()}")
+                excel_error = str(e)
+        else:
+            excel_error = "Branch not found in DB" if not branch_obj else f"No drive_file_id for branch {branch_id}"
 
         return {
             "message": "Marked as paid",

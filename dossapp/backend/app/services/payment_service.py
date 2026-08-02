@@ -17,13 +17,32 @@ from app.utils.phone import normalize_phone
 logger = logging.getLogger(__name__)
 
 
-async def get_next_receipt_sequence(db: AsyncSession, prefix: str = "P") -> int:
-    """Get the next receipt sequence number for a given prefix (P- or M-)."""
-    result = await db.execute(
-        select(func.count()).where(Receipt.receipt_number.like(f"{prefix}-%"))
-    )
-    count = result.scalar() or 0
-    return count + 1
+async def get_next_receipt_number(db: AsyncSession, excel_receipts: Optional[list[str]] = None) -> str:
+    """Get the next receipt number as a plain integer continuing the Excel sequence.
+
+    Combines max from DB receipts and the Excel sheet's existing receipts,
+    then returns max + 1 as a plain string (e.g. "1521").
+    """
+    import re
+    # Max from DB
+    result = await db.execute(select(Receipt.receipt_number))
+    all_numbers = result.scalars().all()
+    max_num = 0
+    for rn in all_numbers:
+        m = re.search(r"(\d+)", rn or "")
+        if m:
+            num = int(m.group(1))
+            if num > max_num:
+                max_num = num
+    # Max from Excel sheet receipts
+    for rn in (excel_receipts or []):
+        for part in str(rn).split("/"):  # handle "787/973" style
+            m = re.search(r"(\d+)", part)
+            if m:
+                num = int(m.group(1))
+                if num > max_num:
+                    max_num = num
+    return str(max_num + 1)
 
 
 async def record_online_payment(
@@ -74,8 +93,7 @@ async def record_online_payment(
     await db.flush()
 
     # Generate receipt
-    seq = await get_next_receipt_sequence(db)
-    receipt_number = f"P-{seq:06d}"
+    receipt_number = await get_next_receipt_number(db)
 
     normalized_phone = normalize_phone(phone)
     pdf_data = generate_receipt_pdf(
@@ -212,6 +230,7 @@ async def record_manual_payment(
     phone: Optional[str] = None,
     email: Optional[str] = None,
     payment_method: str = "cash",
+    excel_receipts: Optional[list[str]] = None,
 ) -> Optional[Receipt]:
     """Record a manual (admin-marked) payment and generate receipt. Idempotent."""
 
@@ -240,8 +259,7 @@ async def record_manual_payment(
     db.add(payment)
     await db.flush()
 
-    seq = await get_next_receipt_sequence(db, prefix="M")
-    receipt_number = f"M-{seq:06d}"
+    receipt_number = await get_next_receipt_number(db, excel_receipts=excel_receipts)
 
     channel = "Cash" if payment_method == "cash" else "Card"
     normalized_phone = normalize_phone(phone)

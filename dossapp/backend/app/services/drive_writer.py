@@ -103,6 +103,54 @@ def _find_roster_sheet_name(sheets_service, spreadsheet_id: str) -> Optional[str
     return None
 
 
+def read_existing_receipts(drive_file_id: str) -> list[str]:
+    """Read all existing receipt numbers from the roster sheet."""
+    if not _HAS_GOOGLE:
+        return []
+
+    creds = _get_credentials()
+    sheets = build("sheets", "v4", credentials=creds, cache_discovery=False)
+    sheet_name = _find_roster_sheet_name(sheets, drive_file_id)
+    if not sheet_name:
+        return []
+
+    result = sheets.spreadsheets().values().get(
+        spreadsheetId=drive_file_id,
+        range=f"'{sheet_name}'!A1:Z500",
+        valueRenderOption="UNFORMATTED_VALUE",
+    ).execute()
+    rows = result.get("values", [])
+
+    # Find receipt column
+    receipt_col = None
+    header_row_idx = None
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            cell_clean = str(cell).strip().lower()
+            if cell_clean in _RECEIPT_HEADERS:
+                receipt_col = j
+            if cell_clean in ("id", "no", "no."):
+                has_id = True
+            if cell_clean == "name":
+                if receipt_col is not None:
+                    header_row_idx = i
+                    break
+        if header_row_idx is not None:
+            break
+
+    if receipt_col is None or header_row_idx is None:
+        return []
+
+    receipts = []
+    for i in range(header_row_idx + 1, len(rows)):
+        row = rows[i]
+        if receipt_col < len(row):
+            val = str(row[receipt_col]).strip()
+            if val and val != "None":
+                receipts.append(val)
+    return receipts
+
+
 def _update_google_sheet(
     creds, spreadsheet_id: str, athlete_number: int,
     pay_value: str, receipt_number: str,
