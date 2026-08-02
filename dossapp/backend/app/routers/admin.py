@@ -1031,6 +1031,19 @@ async def excel_health(admin: AdminUser = Depends(get_current_admin)):
     return source.get_health()
 
 
+@router.get("/admin/debug/price-matrix/{branch_id}")
+async def debug_price_matrix(
+    branch_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Temporary: dump SK sheet price matrix for a branch."""
+    source = _get_roster_source()
+    roster = await source.get_branch_roster(branch_id)
+    if not roster:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    return {"branch": roster.branch_name, "price_matrix": roster.price_matrix}
+
+
 @router.post("/admin/notifications/test-send")
 async def test_send_notification(
     payload: TestSendRequest,
