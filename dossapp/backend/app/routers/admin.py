@@ -654,65 +654,81 @@ async def mark_athlete_paid(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin manually marks an athlete as paid for the current period."""
-    enforce_branch_scope(admin, branch_id)
-    source = _get_roster_source()
-    roster = await source.get_branch_roster(branch_id)
-    if not roster:
-        raise HTTPException(status_code=404, detail="Branch not found")
+    try:
+        enforce_branch_scope(admin, branch_id)
+        source = _get_roster_source()
+        roster = await source.get_branch_roster(branch_id)
+        if not roster:
+            raise HTTPException(status_code=404, detail="Branch not found")
 
-    athlete = next((a for a in roster.athletes if a.athlete_number == athlete_number), None)
-    if not athlete:
-        raise HTTPException(status_code=404, detail="Athlete not found in roster")
+        athlete = next((a for a in roster.athletes if a.athlete_number == athlete_number), None)
+        if not athlete:
+            raise HTTPException(status_code=404, detail="Athlete not found in roster")
 
-    period = datetime.now().strftime("%Y-%m")
+        period = datetime.now().strftime("%Y-%m")
 
-    # Determine bill amount from catalog, then Excel pay, then fail
-    from app.services.price_resolver import resolve_price
-    catalog_price = await resolve_price(
-        db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
-    )
+        from app.services.price_resolver import resolve_price
+        catalog_price = await resolve_price(
+            db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+        )
 
-    if catalog_price is None:
-        raise HTTPException(status_code=400, detail="No price set in the pricing list for this athlete's program")
-    bill_amount = catalog_price
-
-    from app.services.payment_service import record_manual_payment
-    receipt = await record_manual_payment(
-        db=db,
-        branch_id=branch_id,
-        athlete_number=athlete_number,
-        period=period,
-        amount_paid=bill_amount,
-        amount_owed=bill_amount,
-        athlete_name=athlete.name,
-        branch_name=roster.branch_name,
-        level=athlete.step,
-        athlete_type=athlete.type,
-        phone=athlete.phone1,
-        payment_method=body.payment_method,
-    )
-
-    if not receipt:
-        raise HTTPException(status_code=400, detail="Already paid for this period")
-
-    # Write Pay + Receipt back to the Google Drive Excel sheet
-    import asyncio
-    branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
-    branch_obj = branch_result.scalar_one_or_none()
-    if branch_obj and branch_obj.drive_file_id:
-        try:
-            from app.services.drive_writer import update_athlete_payment
-            await asyncio.to_thread(
-                update_athlete_payment,
-                branch_obj.drive_file_id,
-                athlete_number,
-                str(int(bill_amount)) if bill_amount == int(bill_amount) else str(bill_amount),
-                receipt.receipt_number,
+        if catalog_price is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No price for type={athlete.type}, step={athlete.step}, segment={athlete.segment}, sessions={athlete.sessions}",
             )
+        bill_amount = catalog_price
+
+        from app.services.payment_service import record_manual_payment
+        receipt = await record_manual_payment(
+            db=db,
+            branch_id=branch_id,
+            athlete_number=athlete_number,
+            period=period,
+            amount_paid=bill_amount,
+            amount_owed=bill_amount,
+            athlete_name=athlete.name,
+            branch_name=roster.branch_name,
+            level=athlete.step,
+            athlete_type=athlete.type,
+            phone=athlete.phone1,
+            payment_method=body.payment_method,
+        )
+
+        if not receipt:
+            raise HTTPException(status_code=400, detail="Already paid for this period")
+
+        receipt_number = receipt.receipt_number
+        receipt_id = receipt.id
+
+        # Format amount as clean string (1250.00 → "1250")
+        pay_str = str(bill_amount).rstrip("0").rstrip(".")
+
+        # Write Pay + Receipt back to the Google Drive Excel sheet (best-effort)
+        try:
+            import asyncio
+            branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
+            branch_obj = branch_result.scalar_one_or_none()
+            if branch_obj and branch_obj.drive_file_id:
+                from app.services.drive_writer import update_athlete_payment
+                await asyncio.to_thread(
+                    update_athlete_payment,
+                    branch_obj.drive_file_id,
+                    athlete_number,
+                    pay_str,
+                    receipt_number,
+                )
         except Exception as e:
             logger.warning(f"Failed to write payment to Excel: {e}")
 
-    return {"message": "Marked as paid", "receipt_number": receipt.receipt_number, "receipt_id": receipt.id}
+        return {"message": "Marked as paid", "receipt_number": receipt_number, "receipt_id": receipt_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"mark_athlete_paid error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.get("/branches/{branch_id}/payments", response_model=list[PaymentOut])
