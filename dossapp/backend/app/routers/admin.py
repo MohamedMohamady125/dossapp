@@ -1048,21 +1048,15 @@ async def debug_price_matrix(
         from app.services.drive_reader import download_file
         from app.models.branch import Branch
         from sqlalchemy import select as sa_select
-        from app.database import get_db_sync
         import openpyxl
 
         # Get branch drive file id
-        branch = roster
         file_id = None
-        # Try to get from DB
-        from app.database import async_session_factory
-        import asyncio
-        async def _get_fid():
-            async with async_session_factory() as db:
-                r = await db.execute(sa_select(Branch).where(Branch.id == branch_id))
-                b = r.scalar_one_or_none()
-                return b.drive_file_id if b else None
-        file_id = await _get_fid()
+        from app.database import async_session
+        async with async_session() as db:
+            r = await db.execute(sa_select(Branch).where(Branch.id == branch_id))
+            b = r.scalar_one_or_none()
+            file_id = b.drive_file_id if b else None
 
         if file_id:
             path = download_file(file_id)
