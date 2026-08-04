@@ -1073,23 +1073,33 @@ async def get_analytics(
                 if a.gender in ("M", "F"):
                     gender_by_level[a.step][a.gender] += 1
 
-        # ── Revenue by product type (paid = has pay value) ──
+        # ── Revenue from DB payments (source of truth for both online + manual) ──
+        payment_result = await db.execute(
+            select(Payment).where(
+                Payment.branch_id == bid,
+                Payment.period == period,
+                Payment.status == "paid",
+            )
+        )
+        db_payments = payment_result.scalars().all()
+        athlete_map = {a.athlete_number: a for a in athletes}
+
         revenue_by_type: dict[str, float] = {}
         revenue_by_segment: dict[str, float] = {}
         total_paid = 0.0
         paid_count = 0
-        for a in athletes:
-            if a.pay:
-                try:
-                    amount = float(Decimal(a.pay))
-                    total_paid += amount
-                    paid_count += 1
-                    t = a.type or "Unknown"
-                    revenue_by_type[t] = revenue_by_type.get(t, 0) + amount
-                    s = a.segment or "No Segment"
-                    revenue_by_segment[s] = revenue_by_segment.get(s, 0) + amount
-                except (InvalidOperation, ValueError):
-                    pass
+        for p in db_payments:
+            try:
+                amount = float(p.amount_paid)
+                total_paid += amount
+                paid_count += 1
+                a = athlete_map.get(p.athlete_number)
+                t = (a.type if a else None) or "Unknown"
+                revenue_by_type[t] = revenue_by_type.get(t, 0) + amount
+                s = (a.segment if a else None) or "No Segment"
+                revenue_by_segment[s] = revenue_by_segment.get(s, 0) + amount
+            except (ValueError, TypeError):
+                pass
 
         # ── Day/slot demand ──
         # Already in day_counts above
