@@ -134,12 +134,15 @@ class _AthletesScreenState extends State<AthletesScreen> {
         if (a.type != null) a.type!,
         if (a.bill != null) 'Bill: ${formatMoney(a.bill)}',
         if (a.isPaid) 'Paid: ${formatMoney(a.pay)}',
-      ].join(' \u2022 '), style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        if (a.bill == null && a.billMissing != null) '\u26A0 ${a.billMissing}',
+      ].join(' \u2022 '), style: TextStyle(fontSize: 12, color: a.billMissing != null && a.bill == null ? AppColors.warning : AppColors.textSecondary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (a.isPaid)
             const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+          if (a.bill == null && a.billMissing != null)
+            const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
           if (a.hasAccount)
             Padding(
               padding: const EdgeInsets.only(left: 4),
@@ -382,7 +385,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
         _infoRow(Icons.date_range_rounded, 'Days', athlete.days),
         _infoRow(Icons.event_repeat_rounded, 'Sessions', athlete.sessions),
         _infoRow(Icons.hub_rounded, 'Segment', athlete.segment),
-        _infoRow(Icons.receipt_rounded, 'Bill', athlete.bill != null ? formatMoney(athlete.bill) : null),
+        _infoRow(Icons.receipt_rounded, 'Bill', athlete.bill != null ? formatMoney(athlete.bill) : athlete.billMissing != null ? '\u26A0 ${athlete.billMissing}' : null),
         _infoRow(Icons.payments_rounded, 'Paid', athlete.pay != null ? formatMoney(athlete.pay) : null),
         _infoRow(Icons.receipt_long_rounded, 'Receipt No.', athlete.receiptNo),
         _infoRow(Icons.comment_rounded, 'Comment', athlete.comment),
@@ -455,57 +458,86 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           ),
         ],
 
-        // ── Mark as Paid ──
-        if (athlete.bill != null || athlete.pay != null) ...[
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: (athlete.isPaid || _markedPaid)
-                ? Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.successLight,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.success.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Paid${athlete.pay != null ? " - ${formatMoney(athlete.pay)}" : ""}', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 16)),
-                            if (_receiptNumber != null)
-                              Text('Receipt: $_receiptNumber', style: const TextStyle(color: AppColors.success, fontSize: 13))
-                            else if (athlete.receiptNo != null)
-                              Text('Receipt: ${athlete.receiptNo}', style: const TextStyle(color: AppColors.success, fontSize: 13)),
-                          ],
-                        )),
-                      ],
-                    ),
-                  )
-                : FilledButton.icon(
-                    onPressed: _markingPaid ? null : _showPaymentMethodDialog,
-                    icon: _markingPaid
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.paid_rounded),
-                    label: Text(_markingPaid ? 'Marking...' : 'Mark as Paid (${formatMoney(athlete.bill ?? athlete.pay)})'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      minimumSize: const Size(double.infinity, 52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
+        // ── Payment Status ──
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: (athlete.isPaid || _markedPaid)
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.successLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
                   ),
-          ),
-        ],
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Paid${_markedPaid && athlete.bill != null ? " - ${formatMoney(athlete.bill)}" : athlete.pay != null ? " - ${formatMoney(athlete.pay)}" : ""}',
+                            style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 16),
+                          ),
+                          if (_receiptNumber != null)
+                            Text('Receipt: $_receiptNumber', style: const TextStyle(color: AppColors.success, fontSize: 13))
+                          else if (athlete.receiptNo != null)
+                            Text('Receipt: ${athlete.receiptNo}', style: const TextStyle(color: AppColors.success, fontSize: 13)),
+                        ],
+                      )),
+                    ],
+                  ),
+                )
+              : athlete.bill != null
+                  ? FilledButton.icon(
+                      onPressed: _markingPaid ? null : _showPaymentMethodDialog,
+                      icon: _markingPaid
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.paid_rounded),
+                      label: Text(_markingPaid ? 'Marking...' : 'Mark as Paid (${formatMoney(athlete.bill)})'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        minimumSize: const Size(double.infinity, 52),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.warningLight,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Cannot calculate bill', style: TextStyle(color: AppColors.warningDark, fontSize: 14, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  athlete.billMissing ?? 'No price set for this athlete',
+                                  style: const TextStyle(color: AppColors.warning, fontSize: 12, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+        ),
 
         const SizedBox(height: 16),
         Padding(

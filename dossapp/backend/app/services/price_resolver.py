@@ -192,6 +192,50 @@ def resolve_price_from_catalog(
     return None
 
 
+def diagnose_missing_bill(
+    catalog: CatalogLookup,
+    athlete_type: Optional[str],
+    athlete_step: Optional[str],
+    athlete_segment: Optional[str],
+    athlete_sessions: Optional[str],
+) -> str:
+    """Return a human-readable explanation of why a bill can't be calculated."""
+    missing = []
+    if not athlete_type or not athlete_type.strip():
+        missing.append("Type")
+    if not catalog:
+        return "No price list loaded for this branch"
+    if missing:
+        return f"Missing in Excel: {', '.join(missing)}"
+
+    # Type exists but no catalog match — explain what was tried
+    candidates = _normalize_program_name(athlete_type, athlete_step)
+    sessions = _normalize_sessions(athlete_sessions)
+    sess_lower = sessions.lower() if sessions else "8 sessions"
+
+    # Check if ANY entry exists for this program
+    candidate_names = [c.strip().lower() for c in candidates]
+    catalog_programs = set(k[0] for k in catalog.keys())
+    matched_program = None
+    for c in candidate_names:
+        if c in catalog_programs:
+            matched_program = c
+            break
+
+    if not matched_program:
+        return f"No price for type \"{athlete_type}\" in the price list"
+
+    # Program exists but sessions don't match
+    available_sessions = sorted(set(
+        k[2] for k in catalog.keys()
+        if k[0] == matched_program and k[2]
+    ))
+    if available_sessions:
+        return f"No price for {athlete_type} at {sess_lower} (available: {', '.join(available_sessions)})"
+
+    return f"No matching price for type \"{athlete_type}\""
+
+
 async def resolve_price(
     db: AsyncSession,
     branch_id: int,

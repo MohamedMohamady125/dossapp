@@ -447,11 +447,12 @@ async def list_athletes(
     provisioned = {row[0] for row in result.all()}
 
     # Resolve bills from price catalog (single DB query for entire branch)
-    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
     catalog = await load_branch_catalog(db, branch_id)
     athletes_out = []
     for a in roster.athletes:
         bill = resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
+        bill_missing = None if bill else diagnose_missing_bill(catalog, a.type, a.step, a.segment, a.sessions)
         athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
             branch_id=branch_id,
@@ -467,6 +468,7 @@ async def list_athletes(
             segment=a.segment,
             pay=a.pay,
             bill=str(bill) if bill else None,
+            bill_missing=bill_missing,
             phone1=a.phone1,
             phone2=a.phone2,
             comment=a.comment,
@@ -503,6 +505,11 @@ async def get_athlete_detail(
     )
     has_account = result.scalar_one_or_none() is not None
 
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
+    catalog = await load_branch_catalog(db, branch_id)
+    bill = resolve_price_from_catalog(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
+    bill_missing = None if bill else diagnose_missing_bill(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
+
     return AthleteDetail(
         branch=roster.branch_name,
         branch_id=branch_id,
@@ -517,6 +524,8 @@ async def get_athlete_detail(
         sessions=athlete.sessions,
         segment=athlete.segment,
         pay=athlete.pay,
+        bill=str(bill) if bill else None,
+        bill_missing=bill_missing,
         phone1=athlete.phone1,
         phone2=athlete.phone2,
         comment=athlete.comment,

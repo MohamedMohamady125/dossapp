@@ -78,6 +78,7 @@ class AthleteProfile {
 class AthleteDetail extends AthleteProfile {
   final String? pay;
   final String? bill;
+  final String? billMissing;
   final String? phone1;
   final String? phone2;
   final String? comment;
@@ -101,6 +102,7 @@ class AthleteDetail extends AthleteProfile {
     super.schedule,
     this.pay,
     this.bill,
+    this.billMissing,
     this.phone1,
     this.phone2,
     this.comment,
@@ -125,6 +127,7 @@ class AthleteDetail extends AthleteProfile {
       segment: json['segment'],
       pay: json['pay'],
       bill: json['bill'],
+      billMissing: json['bill_missing'],
       phone1: json['phone1'],
       phone2: json['phone2'],
       comment: json['comment'],

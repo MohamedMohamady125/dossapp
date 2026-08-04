@@ -31,6 +31,7 @@ class AthleteDetail(AthleteProfile):
     """Full detail for admin view — includes all Excel fields."""
     pay: Optional[str] = None
     bill: Optional[str] = None  # Resolved from price catalog
+    bill_missing: Optional[str] = None  # Why bill couldn't be calculated
     phone1: Optional[str] = None
     phone2: Optional[str] = None
     comment: Optional[str] = None
