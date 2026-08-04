@@ -64,7 +64,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     } catch (_) {}
   }
 
-  void _refreshAll() {
+  Future<void> _refreshAll() async {
+    // Force backend to re-download Excel from Google Drive
+    if (_selectedBranchId != null) {
+      try {
+        await ApiService.refreshBranch(_selectedBranchId!);
+      } catch (_) {}
+    }
     setState(() => _refreshKey++);
     _loadBranches();
     _loadPendingCount();
