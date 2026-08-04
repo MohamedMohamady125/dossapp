@@ -27,7 +27,7 @@ def _current_period() -> str:
 
 async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
     """Run reconciliation for a branch. Returns count of new cash payments created."""
-    period = _current_period()
+    period = roster.period or _current_period()
     created_count = 0
 
     # Pre-fetch all account emails for this branch in one query (avoid N+1)

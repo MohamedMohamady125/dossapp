@@ -696,18 +696,65 @@ def _is_attendance_sheet(name: str) -> bool:
     return any(kw in n for kw in attendance_keywords)
 
 
-def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[list[Athlete], list[str], dict, list[str]]:
-    """Parse a complete branch workbook. Returns (athletes, coaches, price_matrix, errors)."""
+def _detect_season_period(athletes: list[Athlete], roster_month: Optional[int]) -> Optional[str]:
+    """Determine billing period from season column values and/or roster sheet name.
+
+    Returns YYYY-MM string or None.
+    """
+    now = datetime.now()
+
+    # Try season column: collect the most common month name from athlete rows
+    season_months: dict[int, int] = {}
+    for a in athletes:
+        # Season isn't stored on Athlete yet, but we pass it separately
+        pass
+
+    # Fall back to roster sheet name month
+    if roster_month:
+        # Determine the year: if the month is in the future by >2 months, it's probably last year
+        year = now.year
+        if roster_month > now.month + 2:
+            year -= 1
+        return f"{year}-{roster_month:02d}"
+
+    return None
+
+
+def _detect_season_from_column(ws: Worksheet, col_map: dict, header_row: int, max_rows: int) -> Optional[int]:
+    """Read season column values and return the most common month number."""
+    if "season" not in col_map:
+        return None
+
+    season_col = col_map["season"]
+    month_counts: dict[int, int] = {}
+    for row_idx in range(header_row + 1, min(header_row + 100, max_rows + 1)):
+        val = _clean(ws.cell(row=row_idx, column=season_col).value).strip().lower()
+        if val:
+            for word in re.split(r"[\s.\-_]+", val):
+                if word in _MONTH_NAMES:
+                    m = _MONTH_NAMES[word]
+                    month_counts[m] = month_counts.get(m, 0) + 1
+                    break
+
+    if month_counts:
+        return max(month_counts, key=month_counts.get)
+    return None
+
+
+def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[list[Athlete], list[str], dict, list[str], Optional[str]]:
+    """Parse a complete branch workbook. Returns (athletes, coaches, price_matrix, errors, detected_period)."""
     errors: list[str] = []
     athletes: list[Athlete] = []
     coaches: list[str] = []
     price_matrix: dict = {}
 
+    detected_period: Optional[str] = None
+
     try:
         wb = load_workbook(file_path, read_only=False, data_only=True)
     except Exception as e:
         errors.append(f"Failed to open workbook: {e}")
-        return athletes, coaches, price_matrix, errors
+        return athletes, coaches, price_matrix, errors, None
 
     roster_sheet = None
     attendance_sheets: list[tuple[Worksheet, str]] = []
@@ -730,12 +777,28 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
     if roster_sheet is None:
         errors.append("No roster sheet found (expected sheet with 'Reg' in name)")
         wb.close()
-        return athletes, coaches, price_matrix, errors
+        return athletes, coaches, price_matrix, errors, None
 
     # Parse roster
     athletes, roster_errors = parse_roster_sheet(roster_sheet, branch_name, branch_id)
     errors.extend(roster_errors)
     logger.info(f"Roster '{roster_sheet.title}': {len(athletes)} athletes")
+
+    # Detect billing period from season column (priority) or sheet name
+    header_row_for_season, col_map_for_season = _find_header_row(roster_sheet)
+    season_month = None
+    if header_row_for_season is not None:
+        season_month = _detect_season_from_column(roster_sheet, col_map_for_season, header_row_for_season, roster_sheet.max_row or 0)
+    period_month = season_month or roster_month
+    if period_month:
+        now = datetime.now()
+        year = now.year
+        if period_month > now.month + 2:
+            year -= 1
+        detected_period = f"{year}-{period_month:02d}"
+        logger.info(f"Detected billing period: {detected_period} (season_col={season_month}, sheet_name={roster_month})")
+    else:
+        detected_period = None
 
     # Build athlete lookup
     athlete_by_num: dict[int, Athlete] = {a.athlete_number: a for a in athletes}
@@ -788,4 +851,4 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
             errors.append(f"Error parsing Sk. sheet: {e}")
 
     wb.close()
-    return athletes, coaches, price_matrix, errors
+    return athletes, coaches, price_matrix, errors, detected_period

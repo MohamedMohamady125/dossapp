@@ -125,9 +125,12 @@ class ExcelRosterSource(RosterSource):
                 return False
 
             try:
-                athletes, coaches, price_matrix, errors = await asyncio.to_thread(
+                athletes, coaches, price_matrix, errors, detected_period = await asyncio.to_thread(
                     parse_workbook, tmp_path, config["branch_name"], branch_id
                 )
+
+                # Use period from Excel (season column / sheet name), fall back to current month
+                period = detected_period or datetime.now().strftime("%Y-%m")
 
                 roster = BranchRoster(
                     branch_id=branch_id,
@@ -138,7 +141,7 @@ class ExcelRosterSource(RosterSource):
                     parse_errors=errors,
                     last_modified=current_modified,
                     last_refreshed=datetime.now(timezone.utc).isoformat(),
-                    period=datetime.now().strftime("%Y-%m"),  # Tier 3: stamp with current period
+                    period=period,
                 )
 
                 async with self._lock:
@@ -149,7 +152,24 @@ class ExcelRosterSource(RosterSource):
                 if errors:
                     logger.warning(f"Branch {branch_id} parsed with {len(errors)} warnings: {errors[:3]}")
 
-                logger.info(f"Branch {branch_id}: loaded {len(athletes)} athletes")
+                logger.info(f"Branch {branch_id}: loaded {len(athletes)} athletes, period={period}")
+
+                # Save detected period to Branch DB
+                if period:
+                    try:
+                        from app.database import async_session
+                        from app.models.branch import Branch
+                        async with async_session() as db:
+                            from sqlalchemy import select as sel
+                            result = await db.execute(sel(Branch).where(Branch.id == branch_id))
+                            branch_obj = result.scalar_one_or_none()
+                            if branch_obj and branch_obj.current_period != period:
+                                branch_obj.current_period = period
+                                db.add(branch_obj)
+                                await db.commit()
+                                logger.info(f"Branch {branch_id}: updated current_period to {period}")
+                    except Exception as e:
+                        logger.error(f"Branch {branch_id}: failed to save period: {e}")
 
                 # Auto-sync SK tab prices to the DB catalog
                 if price_matrix:
@@ -190,9 +210,10 @@ class ExcelRosterSource(RosterSource):
             return False
 
         try:
-            athletes, coaches, price_matrix, errors = await asyncio.to_thread(
+            athletes, coaches, price_matrix, errors, detected_period = await asyncio.to_thread(
                 parse_workbook, local_path, config["branch_name"], branch_id
             )
+            period = detected_period or datetime.now().strftime("%Y-%m")
             roster = BranchRoster(
                 branch_id=branch_id,
                 branch_name=config["branch_name"],
@@ -202,7 +223,7 @@ class ExcelRosterSource(RosterSource):
                 parse_errors=errors,
                 last_modified=mtime,
                 last_refreshed=datetime.now(timezone.utc).isoformat(),
-                period=datetime.now().strftime("%Y-%m"),
+                period=period,
             )
             async with self._lock:
                 self._cache[branch_id] = roster

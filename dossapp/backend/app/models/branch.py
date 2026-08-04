@@ -9,3 +9,4 @@ class Branch(Base):
     name = Column(String(100), nullable=False, unique=True)
     display_name = Column(String(200), nullable=False)
     drive_file_id = Column(String(200), nullable=True)
+    current_period = Column(String(10), nullable=True)  # YYYY-MM from Excel season/sheet name

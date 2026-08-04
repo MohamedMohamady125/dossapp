@@ -45,6 +45,11 @@ def _add_missing_columns(sync_conn):
                 "ALTER TABLE admin_users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    if "branches" in insp.get_table_names():
+        cols = {c["name"] for c in insp.get_columns("branches")}
+        if "current_period" not in cols:
+            sync_conn.execute(text("ALTER TABLE branches ADD COLUMN current_period VARCHAR(10)"))
+
 
 async def init_db():
     """Create all tables if they don't exist."""

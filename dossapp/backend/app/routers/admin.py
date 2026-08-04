@@ -694,7 +694,7 @@ async def mark_athlete_paid(
         if not athlete:
             raise HTTPException(status_code=404, detail="Athlete not found in roster")
 
-        period = datetime.now().strftime("%Y-%m")
+        period = roster.period or datetime.now().strftime("%Y-%m")
 
         from app.services.price_resolver import resolve_price
         catalog_price = await resolve_price(
@@ -1011,7 +1011,9 @@ async def get_analytics(
             rosters = {k: v for k, v in rosters.items() if k == admin.assigned_branch_id}
 
     if not period:
-        period = datetime.now().strftime("%Y-%m")
+        # Use first roster's period if available
+        first_roster = next(iter(rosters.values()), None) if rosters else None
+        period = (first_roster.period if first_roster and first_roster.period else None) or datetime.now().strftime("%Y-%m")
 
     # Tier 1 analytics
     analytics = {"period": period, "branches": {}}
@@ -1464,7 +1466,7 @@ async def list_reinstatement_requests(
 
         # Check payment status
         from app.models.payment import Payment
-        period = datetime.now().strftime("%Y-%m")
+        period = (roster.period if roster and roster.period else None) or datetime.now().strftime("%Y-%m")
         paid_result = await db.execute(
             select(Payment.id).where(
                 Payment.branch_id == req.branch_id,

@@ -93,10 +93,12 @@ def _is_in_payment_window() -> bool:
 async def get_bill(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     source = _get_roster_source()
     roster = await source.get_branch_roster(account.branch_id)
-    period = datetime.now().strftime("%Y-%m")
 
     if not roster:
         raise HTTPException(status_code=503, detail="Branch data not available")
+
+    # Period comes from the Excel sheet (season column / sheet name), not the calendar
+    period = roster.period or datetime.now().strftime("%Y-%m")
 
     athlete = next((a for a in roster.athletes if a.athlete_number == account.athlete_number), None)
     if not athlete:
@@ -197,7 +199,7 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
         raise HTTPException(status_code=404, detail="No active enrollment")
 
     # Check not already paid
-    period = datetime.now().strftime("%Y-%m")
+    period = roster.period or datetime.now().strftime("%Y-%m")
     result = await db.execute(
         select(Payment).where(
             Payment.branch_id == account.branch_id,
