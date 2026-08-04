@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
+from app.utils.billing import current_billing_period
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select, func
@@ -694,7 +696,7 @@ async def mark_athlete_paid(
         if not athlete:
             raise HTTPException(status_code=404, detail="Athlete not found in roster")
 
-        period = roster.period or datetime.now().strftime("%Y-%m")
+        period = roster.period or current_billing_period()
 
         from app.services.price_resolver import resolve_price
         catalog_price = await resolve_price(
@@ -1013,7 +1015,7 @@ async def get_analytics(
     if not period:
         # Use first roster's period if available
         first_roster = next(iter(rosters.values()), None) if rosters else None
-        period = (first_roster.period if first_roster and first_roster.period else None) or datetime.now().strftime("%Y-%m")
+        period = (first_roster.period if first_roster and first_roster.period else None) or current_billing_period()
 
     # Tier 1 analytics
     analytics = {"period": period, "branches": {}}
@@ -1466,7 +1468,7 @@ async def list_reinstatement_requests(
 
         # Check payment status
         from app.models.payment import Payment
-        period = (roster.period if roster and roster.period else None) or datetime.now().strftime("%Y-%m")
+        period = (roster.period if roster and roster.period else None) or current_billing_period()
         paid_result = await db.execute(
             select(Payment.id).where(
                 Payment.branch_id == req.branch_id,

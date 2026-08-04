@@ -18,7 +18,8 @@ async def save_roster_snapshot(roster: BranchRoster, db: AsyncSession):
 
     Only saves once per branch per period (checks for existing).
     """
-    period = roster.period or datetime.now().strftime("%Y-%m")
+    from app.utils.billing import current_billing_period
+    period = roster.period or current_billing_period()
 
     # Check if we already have a snapshot for this branch+period today
     result = await db.execute(

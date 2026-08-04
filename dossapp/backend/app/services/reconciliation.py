@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 def _current_period() -> str:
     """Current billing period as YYYY-MM."""
-    now = datetime.now()
-    return now.strftime("%Y-%m")
+    from app.utils.billing import current_billing_period
+    return current_billing_period()
 
 
 async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:

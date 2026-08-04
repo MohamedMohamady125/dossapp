@@ -4,6 +4,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
+from app.utils.billing import current_billing_period
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import select
@@ -98,7 +100,7 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         raise HTTPException(status_code=503, detail="Branch data not available")
 
     # Period comes from the Excel sheet (season column / sheet name), not the calendar
-    period = roster.period or datetime.now().strftime("%Y-%m")
+    period = roster.period or current_billing_period()
 
     athlete = next((a for a in roster.athletes if a.athlete_number == account.athlete_number), None)
     if not athlete:
@@ -199,7 +201,7 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
         raise HTTPException(status_code=404, detail="No active enrollment")
 
     # Check not already paid
-    period = roster.period or datetime.now().strftime("%Y-%m")
+    period = roster.period or current_billing_period()
     result = await db.execute(
         select(Payment).where(
             Payment.branch_id == account.branch_id,

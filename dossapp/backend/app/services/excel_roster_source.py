@@ -12,6 +12,7 @@ from typing import Optional
 from app.services.roster_source import RosterSource, BranchRoster
 from app.services.excel_parser import parse_workbook
 from app.services.drive_reader import download_file, get_file_modified_time
+from app.utils.billing import current_billing_period
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ class ExcelRosterSource(RosterSource):
                 )
 
                 # Use period from Excel (season column / sheet name), fall back to current month
-                period = detected_period or datetime.now().strftime("%Y-%m")
+                period = detected_period or current_billing_period()
 
                 roster = BranchRoster(
                     branch_id=branch_id,
@@ -213,7 +214,7 @@ class ExcelRosterSource(RosterSource):
             athletes, coaches, price_matrix, errors, detected_period = await asyncio.to_thread(
                 parse_workbook, local_path, config["branch_name"], branch_id
             )
-            period = detected_period or datetime.now().strftime("%Y-%m")
+            period = detected_period or current_billing_period()
             roster = BranchRoster(
                 branch_id=branch_id,
                 branch_name=config["branch_name"],
