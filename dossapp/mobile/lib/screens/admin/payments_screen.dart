@@ -25,7 +25,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   String _search = '';
   late AnimationController _animController;
 
-  String get _currentPeriodRaw => DateTime.now().toString().substring(0, 7);
+  String? _period;
 
   @override
   void initState() {
@@ -45,9 +45,13 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     try {
       _payments = await ApiService.getBranchPayments(
         widget.branchId,
-        period: _currentPeriodRaw,
         status: _statusFilter.isEmpty ? null : _statusFilter,
       );
+      // Derive period from first payment or fallback to current month
+      if (_payments != null && _payments!.isNotEmpty) {
+        _period = _payments!.first['period']?.toString();
+      }
+      _period ??= DateTime.now().toString().substring(0, 7);
       _animController.forward(from: 0);
     } catch (e) {
       _error = e.toString();
@@ -105,7 +109,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(formatPeriod(_currentPeriodRaw), style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+                    Text(formatPeriod(_period ?? ''), style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(formatMoney(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
                   ],

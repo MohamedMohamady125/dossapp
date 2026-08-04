@@ -947,40 +947,56 @@ async def list_payments(
     if not period:
         period = (roster.period if roster and roster.period else None) or current_billing_period()
 
-    query = select(Payment).where(
-        Payment.branch_id == branch_id,
-        Payment.period == period,
+    # Source of truth: Excel Pay column — athletes with a pay value are "paid"
+    athletes = roster.athletes if roster else []
+
+    # Pre-fetch DB payments + receipts for enrichment (receipt numbers, channels)
+    db_result = await db.execute(
+        select(Payment).where(
+            Payment.branch_id == branch_id,
+            Payment.period == period,
+            Payment.status == "paid",
+        )
     )
-    if status:
-        query = query.where(Payment.status == status)
-    query = query.order_by(Payment.created_at.desc())
+    db_payments = db_result.scalars().all()
+    db_pay_map = {p.athlete_number: p for p in db_payments}
 
-    result = await db.execute(query)
-    payments = result.scalars().all()
-
-    # Look up athlete names from roster cache
-    athlete_map = {a.athlete_number: a for a in roster.athletes} if roster else {}
-
-    # Batch-fetch receipts for all payments
-    payment_ids = [p.id for p in payments]
+    payment_ids = [p.id for p in db_payments]
     receipt_map = {}
     if payment_ids:
         receipt_result = await db.execute(
             select(Receipt).where(Receipt.payment_id.in_(payment_ids))
         )
-        receipt_map = {r.payment_id: r for r in receipt_result.scalars().all()}
+        for r in receipt_result.scalars().all():
+            receipt_map[r.payment_id] = r
 
     out = []
-    for p in payments:
+    for a in athletes:
+        # Determine if paid from Excel
+        try:
+            excel_amount = float(a.pay) if a.pay else 0
+        except (ValueError, TypeError):
+            excel_amount = 0
 
-        athlete = athlete_map.get(p.athlete_number)
-        receipt = receipt_map.get(p.id)
+        is_paid = excel_amount > 0
+        if not is_paid:
+            # Also check DB for online payments not yet in Excel
+            db_p = db_pay_map.get(a.athlete_number)
+            if db_p:
+                is_paid = True
+                excel_amount = float(db_p.amount_paid)
 
-        # Extract coach + training time from first schedule slot
+        # Apply status filter
+        if status == "paid" and not is_paid:
+            continue
+        if status == "pending" and is_paid:
+            continue
+
+        # Extract coach + training time
         coach_name = None
         training_time = None
-        if athlete and athlete.schedule:
-            slot = athlete.schedule[0]
+        if a.schedule:
+            slot = a.schedule[0]
             coach_name = slot.coach
             parts = []
             if slot.day_pair:
@@ -989,20 +1005,24 @@ async def list_payments(
                 parts.append(slot.time_block)
             training_time = " ".join(parts) if parts else None
 
+        # Enrich with DB receipt info if available
+        db_p = db_pay_map.get(a.athlete_number)
+        receipt = receipt_map.get(db_p.id) if db_p else None
+
         out.append(PaymentOut(
-            id=p.id,
-            branch_id=p.branch_id,
-            athlete_number=p.athlete_number,
-            athlete_name=athlete.name if athlete else f"Athlete #{p.athlete_number}",
-            level=athlete.step if athlete else None,
-            athlete_type=athlete.type if athlete else None,
-            period=p.period,
-            source=p.source,
-            amount_paid=str(p.amount_paid),
-            status=p.status,
-            paid_at=p.paid_at,
-            payment_channel=receipt.payment_channel if receipt else None,
-            receipt_number=receipt.receipt_number if receipt else None,
+            id=db_p.id if db_p else 0,
+            branch_id=branch_id,
+            athlete_number=a.athlete_number,
+            athlete_name=a.name or f"Athlete #{a.athlete_number}",
+            level=a.step,
+            athlete_type=a.type,
+            period=period,
+            source=db_p.source if db_p else ("excel" if is_paid else None),
+            amount_paid=str(excel_amount) if is_paid else "0",
+            status="paid" if is_paid else "pending",
+            paid_at=db_p.paid_at if db_p else None,
+            payment_channel=receipt.payment_channel if receipt else ("Cash" if is_paid else None),
+            receipt_number=receipt.receipt_number if receipt else (a.receipt_no if is_paid else None),
             receipt_id=receipt.id if receipt else None,
             coach=coach_name,
             training_time=training_time,
@@ -1117,30 +1137,23 @@ async def get_analytics(
                 if a.gender in ("M", "F"):
                     gender_by_level[a.step][a.gender] += 1
 
-        # ── Revenue from DB payments (source of truth for both online + manual) ──
-        payment_result = await db.execute(
-            select(Payment).where(
-                Payment.branch_id == bid,
-                Payment.period == period,
-                Payment.status == "paid",
-            )
-        )
-        db_payments = payment_result.scalars().all()
-        athlete_map = {a.athlete_number: a for a in athletes}
-
+        # ── Revenue from Excel Pay column (source of truth) ──
         revenue_by_type: dict[str, float] = {}
         revenue_by_segment: dict[str, float] = {}
         total_paid = 0.0
         paid_count = 0
-        for p in db_payments:
+        for a in athletes:
+            if not a.pay:
+                continue
             try:
-                amount = float(p.amount_paid)
+                amount = float(a.pay)
+                if amount <= 0:
+                    continue
                 total_paid += amount
                 paid_count += 1
-                a = athlete_map.get(p.athlete_number)
-                t = (a.type if a else None) or "Unknown"
+                t = a.type or "Unknown"
                 revenue_by_type[t] = revenue_by_type.get(t, 0) + amount
-                s = (a.segment if a else None) or "No Segment"
+                s = a.segment or "No Segment"
                 revenue_by_segment[s] = revenue_by_segment.get(s, 0) + amount
             except (ValueError, TypeError):
                 pass
