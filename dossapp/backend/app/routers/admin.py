@@ -434,6 +434,8 @@ async def list_athletes(
 ):
     enforce_branch_scope(admin, branch_id)
     source = _get_roster_source()
+    # Always check for Excel changes before serving athletes
+    await source.refresh_branch(branch_id)
     roster = await source.get_branch_roster(branch_id)
     if not roster:
         raise HTTPException(status_code=404, detail="Branch not found")
