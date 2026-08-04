@@ -416,6 +416,13 @@ class ApiService {
     return jsonDecode(resp.body);
   }
 
+  static Future<void> setAthleteBill(int branchId, int athleteNumber, double amount) async {
+    final resp = await _post('/branches/$branchId/athletes/$athleteNumber/set-bill', {'amount': amount});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to set bill'));
+    }
+  }
+
   static Future<void> refreshBranch(int branchId) async {
     final resp = await _post('/branches/$branchId/refresh', {});
     if (resp.statusCode != 200) {

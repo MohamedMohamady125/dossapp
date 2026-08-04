@@ -8,9 +8,10 @@ from app.models.roster_snapshot import RosterSnapshot
 from app.models.push import DeviceToken, InboxNotification, ScheduleSnapshot, NotificationDedupe
 from app.models.price_catalog import PriceCatalog
 from app.models.reinstatement_request import ReinstatementRequest
+from app.models.bill_override import BillOverride
 
 __all__ = [
     "Branch", "AdminUser", "Account", "Payment", "Receipt", "NotificationLog", "RosterSnapshot",
     "DeviceToken", "InboxNotification", "ScheduleSnapshot", "NotificationDedupe",
-    "PriceCatalog", "ReinstatementRequest",
+    "PriceCatalog", "ReinstatementRequest", "BillOverride",
 ]

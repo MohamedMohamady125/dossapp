@@ -164,7 +164,8 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     # Primary: price catalog lookup based on athlete's type/step/segment
     from app.services.price_resolver import resolve_price
     catalog_price = await resolve_price(
-        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+        athlete_number=account.athlete_number,
     )
 
     amount_owed = _fmt_amount(catalog_price) if catalog_price is not None else None
@@ -216,7 +217,8 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
     # Primary: price catalog lookup
     from app.services.price_resolver import resolve_price
     catalog_price = await resolve_price(
-        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+        athlete_number=account.athlete_number,
     )
     if catalog_price is None:
         raise HTTPException(status_code=400, detail="No price set in the pricing list for your program")

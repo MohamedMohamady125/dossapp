@@ -59,7 +59,8 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
 
         # Use catalog price for amount_owed; athlete.pay is the actual cash collected
         catalog_price = await resolve_price(
-            db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+            db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+            athlete_number=athlete.athlete_number,
         )
 
         receipt = await record_cash_payment(

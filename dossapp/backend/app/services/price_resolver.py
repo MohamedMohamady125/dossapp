@@ -243,8 +243,22 @@ async def resolve_price(
     athlete_step: Optional[str],
     athlete_segment: Optional[str],
     athlete_sessions: Optional[str],
+    athlete_number: Optional[int] = None,
 ) -> Optional[Decimal]:
-    """Look up the catalog price for an athlete. Convenience wrapper for single lookups."""
+    """Look up the catalog price for an athlete. Checks bill overrides first."""
+    # Check for admin-set bill override
+    if athlete_number is not None:
+        from app.models.bill_override import BillOverride
+        result = await db.execute(
+            select(BillOverride.amount).where(
+                BillOverride.branch_id == branch_id,
+                BillOverride.athlete_number == athlete_number,
+            )
+        )
+        override = result.scalar_one_or_none()
+        if override is not None:
+            return override
+
     catalog = await load_branch_catalog(db, branch_id)
     return resolve_price_from_catalog(catalog, athlete_type, athlete_step, athlete_segment, athlete_sessions)
 

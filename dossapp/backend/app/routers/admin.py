@@ -464,12 +464,17 @@ async def list_athletes(
     )
     provisioned = {row[0] for row in result.all()}
 
-    # Resolve bills from price catalog (single DB query for entire branch)
+    # Resolve bills: check overrides first, then price catalog
     from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
+    from app.models.bill_override import BillOverride
     catalog = await load_branch_catalog(db, branch_id)
+    override_result = await db.execute(
+        select(BillOverride).where(BillOverride.branch_id == branch_id)
+    )
+    override_map = {o.athlete_number: o.amount for o in override_result.scalars().all()}
     athletes_out = []
     for a in roster.athletes:
-        bill = resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
+        bill = override_map.get(a.athlete_number) or resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
         bill_missing = None if bill else diagnose_missing_bill(catalog, a.type, a.step, a.segment, a.sessions)
         athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
@@ -523,9 +528,9 @@ async def get_athlete_detail(
     )
     has_account = result.scalar_one_or_none() is not None
 
-    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill, resolve_price
+    bill = await resolve_price(db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions, athlete_number=athlete_number)
     catalog = await load_branch_catalog(db, branch_id)
-    bill = resolve_price_from_catalog(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
     bill_missing = None if bill else diagnose_missing_bill(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
 
     return AthleteDetail(
@@ -672,6 +677,48 @@ async def reprovision_account(
     )
 
 
+class SetBillBody(BaseModel):
+    amount: float
+
+
+@router.post("/branches/{branch_id}/athletes/{athlete_number}/set-bill")
+async def set_athlete_bill(
+    branch_id: int,
+    athlete_number: int,
+    body: SetBillBody,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin manually sets a bill amount for an athlete (overrides catalog lookup)."""
+    enforce_branch_scope(admin, branch_id)
+    from app.models.bill_override import BillOverride
+
+    if body.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be positive")
+
+    result = await db.execute(
+        select(BillOverride).where(
+            BillOverride.branch_id == branch_id,
+            BillOverride.athlete_number == athlete_number,
+        )
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.amount = Decimal(str(body.amount))
+        existing.set_by_admin_id = admin.id
+    else:
+        db.add(BillOverride(
+            branch_id=branch_id,
+            athlete_number=athlete_number,
+            amount=Decimal(str(body.amount)),
+            set_by_admin_id=admin.id,
+        ))
+
+    await db.commit()
+    return {"message": "Bill set", "amount": body.amount}
+
+
 class MarkPaidBody(BaseModel):
     payment_method: str = "cash"  # "cash" | "card"
 
@@ -700,7 +747,8 @@ async def mark_athlete_paid(
 
         from app.services.price_resolver import resolve_price
         catalog_price = await resolve_price(
-            db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions
+            db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+            athlete_number=athlete_number,
         )
 
         if catalog_price is None:

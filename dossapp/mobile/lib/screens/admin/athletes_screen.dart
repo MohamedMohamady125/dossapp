@@ -275,6 +275,54 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
     if (mounted) setState(() => _markingPaid = false);
   }
 
+  Future<void> _showSetBillDialog() async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Set Bill Amount', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Amount (EGP)',
+            prefixIcon: Icon(Icons.payments_outlined, size: 20),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final val = double.tryParse(controller.text.trim());
+              if (val != null && val > 0) {
+                Navigator.pop(ctx, val);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (amount != null && mounted) {
+      try {
+        await ApiService.setAthleteBill(widget.athlete.branchId, widget.athlete.athleteNumber, amount);
+        if (mounted) {
+          Navigator.pop(context); // Close detail sheet
+          widget.onProvision(); // Reload list
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Bill set to ${amount.toStringAsFixed(0)} EGP')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final athlete = widget.athlete;
@@ -513,32 +561,46 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                     )
-                  : Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.warningLight,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Cannot calculate bill', style: TextStyle(color: AppColors.warningDark, fontSize: 14, fontWeight: FontWeight.w700)),
-                                const SizedBox(height: 2),
-                                Text(
-                                  athlete.billMissing ?? 'No price set for this athlete',
-                                  style: const TextStyle(color: AppColors.warning, fontSize: 12, fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
+                  : Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.warningLight,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
                           ),
-                        ],
-                      ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Cannot calculate bill', style: TextStyle(color: AppColors.warningDark, fontSize: 14, fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      athlete.billMissing ?? 'No price set for this athlete',
+                                      style: const TextStyle(color: AppColors.warning, fontSize: 12, fontWeight: FontWeight.w500),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => _showSetBillDialog(),
+                          icon: const Icon(Icons.edit_rounded, size: 18),
+                          label: const Text('Set Bill Amount'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ],
                     ),
         ),
 
