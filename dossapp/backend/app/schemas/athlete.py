@@ -50,6 +50,9 @@ class BillResponse(BaseModel):
     # Store-acceptance framing: show branch, coach, class time
     branch_name: Optional[str] = None
     schedule: list[ScheduleSlot] = []
+    # Previous month context
+    prev_period: Optional[str] = None
+    prev_paid: bool = False
 
 
 class ProvisionRequest(BaseModel):

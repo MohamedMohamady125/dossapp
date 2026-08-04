@@ -102,7 +102,7 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     if not athlete:
         return BillResponse(period=period, no_enrollment=True, branch_name=roster.branch_name)
 
-    # Check if already paid
+    # Check if already paid (DB payment OR Excel pay column)
     result = await db.execute(
         select(Payment).where(
             Payment.branch_id == account.branch_id,
@@ -120,9 +120,13 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         )
         receipt_number = receipt_result.scalar_one_or_none()
 
+    # Also check Excel pay column — athlete is paid if EITHER DB or Excel says so
+    excel_paid = bool(athlete.pay and athlete.receipt_no)
+    is_paid = payment is not None or excel_paid
+
     # Auto-suspend if payment window closed and athlete hasn't paid
     # But skip if admin approved a reinstatement this month (don't re-suspend)
-    if not payment and not _is_in_payment_window() and account.status == "active":
+    if not is_paid and not _is_in_payment_window() and account.status == "active":
         from app.models.reinstatement_request import ReinstatementRequest
         month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         reinstatement = await db.execute(
@@ -137,6 +141,22 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
             db.add(account)
             await db.flush()
 
+    # Previous month payment status
+    now = datetime.now()
+    if now.month == 1:
+        prev_period = f"{now.year - 1}-12"
+    else:
+        prev_period = f"{now.year}-{now.month - 1:02d}"
+    prev_result = await db.execute(
+        select(Payment).where(
+            Payment.branch_id == account.branch_id,
+            Payment.athlete_number == account.athlete_number,
+            Payment.period == prev_period,
+            Payment.status == "paid",
+        )
+    )
+    prev_paid = prev_result.scalars().first() is not None
+
     # Primary: price catalog lookup based on athlete's type/step/segment
     from app.services.price_resolver import resolve_price
     catalog_price = await resolve_price(
@@ -148,14 +168,16 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     return BillResponse(
         period=period,
         amount_owed=amount_owed,
-        is_paid=payment is not None,
-        receipt_number=receipt_number,
+        is_paid=is_paid,
+        receipt_number=receipt_number or (athlete.receipt_no if excel_paid else None),
         is_suspended=account.status == "suspended",
         branch_name=roster.branch_name,
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
             for s in athlete.schedule
         ],
+        prev_period=prev_period,
+        prev_paid=prev_paid,
     )
 
 

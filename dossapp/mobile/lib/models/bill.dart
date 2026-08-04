@@ -9,6 +9,8 @@ class Bill {
   final bool isSuspended;
   final String? branchName;
   final List<ScheduleSlot> schedule;
+  final String? prevPeriod;
+  final bool prevPaid;
 
   Bill({
     required this.period,
@@ -19,6 +21,8 @@ class Bill {
     this.isSuspended = false,
     this.branchName,
     this.schedule = const [],
+    this.prevPeriod,
+    this.prevPaid = false,
   });
 
   factory Bill.fromJson(Map<String, dynamic> json) {
@@ -34,6 +38,8 @@ class Bill {
               ?.map((s) => ScheduleSlot.fromJson(s))
               .toList() ??
           [],
+      prevPeriod: json['prev_period'],
+      prevPaid: json['prev_paid'] ?? false,
     );
   }
 }

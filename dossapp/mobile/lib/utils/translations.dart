@@ -109,6 +109,7 @@ class S {
   String get myBill => _t('My Bill', 'فاتورتي');
   String get amountDue => _t('Amount Due', 'المبلغ المستحق');
   String get paid => _t('PAID', 'مدفوعة');
+  String get unpaid => _t('Unpaid', 'غير مدفوعة');
   String get serviceDetails => _t('Service Details', 'تفاصيل الخدمة');
   String get swimmingLessonsAt => _t('In-person swimming lessons at', 'دروس سباحة حضورية في');
   String get billPending => _t('Bill Pending', 'الفاتورة قيد المعالجة');

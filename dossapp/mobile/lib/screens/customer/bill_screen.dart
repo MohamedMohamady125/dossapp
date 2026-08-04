@@ -156,21 +156,27 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             AnimatedListItem(index: 0, child: _buildAmountCard(bill)),
             const SizedBox(height: 16),
 
+            // ── Previous Month Status ──
+            if (bill.prevPeriod != null)
+              AnimatedListItem(index: 1, child: _buildPrevMonthCard(bill)),
+            if (bill.prevPeriod != null)
+              const SizedBox(height: 16),
+
             // ── Service Details ──
             if (bill.branchName != null || bill.schedule.isNotEmpty)
-              AnimatedListItem(index: 1, child: _buildServiceCard(bill)),
+              AnimatedListItem(index: 2, child: _buildServiceCard(bill)),
 
             const SizedBox(height: 16),
 
             // ── Payment Action / Status ──
             if (bill.isSuspended)
-              AnimatedListItem(index: 2, child: _buildSuspendedCard())
+              AnimatedListItem(index: 3, child: _buildSuspendedCard())
             else if (bill.isPaid)
-              AnimatedListItem(index: 2, child: _buildPaidCard(bill))
+              AnimatedListItem(index: 3, child: _buildPaidCard(bill))
             else if (bill.amountOwed != null)
-              AnimatedListItem(index: 2, child: _buildPayButton(bill))
+              AnimatedListItem(index: 3, child: _buildPayButton(bill))
             else
-              AnimatedListItem(index: 2, child: _buildPendingCard()),
+              AnimatedListItem(index: 3, child: _buildPendingCard()),
 
             const SizedBox(height: 24),
           ])),
@@ -283,6 +289,42 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrevMonthCard(Bill bill) {
+    final s = S.of(context);
+    final paid = bill.prevPaid;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: paid ? AppColors.success.withValues(alpha: 0.08) : AppColors.warning.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: paid ? AppColors.success.withValues(alpha: 0.25) : AppColors.warning.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            paid ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+            size: 20,
+            color: paid ? AppColors.success : AppColors.warning,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${formatPeriod(bill.prevPeriod!)}: ${paid ? s.paid : s.unpaid}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: paid ? AppColors.success : AppColors.warning,
+              ),
+            ),
+          ),
         ],
       ),
     );
