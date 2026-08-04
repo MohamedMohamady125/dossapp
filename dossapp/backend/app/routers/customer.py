@@ -121,10 +121,21 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         receipt_number = receipt_result.scalar_one_or_none()
 
     # Auto-suspend if payment window closed and athlete hasn't paid
+    # But skip if admin approved a reinstatement this month (don't re-suspend)
     if not payment and not _is_in_payment_window() and account.status == "active":
-        account.status = "suspended"
-        db.add(account)
-        await db.flush()
+        from app.models.reinstatement_request import ReinstatementRequest
+        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        reinstatement = await db.execute(
+            select(ReinstatementRequest).where(
+                ReinstatementRequest.account_id == account.id,
+                ReinstatementRequest.status == "approved",
+                ReinstatementRequest.reviewed_at >= month_start,
+            )
+        )
+        if not reinstatement.scalar_one_or_none():
+            account.status = "suspended"
+            db.add(account)
+            await db.flush()
 
     # Primary: price catalog lookup based on athlete's type/step/segment
     from app.services.price_resolver import resolve_price
