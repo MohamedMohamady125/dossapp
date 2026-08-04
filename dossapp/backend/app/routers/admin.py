@@ -941,10 +941,16 @@ async def list_payments(
     enforce_branch_scope(admin, branch_id)
 
     source = _get_roster_source()
+    roster = await source.get_branch_roster(branch_id)
 
-    query = select(Payment).where(Payment.branch_id == branch_id)
-    if period:
-        query = query.where(Payment.period == period)
+    # Default to current billing period (from roster or calendar)
+    if not period:
+        period = (roster.period if roster and roster.period else None) or current_billing_period()
+
+    query = select(Payment).where(
+        Payment.branch_id == branch_id,
+        Payment.period == period,
+    )
     if status:
         query = query.where(Payment.status == status)
     query = query.order_by(Payment.created_at.desc())
@@ -953,7 +959,6 @@ async def list_payments(
     payments = result.scalars().all()
 
     # Look up athlete names from roster cache
-    roster = await source.get_branch_roster(branch_id)
     athlete_map = {a.athlete_number: a for a in roster.athletes} if roster else {}
 
     # Batch-fetch receipts for all payments
@@ -965,17 +970,8 @@ async def list_payments(
         )
         receipt_map = {r.payment_id: r for r in receipt_result.scalars().all()}
 
-    # Build set of athletes currently paid in Excel (have BOTH pay and receipt_no)
-    paid_in_excel = set()
-    for a in (roster.athletes if roster else []):
-        if a.pay and a.receipt_no:
-            paid_in_excel.add(a.athlete_number)
-
     out = []
     for p in payments:
-        # Only show payments for athletes still marked as paid in Excel
-        if p.athlete_number not in paid_in_excel:
-            continue
 
         athlete = athlete_map.get(p.athlete_number)
         receipt = receipt_map.get(p.id)
