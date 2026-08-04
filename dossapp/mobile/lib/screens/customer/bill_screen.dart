@@ -87,7 +87,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
         );
       }
     }
-    setState(() => _paying = false);
+    if (mounted) setState(() => _paying = false);
   }
 
   @override
@@ -161,7 +161,9 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             const SizedBox(height: 16),
 
             // ── Payment Action / Status ──
-            if (bill.isPaid)
+            if (bill.isSuspended)
+              AnimatedListItem(index: 2, child: _buildSuspendedCard())
+            else if (bill.isPaid)
               AnimatedListItem(index: 2, child: _buildPaidCard(bill))
             else if (bill.amountOwed != null)
               AnimatedListItem(index: 2, child: _buildPayButton(bill))
@@ -449,6 +451,47 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSuspendedCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.warning.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.schedule_rounded, size: 36, color: AppColors.warning),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Enrollment Window Closed',
+            style: GoogleFonts.barlowCondensed(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'The payment window for this period has closed.\n'
+            'Go to the Home tab to check if a spot is\n'
+            'still available in your class.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+          ),
+        ],
       ),
     );
   }

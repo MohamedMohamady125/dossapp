@@ -1356,8 +1356,8 @@ async def approve_reinstatement(
         from app.services.push_service import send_push_to_account
         await send_push_to_account(
             db, account.id, "reinstatement_approved",
-            "Reinstatement Approved",
-            "Your reinstatement request has been approved! You can now use the app normally.",
+            "Spot Confirmed",
+            "A spot has been confirmed for you! You can now complete your payment and resume training.",
             data={"screen": "home"},
         )
 
@@ -1383,7 +1383,7 @@ async def decline_reinstatement(
         raise HTTPException(status_code=400, detail=f"Request already {req.status}")
 
     req.status = "declined"
-    req.admin_note = body.admin_note or "Your spot has been taken because you didn't show up and didn't pay."
+    req.admin_note = body.admin_note or "Unfortunately, all spots in your class have been filled for this period. The system was unable to hold your spot as the enrollment window has passed."
     req.reviewed_by = admin.id
     req.reviewed_at = datetime.now()
     db.add(req)
@@ -1396,7 +1396,7 @@ async def decline_reinstatement(
         from app.services.push_service import send_push_to_account
         await send_push_to_account(
             db, account.id, "reinstatement_declined",
-            "Reinstatement Declined",
+            "No Spots Available",
             req.admin_note,
             data={"screen": "home"},
         )

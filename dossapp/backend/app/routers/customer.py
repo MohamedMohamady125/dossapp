@@ -74,6 +74,12 @@ async def get_profile(account: Account = Depends(get_current_customer_allow_susp
     )
 
 
+def _is_in_payment_window() -> bool:
+    """Payment window: 25th of previous month through 1st of current month (inclusive)."""
+    today = datetime.now()
+    return today.day >= 25 or today.day <= 1
+
+
 @router.get("/bill", response_model=BillResponse)
 async def get_bill(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     source = _get_roster_source()
@@ -104,6 +110,12 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
             select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
         )
         receipt_number = receipt_result.scalar_one_or_none()
+
+    # Auto-suspend if payment window closed and athlete hasn't paid
+    if not payment and not _is_in_payment_window() and account.status == "active":
+        account.status = "suspended"
+        db.add(account)
+        await db.flush()
 
     # Primary: price catalog lookup based on athlete's type/step/segment
     from app.services.price_resolver import resolve_price

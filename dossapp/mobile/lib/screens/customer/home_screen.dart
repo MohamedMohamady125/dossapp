@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
+import '../../models/reinstatement.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
@@ -106,8 +107,10 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   AthleteProfile? _profile;
   Bill? _bill;
+  ReinstatementStatus? _reinstatement;
   bool _loading = true;
   String? _error;
+  bool _submittingReinstatement = false;
 
   @override
   void initState() {
@@ -124,10 +127,28 @@ class _HomeTabState extends State<_HomeTab> {
       ]);
       _profile = results[0] as AthleteProfile;
       _bill = results[1] as Bill;
+
+      // Fetch reinstatement status if suspended
+      if (_profile!.accountStatus == 'suspended') {
+        _reinstatement = await ApiService.getReinstatementStatus();
+      }
     } catch (e) {
       _error = e.toString();
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _submitReinstatement() async {
+    setState(() => _submittingReinstatement = true);
+    try {
+      await ApiService.requestReinstatement();
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+    if (mounted) setState(() => _submittingReinstatement = false);
   }
 
   @override
@@ -175,6 +196,11 @@ class _HomeTabState extends State<_HomeTab> {
   Widget _buildContent() {
     final p = _profile!;
     final b = _bill;
+
+    // ── Suspended state ──
+    if (p.accountStatus == 'suspended') {
+      return _buildSuspendedContent(p);
+    }
 
     return CustomScrollView(
       slivers: [
@@ -297,6 +323,239 @@ class _HomeTabState extends State<_HomeTab> {
           ])),
         ),
       ],
+    );
+  }
+
+  // ── SUSPENDED CONTENT ──
+  Widget _buildSuspendedContent(AthleteProfile p) {
+    final r = _reinstatement;
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          expandedHeight: 200,
+          pinned: true,
+          flexibleSpace: FlexibleSpaceBar(
+            background: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 56, height: 56,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: const Center(child: Icon(Icons.schedule_rounded, size: 28, color: Colors.white)),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Enrollment Paused',
+                                style: GoogleFonts.barlowCondensed(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(p.name, style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                            ],
+                          )),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+              onPressed: () { _load(); widget.onRefresh(); },
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Colors.white70),
+              onPressed: () => context.read<AuthProvider>().logout(),
+            ),
+          ],
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(delegate: SliverChildListDelegate([
+
+            // ── Suspension reason ──
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded, size: 40, color: AppColors.error),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Enrollment Window Closed',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'The enrollment period for this month has ended. '
+                    'Spots are limited and are assigned to confirmed members who completed their payment on time.\n\n'
+                    'If you\'d like to check for available spots, you can submit a request below.',
+                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── Reinstatement status / action ──
+            if (r == null || r.isNone) ...[
+              // No request yet — show button
+              _reinstatementActionCard(),
+            ] else if (r.isPending) ...[
+              _reinstatementStatusCard(
+                icon: Icons.hourglass_top_rounded,
+                iconColor: AppColors.warning,
+                bgColor: AppColors.warningLight,
+                borderColor: AppColors.warning.withValues(alpha: 0.3),
+                title: 'Checking Availability',
+                subtitle: 'Your request has been submitted. The system is checking for available spots in your class. You\'ll be notified once confirmed.',
+              ),
+            ] else if (r.isDeclined) ...[
+              _reinstatementStatusCard(
+                icon: Icons.event_busy_rounded,
+                iconColor: AppColors.error,
+                bgColor: AppColors.error.withValues(alpha: 0.06),
+                borderColor: AppColors.error.withValues(alpha: 0.2),
+                title: 'No Spots Available',
+                subtitle: r.adminNote ?? 'Unfortunately, all spots in your class have been filled for this period. The system was unable to hold your spot as the enrollment window has passed.',
+              ),
+              const SizedBox(height: 12),
+              // Allow resubmission after decline
+              _reinstatementActionCard(),
+            ],
+
+            const SizedBox(height: 24),
+          ])),
+        ),
+      ],
+    );
+  }
+
+  Widget _reinstatementActionCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.event_available_rounded, size: 36, color: AppColors.primary),
+          const SizedBox(height: 12),
+          const Text(
+            'Check Spot Availability',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Submit a request to check if a spot is still available in your class. '
+            'You\'ll be notified once the system confirms availability.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _submittingReinstatement ? null : _submitReinstatement,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _submittingReinstatement
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                  : const Text('Request Available Spot', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reinstatementStatusCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    required Color borderColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 32, color: iconColor),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 
