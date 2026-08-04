@@ -4,14 +4,18 @@ import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
+import '../settings_screen.dart';
 import 'athletes_screen.dart';
 import 'payments_screen.dart';
 import 'analytics_screen.dart';
 import 'excel_health_screen.dart';
 import 'branch_management_screen.dart';
 import 'price_catalog_screen.dart';
+import 'reinstatement_screen.dart';
+import 'branch_admins_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -26,11 +30,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   List<Map<String, dynamic>>? _branches;
   bool _loadingBranches = true;
   int _refreshKey = 0;
+  int _pendingReinstatements = 0;
 
   @override
   void initState() {
     super.initState();
     _loadBranches();
+    _loadPendingCount();
   }
 
   Future<void> _loadBranches() async {
@@ -51,14 +57,23 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     }
   }
 
+  Future<void> _loadPendingCount() async {
+    try {
+      final requests = await ApiService.getReinstatementRequests(statusFilter: 'pending');
+      if (mounted) setState(() => _pendingReinstatements = requests.length);
+    } catch (_) {}
+  }
+
   void _refreshAll() {
     setState(() => _refreshKey++);
     _loadBranches();
+    _loadPendingCount();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final s = S.of(context);
     final maxIndex = auth.isAdmin ? 5 : 3;
     if (_currentIndex > maxIndex) _currentIndex = 0;
 
@@ -67,9 +82,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [
-              const SkeletonHero(),
-              const SkeletonList(count: 3, padding: EdgeInsets.symmetric(horizontal: 16)),
+            children: const [
+              SkeletonHero(),
+              SkeletonList(count: 3, padding: EdgeInsets.symmetric(horizontal: 16)),
             ],
           ),
         ),
@@ -79,13 +94,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     // Find selected branch name
     final selectedBranch = _branches?.firstWhere(
       (b) => b['id'] == _selectedBranchId,
-      orElse: () => {'name': 'Select Branch', 'athlete_count': 0},
+      orElse: () => {'name': s.branch, 'athlete_count': 0},
     );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Aqua Athletic',
+          s.appName,
           style: GoogleFonts.barlowCondensed(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -95,14 +110,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
         actions: [
           IconButton(
+            icon: _pendingReinstatements > 0
+                ? Badge(label: Text('$_pendingReinstatements'), child: const Icon(Icons.person_add_alt_1_rounded, size: 22))
+                : const Icon(Icons.person_add_alt_1_rounded, size: 22),
+            tooltip: s.reinstatementRequests,
+            onPressed: () async {
+              await Navigator.push(context, MaterialPageRoute(builder: (_) => const ReinstatementScreen()));
+              _loadPendingCount();
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
-            tooltip: 'Refresh',
+            tooltip: s.refresh,
             onPressed: _refreshAll,
           ),
           if (auth.isAdmin && _branches != null && _branches!.isNotEmpty)
             PopupMenuButton<int>(
               icon: const Icon(Icons.swap_horiz_rounded, size: 22),
-              tooltip: 'Switch Branch',
+              tooltip: s.branches,
               position: PopupMenuPosition.under,
               onSelected: (id) => setState(() { _selectedBranchId = id; _refreshKey++; }),
               itemBuilder: (ctx) => _branches!.map((b) => PopupMenuItem(
@@ -120,9 +145,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 ),
               )).toList(),
             ),
+          if (auth.isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings_outlined, size: 22),
+              tooltip: s.branchAdmins,
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BranchAdminsScreen())),
+            ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded, size: 22),
-            onPressed: () => auth.logout(),
+            icon: const Icon(Icons.settings_outlined, size: 22),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
         bottom: selectedBranch != null ? PreferredSize(
@@ -147,7 +178,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${selectedBranch['name']} \u2022 ${formatNumber(selectedBranch['athlete_count'])} athletes',
+                  '${selectedBranch['name']} \u2022 ${formatNumber(selectedBranch['athlete_count'])} ${s.athletes.toLowerCase()}',
                   style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
               ],
@@ -156,7 +187,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ) : null,
       ),
       body: (_selectedBranchId == null && _currentIndex < 4)
-          ? const Center(child: Text('No branches available'))
+          ? Center(child: Text(s.noData))
           : _buildCurrentTab(auth),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
@@ -166,13 +197,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) => setState(() => _currentIndex = i),
           destinations: [
-            const NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Athletes'),
-            const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Payments'),
-            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights), label: 'Analytics'),
-            const NavigationDestination(icon: Icon(Icons.monitor_heart_outlined), selectedIcon: Icon(Icons.monitor_heart), label: 'Health'),
+            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people), label: s.athletes),
+            NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: s.payments),
+            NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: s.analytics),
+            NavigationDestination(icon: const Icon(Icons.monitor_heart_outlined), selectedIcon: const Icon(Icons.monitor_heart), label: s.health),
             if (auth.isAdmin) ...[
-              const NavigationDestination(icon: Icon(Icons.sell_outlined), selectedIcon: Icon(Icons.sell), label: 'Pricing'),
-              const NavigationDestination(icon: Icon(Icons.account_tree_outlined), selectedIcon: Icon(Icons.account_tree), label: 'Branches'),
+              NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: s.pricing),
+              NavigationDestination(icon: const Icon(Icons.account_tree_outlined), selectedIcon: const Icon(Icons.account_tree), label: s.branches),
             ],
           ],
         ),

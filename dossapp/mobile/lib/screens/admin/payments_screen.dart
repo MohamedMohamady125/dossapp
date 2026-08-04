@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
@@ -210,12 +213,51 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
+  Future<void> _downloadReceipt(int receiptId, String receiptNumber) async {
+    try {
+      final pdfBytes = await ApiService.adminDownloadReceiptPdf(receiptId);
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/receipt_$receiptNumber.pdf');
+      await file.writeAsBytes(pdfBytes);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to download: $e')));
+      }
+    }
+  }
+
   Widget _paymentCard(Map<String, dynamic> p) {
     final isPaid = p['status'] == 'paid';
     final name = p['athlete_name'] ?? 'Athlete #${p['athlete_number']}';
     final level = p['level'] ?? '';
     final type = p['athlete_type'] ?? '';
     final subtitle = [level, type].where((s) => s.isNotEmpty).join(' \u2022 ');
+    final coach = p['coach'] as String?;
+    final trainingTime = p['training_time'] as String?;
+    final channel = p['payment_channel'] as String?;
+    final receiptId = p['receipt_id'] as int?;
+    final receiptNumber = p['receipt_number'] as String?;
+
+    // Channel badge color
+    Color channelColor;
+    switch (channel) {
+      case 'Online':
+        channelColor = AppColors.secondary;
+        break;
+      case 'Cash':
+        channelColor = AppColors.success;
+        break;
+      case 'Card':
+        channelColor = const Color(0xFF7C3AED);
+        break;
+      default:
+        channelColor = AppColors.textMuted;
+    }
+
+    final hasScheduleInfo = coach != null || trainingTime != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -225,36 +267,65 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
+      child: Column(
         children: [
-          // Avatar
-          Container(
-            width: 42, height: 42,
-            decoration: BoxDecoration(
-              color: isPaid ? AppColors.successLight : AppColors.warningLight,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '#',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isPaid ? AppColors.success : AppColors.warning),
-            )),
-          ),
-          const SizedBox(width: 12),
-          // Name + details
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-              if (subtitle.isNotEmpty)
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            ],
-          )),
-          // Amount + status
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
+              // Avatar
+              Container(
+                width: 42, height: 42,
+                decoration: BoxDecoration(
+                  color: isPaid ? AppColors.successLight : AppColors.warningLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '#',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isPaid ? AppColors.success : AppColors.warning),
+                )),
+              ),
+              const SizedBox(width: 12),
+              // Name + details
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (subtitle.isNotEmpty)
+                    Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ],
+              )),
+              // Amount
               Text(formatMoney(p['amount_paid']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-              const SizedBox(height: 3),
+            ],
+          ),
+
+          // Coach + training time row
+          if (hasScheduleInfo) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 54), // align with name
+                if (coach != null) ...[
+                  Icon(Icons.person_outline, size: 14, color: AppColors.textMuted),
+                  const SizedBox(width: 4),
+                  Text(coach, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                ],
+                if (coach != null && trainingTime != null)
+                  const Text(' \u2022 ', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                if (trainingTime != null) ...[
+                  Icon(Icons.schedule, size: 14, color: AppColors.textMuted),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(trainingTime, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
+                ],
+              ],
+            ),
+          ],
+
+          // Status + channel badges + download
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const SizedBox(width: 54),
+              // Status badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -263,10 +334,42 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 ),
                 child: Text(
                   (p['status'] as String).toUpperCase(),
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                    color: isPaid ? AppColors.success : AppColors.warning),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: isPaid ? AppColors.success : AppColors.warning),
                 ),
               ),
+              // Channel badge
+              if (channel != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: channelColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    channel,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: channelColor),
+                  ),
+                ),
+              ],
+              // Receipt number
+              if (receiptNumber != null) ...[
+                const SizedBox(width: 6),
+                Text(receiptNumber, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              ],
+              const Spacer(),
+              // Download button
+              if (isPaid && receiptId != null)
+                SizedBox(
+                  width: 32, height: 32,
+                  child: IconButton(
+                    onPressed: () => _downloadReceipt(receiptId, receiptNumber ?? '$receiptId'),
+                    icon: const Icon(Icons.download_rounded, size: 18),
+                    color: AppColors.primary,
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Download Receipt',
+                  ),
+                ),
             ],
           ),
         ],

@@ -167,6 +167,27 @@ async def staff_change_password(
     return {"message": "Password changed successfully"}
 
 
+@router.post("/staff/update-password")
+async def staff_update_password(
+    req: Request,
+    user: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change staff password with old password verification (voluntary change)."""
+    body = await req.json()
+    old_password = body.get("old_password", "")
+    new_password = body.get("new_password", "")
+
+    if not verify_password(old_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+    user.password_hash = hash_password(new_password)
+    db.add(user)
+    return {"message": "Password changed successfully"}
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
     payload = decode_token(req.refresh_token)

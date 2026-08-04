@@ -384,6 +384,24 @@ async def list_missing_prices(
     return missing
 
 
+@router.post("/branches/{branch_id}/refresh")
+async def refresh_branch_data(
+    branch_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Force refresh roster data from Google Drive Excel."""
+    enforce_branch_scope(admin, branch_id)
+    source = _get_roster_source()
+    # Clear cached modified time to force re-download
+    source._last_modified.pop(branch_id, None)
+    refreshed = await source.refresh_branch(branch_id)
+    roster = await source.get_branch_roster(branch_id)
+    return {
+        "refreshed": refreshed,
+        "athlete_count": len(roster.athletes) if roster else 0,
+    }
+
+
 @router.get("/branches")
 async def list_branches(admin: AdminUser = Depends(get_current_admin)):
     source = _get_roster_source()
@@ -434,8 +452,6 @@ async def list_athletes(
 ):
     enforce_branch_scope(admin, branch_id)
     source = _get_roster_source()
-    # Always check for Excel changes before serving athletes
-    await source.refresh_branch(branch_id)
     roster = await source.get_branch_roster(branch_id)
     if not roster:
         raise HTTPException(status_code=404, detail="Branch not found")
@@ -874,9 +890,7 @@ async def list_payments(
 ):
     enforce_branch_scope(admin, branch_id)
 
-    # Refresh roster from Excel to get current pay/receipt status
     source = _get_roster_source()
-    await source.refresh_branch(branch_id)
 
     query = select(Payment).where(Payment.branch_id == branch_id)
     if period:
@@ -1250,6 +1264,167 @@ async def test_send_notification(
 
     await send_push_to_account(db, account.id, "test", payload.title, payload.body)
     return {"dry_run": False, "message": "Notification sent"}
+
+
+# ── Branch Admin Management (general admin only) ──
+
+
+class CreateBranchAdminBody(BaseModel):
+    email: str
+    branch_id: int
+
+
+class BranchAdminOut(BaseModel):
+    id: int
+    username: str
+    email: Optional[str]
+    branch_id: Optional[int]
+    branch_name: Optional[str] = None
+    is_active: bool
+    must_change_password: bool
+    last_login_at: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+@router.post("/admin/branch-admins")
+async def create_branch_admin(
+    body: CreateBranchAdminBody,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """General admin creates a branch admin. Returns username + temp password."""
+    _require_admin_role(admin)
+
+    # Validate email
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
+    # Check branch exists
+    branch_result = await db.execute(select(Branch).where(Branch.id == body.branch_id))
+    branch = branch_result.scalar_one_or_none()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    # Check email not already used
+    existing = await db.execute(select(AdminUser).where(AdminUser.email == email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="An admin with this email already exists")
+
+    # Generate username from email prefix + branch
+    email_prefix = email.split("@")[0].replace(".", "").replace("-", "").replace("_", "")[:12]
+    branch_prefix = branch.name[:3].lower().replace(" ", "")
+    username = f"{email_prefix}.{branch_prefix}"
+
+    # Ensure username is unique
+    dup = await db.execute(select(AdminUser).where(AdminUser.username == username))
+    if dup.scalar_one_or_none():
+        username = f"{email_prefix}.{branch_prefix}{branch.id}"
+
+    temp_password = generate_temp_password(10)
+
+    branch_admin = AdminUser(
+        username=username,
+        email=email,
+        password_hash=hash_password(temp_password),
+        role="assistant",
+        assigned_branch_id=body.branch_id,
+        must_change_password=True,
+        is_active=True,
+    )
+    db.add(branch_admin)
+    await db.commit()
+    await db.refresh(branch_admin)
+
+    return {
+        "id": branch_admin.id,
+        "username": username,
+        "temp_password": temp_password,
+        "email": email,
+        "branch_id": body.branch_id,
+        "branch_name": branch.display_name or branch.name,
+    }
+
+
+@router.get("/admin/branch-admins", response_model=list[BranchAdminOut])
+async def list_branch_admins(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all branch admins (assistants). General admin only."""
+    _require_admin_role(admin)
+
+    result = await db.execute(
+        select(AdminUser)
+        .where(AdminUser.role == "assistant")
+        .order_by(AdminUser.assigned_branch_id, AdminUser.username)
+    )
+    admins = result.scalars().all()
+
+    # Get branch names
+    branch_ids = {a.assigned_branch_id for a in admins if a.assigned_branch_id}
+    branch_names = {}
+    if branch_ids:
+        br_result = await db.execute(select(Branch).where(Branch.id.in_(branch_ids)))
+        branch_names = {b.id: b.display_name or b.name for b in br_result.scalars().all()}
+
+    return [
+        BranchAdminOut(
+            id=a.id,
+            username=a.username,
+            email=a.email,
+            branch_id=a.assigned_branch_id,
+            branch_name=branch_names.get(a.assigned_branch_id),
+            is_active=a.is_active,
+            must_change_password=a.must_change_password or False,
+            last_login_at=a.last_login_at.isoformat() if a.last_login_at else None,
+            created_at=a.created_at.isoformat() if a.created_at else None,
+        )
+        for a in admins
+    ]
+
+
+@router.put("/admin/branch-admins/{admin_id}/toggle-active")
+async def toggle_branch_admin_active(
+    admin_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate or deactivate a branch admin."""
+    _require_admin_role(admin)
+
+    result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id, AdminUser.role == "assistant"))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="Branch admin not found")
+
+    target.is_active = not target.is_active
+    db.add(target)
+    await db.commit()
+    return {"message": f"Branch admin {'activated' if target.is_active else 'deactivated'}", "is_active": target.is_active}
+
+
+@router.post("/admin/branch-admins/{admin_id}/reset-password")
+async def reset_branch_admin_password(
+    admin_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset a branch admin's password. Returns new temp password."""
+    _require_admin_role(admin)
+
+    result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id, AdminUser.role == "assistant"))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="Branch admin not found")
+
+    temp_password = generate_temp_password(10)
+    target.password_hash = hash_password(temp_password)
+    target.must_change_password = True
+    db.add(target)
+    await db.commit()
+
+    return {"username": target.username, "temp_password": temp_password}
 
 
 # ── Reinstatement Requests ──

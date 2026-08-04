@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
@@ -126,14 +127,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final hasUnread = _items.any((n) => n['is_read'] != true);
+    final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(s.notifications),
         actions: [
           if (hasUnread)
             TextButton(
               onPressed: _markAllRead,
-              child: const Text('Mark all read'),
+              child: Text(s.markAllRead),
             ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
@@ -153,10 +155,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       return ErrorState(message: _error!, onRetry: _load);
     }
     if (_items.isEmpty) {
+      final s = S.of(context);
       return EmptyState(
         icon: Icons.notifications_none_rounded,
-        title: 'No Notifications Yet',
-        subtitle: 'You will receive updates about schedules, payments, and more.',
+        title: s.noNotifications,
+        subtitle: s.noNotificationsMsg,
       );
     }
 

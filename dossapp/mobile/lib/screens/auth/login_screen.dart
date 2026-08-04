@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
+import '../../services/locale_provider.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../widgets/press_feedback.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -112,14 +114,51 @@ class _LoginScreenState extends State<LoginScreen>
             _codeController.text.trim(), _passwordController.text);
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showForgotPassword() {
+    final s = S.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.lock_reset, size: 22, color: AppColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(s.forgotPasswordTitle)),
+          ],
+        ),
+        content: Text(
+          s.forgotPasswordBody,
+          style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.ok),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
+    final locale = context.watch<LocaleProvider>();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
@@ -135,63 +174,93 @@ class _LoginScreenState extends State<LoginScreen>
                   gradient: AppColors.primaryGradient,
                 ),
                 child: SafeArea(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Stack(
                     children: [
-                      // Animated logo
-                      ScaleTransition(
-                        scale: _logoScale,
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.3),
-                              width: 2,
+                      // Language toggle top right
+                      Positioned(
+                        top: 4,
+                        right: 16,
+                        child: GestureDetector(
+                          onTap: () => locale.toggleLanguage(),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
+                            child: Text(
+                              locale.isArabic ? 'EN' : 'ع',
+                              style: GoogleFonts.barlow(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
                               ),
-                            ],
-                          ),
-                          child: const Icon(Icons.pool,
-                              size: 40, color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FadeTransition(
-                        opacity: _headerFade,
-                        child: SlideTransition(
-                          position: _headerSlide,
-                          child: Text(
-                            'Aqua Athletic',
-                            style: GoogleFonts.barlowCondensed(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.5,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      FadeTransition(
-                        opacity: _headerFade,
-                        child: SlideTransition(
-                          position: _headerSlide,
-                          child: Text(
-                            'Swimming Academy',
-                            style: GoogleFonts.barlow(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.white.withValues(alpha: 0.8),
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Animated logo
+                            ScaleTransition(
+                              scale: _logoScale,
+                              child: Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(22),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.2),
+                                      blurRadius: 24,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(Icons.pool,
+                                    size: 40, color: Colors.white),
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 16),
+                            FadeTransition(
+                              opacity: _headerFade,
+                              child: SlideTransition(
+                                position: _headerSlide,
+                                child: Text(
+                                  s.appName,
+                                  style: GoogleFonts.barlowCondensed(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            FadeTransition(
+                              opacity: _headerFade,
+                              child: SlideTransition(
+                                position: _headerSlide,
+                                child: Text(
+                                  s.swimmingAcademy,
+                                  style: GoogleFonts.barlow(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -225,9 +294,9 @@ class _LoginScreenState extends State<LoginScreen>
                             padding: const EdgeInsets.all(4),
                             child: Row(
                               children: [
-                                _tabButton('Parent / Athlete', !_isAdmin,
+                                _tabButton(s.parentAthlete, !_isAdmin,
                                     () => setState(() => _isAdmin = false)),
-                                _tabButton('Staff', _isAdmin,
+                                _tabButton(s.staff, _isAdmin,
                                     () => setState(() => _isAdmin = true)),
                               ],
                             ),
@@ -245,12 +314,12 @@ class _LoginScreenState extends State<LoginScreen>
                             controller: _codeController,
                             decoration: InputDecoration(
                               labelText:
-                                  _isAdmin ? 'Username' : 'Login Code',
+                                  _isAdmin ? s.username : s.loginCode,
                               prefixIcon: const Icon(Icons.person_outline,
                                   size: 20),
                             ),
                             validator: (v) => v == null || v.trim().isEmpty
-                                ? 'Required'
+                                ? s.required
                                 : null,
                           ),
                         ),
@@ -266,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen>
                             controller: _passwordController,
                             obscureText: _obscure,
                             decoration: InputDecoration(
-                              labelText: 'Password',
+                              labelText: s.password,
                               prefixIcon:
                                   const Icon(Icons.lock_outline, size: 20),
                               suffixIcon: IconButton(
@@ -280,8 +349,32 @@ class _LoginScreenState extends State<LoginScreen>
                               ),
                             ),
                             validator: (v) =>
-                                v == null || v.isEmpty ? 'Required' : null,
+                                v == null || v.isEmpty ? s.required : null,
                             onFieldSubmitted: (_) => _login(),
+                          ),
+                        ),
+                      ),
+
+                      // Forgot password link
+                      FadeTransition(
+                        opacity: _field2Fade,
+                        child: Align(
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: TextButton(
+                            onPressed: _showForgotPassword,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              s.forgotPassword,
+                              style: GoogleFonts.barlow(
+                                fontSize: 13,
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -309,7 +402,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 },
                                 child: Padding(
                                   key: ValueKey(_error),
-                                  padding: const EdgeInsets.only(top: 12),
+                                  padding: const EdgeInsets.only(top: 8),
                                   child: Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
@@ -342,7 +435,7 @@ class _LoginScreenState extends State<LoginScreen>
                             : const SizedBox.shrink(),
                       ),
 
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
 
                       // Login button with gradient + press feedback
                       FadeTransition(
@@ -387,7 +480,7 @@ class _LoginScreenState extends State<LoginScreen>
                                         ),
                                       )
                                     : Text(
-                                        'Log In',
+                                        s.login,
                                         style: GoogleFonts.barlow(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,

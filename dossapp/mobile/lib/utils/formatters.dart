@@ -10,9 +10,9 @@ String formatNumber(dynamic value) {
     n = num.tryParse(value.toString().replaceAll(',', '')) ?? 0;
   }
   if (n == n.toInt()) {
-    return NumberFormat('#,###').format(n.toInt());
+    return NumberFormat('#,##0').format(n.toInt());
   }
-  return NumberFormat('#,###.##').format(n);
+  return NumberFormat('#,##0.##').format(n);
 }
 
 /// Format money: 1012405.0 → "1,012,405 EGP"

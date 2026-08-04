@@ -7,6 +7,7 @@ import '../utils/constants.dart';
 import '../models/athlete.dart';
 import '../models/bill.dart';
 import '../models/receipt.dart';
+import '../models/reinstatement.dart';
 
 class ApiService {
   static const _storage = FlutterSecureStorage();
@@ -137,10 +138,14 @@ class ApiService {
   }
 
   static Future<void> _saveTokens(Map<String, dynamic> data) async {
-    _accessToken = data['access_token'];
-    _refreshToken = data['refresh_token'];
-    await _storage.write(key: 'access_token', value: _accessToken!);
-    await _storage.write(key: 'refresh_token', value: _refreshToken!);
+    _accessToken = data['access_token'] as String?;
+    _refreshToken = data['refresh_token'] as String?;
+    if (_accessToken != null) {
+      await _storage.write(key: 'access_token', value: _accessToken!);
+    }
+    if (_refreshToken != null) {
+      await _storage.write(key: 'refresh_token', value: _refreshToken!);
+    }
   }
 
   static Future<void> logout() async {
@@ -165,11 +170,11 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> customerLogin(String code, String password) async {
-    final resp = await http.post(
+    final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/customer/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'login_code': code, 'password': password}),
-    );
+    ));
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Login failed'));
     }
@@ -188,11 +193,11 @@ class ApiService {
   // ── Admin Auth ──
 
   static Future<Map<String, dynamic>> adminLogin(String username, String password) async {
-    final resp = await http.post(
+    final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/admin/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'username': username, 'password': password}),
-    );
+    ));
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Login failed'));
     }
@@ -205,6 +210,29 @@ class ApiService {
     final resp = await _post('/auth/staff/change-password', {'new_password': newPassword});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Failed'));
+    }
+  }
+
+  // ── Profile Updates ──
+
+  static Future<void> updateEmail(String email) async {
+    final resp = await _put('/me/email', {'email': email});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to update email'));
+    }
+  }
+
+  static Future<void> updatePassword(String oldPassword, String newPassword) async {
+    final resp = await _put('/me/password', {'old_password': oldPassword, 'new_password': newPassword});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to change password'));
+    }
+  }
+
+  static Future<void> staffUpdatePassword(String oldPassword, String newPassword) async {
+    final resp = await _post('/auth/staff/update-password', {'old_password': oldPassword, 'new_password': newPassword});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to change password'));
     }
   }
 
@@ -256,6 +284,30 @@ class ApiService {
     return '${AppConstants.baseUrl}/me/receipts/$receiptId/pdf';
   }
 
+  static Future<List<int>> downloadReceiptPdf(int receiptId) async {
+    final resp = await _safeRequest(() async => http.get(
+      Uri.parse('${AppConstants.baseUrl}/me/receipts/$receiptId/pdf'),
+      headers: await _headers(),
+    ));
+    if (resp.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) {
+        final retryResp = await _safeRequest(() async => http.get(
+          Uri.parse('${AppConstants.baseUrl}/me/receipts/$receiptId/pdf'),
+          headers: await _headers(),
+        ));
+        if (retryResp.statusCode != 200) {
+          throw ApiException(retryResp.statusCode, 'Failed to download PDF');
+        }
+        return retryResp.bodyBytes;
+      }
+    }
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, 'Failed to download PDF');
+    }
+    return resp.bodyBytes;
+  }
+
   // ── Notifications ──
 
   static Future<void> registerDevice(String token, String platform) async {
@@ -292,6 +344,21 @@ class ApiService {
   static Future<void> markAllNotificationsRead() async {
     final resp = await _post('/me/notifications/read-all', {});
     if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to mark all read');
+  }
+
+  // ── Reinstatement ──
+
+  static Future<ReinstatementStatus> getReinstatementStatus() async {
+    final resp = await _get('/me/reinstatement');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load reinstatement status');
+    return ReinstatementStatus.fromJson(jsonDecode(resp.body));
+  }
+
+  static Future<void> requestReinstatement({String? message}) async {
+    final resp = await _post('/me/reinstatement', {if (message != null) 'message': message});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to submit request'));
+    }
   }
 
   // ── Admin Endpoints ──
@@ -341,12 +408,19 @@ class ApiService {
     return jsonDecode(resp.body);
   }
 
-  static Future<Map<String, dynamic>> markAsPaid(int branchId, int athleteNumber) async {
-    final resp = await _post('/branches/$branchId/athletes/$athleteNumber/mark-paid', {});
+  static Future<Map<String, dynamic>> markAsPaid(int branchId, int athleteNumber, {String paymentMethod = 'cash'}) async {
+    final resp = await _post('/branches/$branchId/athletes/$athleteNumber/mark-paid', {'payment_method': paymentMethod});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Failed to mark as paid'));
     }
     return jsonDecode(resp.body);
+  }
+
+  static Future<void> refreshBranch(int branchId) async {
+    final resp = await _post('/branches/$branchId/refresh', {});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Refresh failed'));
+    }
   }
 
   static Future<List<Map<String, dynamic>>> getBranchPayments(
@@ -424,6 +498,93 @@ class ApiService {
     }
   }
 
+  // ── Admin Reinstatement ──
+
+  static Future<List<Map<String, dynamic>>> getReinstatementRequests({String? statusFilter}) async {
+    var path = '/admin/reinstatement-requests';
+    if (statusFilter != null) path += '?status_filter=$statusFilter';
+    final resp = await _get(path);
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load requests');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<void> approveReinstatement(int requestId) async {
+    final resp = await _post('/admin/reinstatement-requests/$requestId/approve', {});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to approve'));
+    }
+  }
+
+  static Future<void> declineReinstatement(int requestId, {String? adminNote}) async {
+    final resp = await _post('/admin/reinstatement-requests/$requestId/decline', {
+      if (adminNote != null) 'admin_note': adminNote,
+    });
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to decline'));
+    }
+  }
+
+  static Future<List<int>> adminDownloadReceiptPdf(int receiptId) async {
+    final resp = await _safeRequest(() async => http.get(
+      Uri.parse('${AppConstants.baseUrl}/admin/receipts/$receiptId/pdf'),
+      headers: await _headers(),
+    ));
+    if (resp.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) {
+        final retryResp = await _safeRequest(() async => http.get(
+          Uri.parse('${AppConstants.baseUrl}/admin/receipts/$receiptId/pdf'),
+          headers: await _headers(),
+        ));
+        if (retryResp.statusCode != 200) {
+          throw ApiException(retryResp.statusCode, 'Failed to download PDF');
+        }
+        return retryResp.bodyBytes;
+      }
+    }
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, 'Failed to download PDF');
+    }
+    return resp.bodyBytes;
+  }
+
+  // ── Branch Admin Management ──
+
+  static Future<Map<String, dynamic>> createBranchAdmin({
+    required String email,
+    required int branchId,
+  }) async {
+    final resp = await _post('/admin/branch-admins', {
+      'email': email,
+      'branch_id': branchId,
+    });
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to create branch admin'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<List<Map<String, dynamic>>> getBranchAdmins() async {
+    final resp = await _get('/admin/branch-admins');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load branch admins');
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  static Future<void> toggleBranchAdminActive(int adminId) async {
+    final resp = await _put('/admin/branch-admins/$adminId/toggle-active', {});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to update'));
+    }
+  }
+
+  static Future<Map<String, dynamic>> resetBranchAdminPassword(int adminId) async {
+    final resp = await _post('/admin/branch-admins/$adminId/reset-password', {});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to reset password'));
+    }
+    return jsonDecode(resp.body);
+  }
+
   // ── Price Catalog ──
 
   static Future<List<Map<String, dynamic>>> getMissingPrices() async {
@@ -487,6 +648,7 @@ class ApiException implements Exception {
   bool get isAuth => statusCode == 401 || statusCode == 403;
   bool get isServer => statusCode >= 500;
   bool get isNotFound => statusCode == 404;
+  bool get isSuspended => statusCode == 423;
 
   @override
   String toString() => message;

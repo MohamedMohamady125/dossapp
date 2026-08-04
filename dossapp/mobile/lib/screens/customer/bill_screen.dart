@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/bill.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
@@ -129,6 +130,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
     final bill = _bill!;
 
     if (bill.noEnrollment) {
+      final s = S.of(context);
       return CustomScrollView(
         slivers: [
           _buildHeader(bill),
@@ -136,8 +138,8 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             hasScrollBody: false,
             child: EmptyState(
               icon: Icons.info_outline_rounded,
-              title: 'No Active Enrollment',
-              subtitle: 'You are not enrolled for the current period.\nContact your branch for more information.',
+              title: s.noActiveEnrollment,
+              subtitle: s.noActiveEnrollmentMsg,
             ),
           ),
         ],
@@ -192,7 +194,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'My Bill',
+                    S.of(context).myBill,
                     style: GoogleFonts.barlowCondensed(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
@@ -239,7 +241,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
       child: Column(
         children: [
           Text(
-            'Amount Due',
+            S.of(context).amountDue,
             style: TextStyle(
               fontSize: 14,
               color: Colors.white.withValues(alpha: 0.8),
@@ -270,9 +272,9 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
                 color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
-                'PAID',
-                style: TextStyle(
+              child: Text(
+                S.of(context).paid,
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
@@ -312,13 +314,13 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Service Details',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary),
+                    Text(
+                      S.of(context).serviceDetails,
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary),
                     ),
                     if (bill.branchName != null)
                       Text(
-                        'In-person swimming lessons at ${bill.branchName}',
+                        '${S.of(context).swimmingLessonsAt} ${bill.branchName}',
                         style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                   ],
@@ -386,7 +388,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 12),
           Text(
-            'PAID',
+            S.of(context).paid,
             style: GoogleFonts.barlowCondensed(
               fontSize: 28,
               fontWeight: FontWeight.w700,
@@ -397,7 +399,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
           if (bill.receiptNumber != null) ...[
             const SizedBox(height: 6),
             Text(
-              'Receipt: ${bill.receiptNumber}',
+              S.of(context).receiptLabel(bill.receiptNumber!),
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.8),
                 fontSize: 14,
@@ -442,7 +444,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
               const Icon(Icons.payment_rounded, color: Colors.white, size: 24),
             const SizedBox(width: 12),
             Text(
-              _paying ? 'Processing...' : 'Pay ${formatMoney(bill.amountOwed)}',
+              _paying ? S.of(context).processing : S.of(context).payAmount(formatMoney(bill.amountOwed)),
               style: GoogleFonts.barlow(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -476,7 +478,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 12),
           Text(
-            'Enrollment Window Closed',
+            S.of(context).enrollmentWindowClosed,
             style: GoogleFonts.barlowCondensed(
               fontSize: 22,
               fontWeight: FontWeight.w700,
@@ -484,12 +486,10 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'The payment window for this period has closed.\n'
-            'Go to the Home tab to check if a spot is\n'
-            'still available in your class.',
+          Text(
+            S.of(context).enrollmentWindowClosedMsg,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -517,7 +517,7 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 12),
           Text(
-            'Bill Pending',
+            S.of(context).billPending,
             style: GoogleFonts.barlowCondensed(
               fontSize: 22,
               fontWeight: FontWeight.w700,
@@ -525,10 +525,10 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Your bill amount has not been set yet.\nYou will be notified when it is ready.',
+          Text(
+            S.of(context).billPendingMsg,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
           ),
         ],
       ),

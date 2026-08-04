@@ -23,6 +23,15 @@ from app.utils.phone import normalize_phone
 router = APIRouter(prefix="/me", tags=["customer"])
 
 
+class UpdateEmailBody(PydanticBaseModel):
+    email: str
+
+
+class ChangePasswordBody(PydanticBaseModel):
+    old_password: str
+    new_password: str
+
+
 def _get_roster_source():
     from app.main import roster_source
     return roster_source
@@ -266,6 +275,44 @@ async def resend_receipt(receipt_id: int, account: Account = Depends(get_current
         await enqueue_notification("whatsapp", receipt.phone, f"Receipt {receipt.receipt_number}: {receipt.amount_paid} EGP PAID", attachment=receipt.pdf_data, receipt_id=receipt.id)
 
     return {"message": "Receipt resend queued"}
+
+
+# ── Profile Updates ──
+
+
+@router.put("/email")
+async def update_email(
+    body: UpdateEmailBody,
+    account: Account = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db),
+):
+    import re
+    email = body.email.strip().lower()
+    if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+
+    account.email = email
+    db.add(account)
+    return {"message": "Email updated successfully"}
+
+
+@router.put("/password")
+async def update_password(
+    body: ChangePasswordBody,
+    account: Account = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.utils.auth import verify_password, hash_password
+
+    if not verify_password(body.old_password, account.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+
+    account.password_hash = hash_password(body.new_password)
+    db.add(account)
+    return {"message": "Password changed successfully"}
 
 
 # ── Reinstatement ──

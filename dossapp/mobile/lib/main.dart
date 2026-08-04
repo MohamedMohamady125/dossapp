@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_provider.dart';
+import 'services/locale_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/change_password_screen.dart';
@@ -22,8 +24,11 @@ Future<void> main() async {
 
   await NotificationService.init();
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthProvider()..init(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()..init()),
+      ],
       child: const AquaAthleticApp(),
     ),
   );
@@ -34,10 +39,22 @@ class AquaAthleticApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locale = context.watch<LocaleProvider>().locale;
+
     return MaterialApp(
       title: 'Aqua Athletic',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
+      locale: locale,
+      supportedLocales: const [
+        Locale('en'),
+        Locale('ar'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: Consumer<AuthProvider>(
         builder: (context, auth, _) {
           final Widget screen;

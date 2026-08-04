@@ -6,6 +6,7 @@ class Bill {
   final bool isPaid;
   final String? receiptNumber;
   final bool noEnrollment;
+  final bool isSuspended;
   final String? branchName;
   final List<ScheduleSlot> schedule;
 
@@ -15,6 +16,7 @@ class Bill {
     this.isPaid = false,
     this.receiptNumber,
     this.noEnrollment = false,
+    this.isSuspended = false,
     this.branchName,
     this.schedule = const [],
   });
@@ -26,6 +28,7 @@ class Bill {
       isPaid: json['is_paid'] ?? false,
       receiptNumber: json['receipt_number'],
       noEnrollment: json['no_enrollment'] ?? false,
+      isSuspended: json['is_suspended'] ?? false,
       branchName: json['branch_name'],
       schedule: (json['schedule'] as List?)
               ?.map((s) => ScheduleSlot.fromJson(s))

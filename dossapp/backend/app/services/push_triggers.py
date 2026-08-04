@@ -194,8 +194,11 @@ async def check_missed_sessions(roster: BranchRoster, db: AsyncSession) -> int:
             # Paid or >= 8 sessions — just notify, no suspension
             ok = await send_push_to_account(
                 db, account.id, "missed_sessions",
-                "We miss you!",
-                f"{athlete.name} has missed {streak} sessions. Are you okay?",
+                "We Noticed You've Been Away",
+                f"Hi! {athlete.name} has missed {streak} consecutive sessions. "
+                f"We hope everything is alright. Your spot is reserved and your "
+                f"coach is looking forward to seeing you back in the pool! "
+                f"If you need to adjust your schedule, please reach out to your branch.",
                 data={"screen": "schedule"},
                 dedupe_key=f"missed:{roster.branch_id}:{athlete.athlete_number}:{streak_start}",
             )

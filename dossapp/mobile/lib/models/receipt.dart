@@ -25,7 +25,7 @@ class Receipt {
 
   factory Receipt.fromJson(Map<String, dynamic> json) {
     return Receipt(
-      id: json['id'],
+      id: json['id'] ?? 0,
       receiptNumber: json['receipt_number'] ?? '',
       period: json['period'] ?? '',
       amountPaid: json['amount_paid'] ?? '',

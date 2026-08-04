@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
 import '../../models/reinstatement.dart';
 import '../../services/api_service.dart';
-import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/press_feedback.dart';
 import '../../widgets/empty_state.dart';
+import '../settings_screen.dart';
 import 'bill_screen.dart';
 import 'receipts_screen.dart';
 import 'notifications_screen.dart';
@@ -58,6 +58,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       body: _buildCurrentTab(),
       bottomNavigationBar: Container(
@@ -70,13 +71,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             if (i != 3) _loadUnread();
           },
           destinations: [
-            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-            const NavigationDestination(icon: Icon(Icons.payment_outlined), selectedIcon: Icon(Icons.payment), label: 'Pay'),
-            const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Receipts'),
+            NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: s.home),
+            NavigationDestination(icon: const Icon(Icons.payment_outlined), selectedIcon: const Icon(Icons.payment), label: s.pay),
+            NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), selectedIcon: const Icon(Icons.receipt_long), label: s.receipts),
             NavigationDestination(
               icon: _bellIcon(Icons.notifications_outlined),
               selectedIcon: _bellIcon(Icons.notifications),
-              label: 'Alerts',
+              label: s.alerts,
             ),
           ],
         ),
@@ -262,8 +263,8 @@ class _HomeTabState extends State<_HomeTab> {
               onPressed: () { _load(); widget.onRefresh(); },
             ),
             IconButton(
-              icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-              onPressed: () => context.read<AuthProvider>().logout(),
+              icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
           ],
         ),
@@ -392,8 +393,8 @@ class _HomeTabState extends State<_HomeTab> {
               onPressed: () { _load(); widget.onRefresh(); },
             ),
             IconButton(
-              icon: const Icon(Icons.logout_rounded, color: Colors.white70),
-              onPressed: () => context.read<AuthProvider>().logout(),
+              icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
           ],
         ),
@@ -750,11 +751,13 @@ class _HomeTabState extends State<_HomeTab> {
     final items = <_DetailItem>[];
     if (p.age != null) items.add(_DetailItem(Icons.cake_outlined, 'Age', '${p.age!.toStringAsFixed(1)} years'));
     if (p.dateOfBirth != null) items.add(_DetailItem(Icons.calendar_today_outlined, 'Date of Birth', p.dateOfBirth!));
-    if (p.gender != null) items.add(_DetailItem(
-      p.gender == 'M' ? Icons.male : Icons.female,
-      'Gender',
-      p.gender == 'M' ? 'Male' : p.gender == 'F' ? 'Female' : p.gender!,
-    ));
+    if (p.gender != null) {
+      items.add(_DetailItem(
+        p.gender == 'M' ? Icons.male : Icons.female,
+        'Gender',
+        p.gender == 'M' ? 'Male' : p.gender == 'F' ? 'Female' : p.gender!,
+      ));
+    }
     if (p.level != null) items.add(_DetailItem(Icons.stairs_outlined, 'Level', p.level!));
     if (p.type != null) items.add(_DetailItem(Icons.category_outlined, 'Type', p.type!));
     if (p.sessions != null) items.add(_DetailItem(Icons.repeat, 'Sessions', p.sessions!));

@@ -1,14 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/receipt.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/press_feedback.dart';
 import '../../widgets/empty_state.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
 class ReceiptsScreen extends StatefulWidget {
@@ -36,17 +38,23 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     } catch (e) {
       _error = e.toString();
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _downloadPdf(Receipt receipt) async {
-    final url = Uri.parse(ApiService.receiptPdfUrl(receipt.id));
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      final pdfBytes = await ApiService.downloadReceiptPdf(receipt.id);
+      if (!mounted) return;
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/receipt_${receipt.receiptNumber}.pdf');
+      await file.writeAsBytes(pdfBytes);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+      );
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open PDF')),
+          SnackBar(content: Text('Failed to download PDF: $e')),
         );
       }
     }
@@ -55,7 +63,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Receipts')),
+      appBar: AppBar(title: Text(S.of(context).receipts)),
       body: _buildBody(),
     );
   }
@@ -70,10 +78,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     }
 
     if (_receipts!.isEmpty) {
+      final s = S.of(context);
       return EmptyState(
         icon: Icons.receipt_long_rounded,
-        title: 'No Receipts Yet',
-        subtitle: 'Your payment receipts will appear here once you make a payment.',
+        title: s.noReceipts,
+        subtitle: s.noReceiptsMsg,
       );
     }
 

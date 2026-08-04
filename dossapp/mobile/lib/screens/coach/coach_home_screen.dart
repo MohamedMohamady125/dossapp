@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-import '../../services/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
+import '../settings_screen.dart';
 
 class CoachHomeScreen extends StatefulWidget {
   const CoachHomeScreen({super.key});
@@ -47,7 +47,6 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthProvider>();
     final coachName = _schedule?['coach_name'] as String?;
     final branchName = _schedule?['branch_name'] as String?;
     final sessions = (_schedule?['sessions'] as List?) ?? [];
@@ -59,7 +58,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'My Schedule',
+          S.of(context).mySchedule,
           style: GoogleFonts.barlowCondensed(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -70,12 +69,12 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
-            tooltip: 'Refresh',
+            tooltip: S.of(context).refresh,
             onPressed: _load,
           ),
           IconButton(
-            icon: const Icon(Icons.logout_rounded, size: 22),
-            onPressed: () => auth.logout(),
+            icon: const Icon(Icons.settings_outlined, size: 22),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
       ),

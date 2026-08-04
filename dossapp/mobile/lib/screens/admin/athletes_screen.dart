@@ -27,9 +27,12 @@ class _AthletesScreenState extends State<AthletesScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceRefresh = false}) async {
     setState(() { _loading = true; _error = null; });
     try {
+      if (forceRefresh) {
+        await ApiService.refreshBranch(widget.branchId);
+      }
       _athletes = await ApiService.getBranchAthletes(widget.branchId);
     } catch (e) {
       _error = e.toString();
@@ -89,7 +92,7 @@ class _AthletesScreenState extends State<AthletesScreen> {
         ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: _load,
+            onRefresh: () => _load(forceRefresh: true),
             child: list.isEmpty
                 ? ListView(
                     children: [

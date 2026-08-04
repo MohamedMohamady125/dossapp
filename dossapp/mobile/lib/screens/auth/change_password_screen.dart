@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
+import '../../utils/translations.dart';
 import '../../widgets/press_feedback.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -136,20 +137,20 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     }
   }
 
-  String get _strengthLabel {
+  String _strengthLabel(S s) {
     switch (_passwordStrength) {
       case 0:
         return '';
       case 1:
-        return 'Weak';
+        return s.weak;
       case 2:
-        return 'Fair';
+        return s.fair;
       case 3:
-        return 'Good';
+        return s.good;
       case 4:
-        return 'Strong';
+        return s.strong;
       case 5:
-        return 'Very Strong';
+        return s.veryStrong;
       default:
         return '';
     }
@@ -157,6 +158,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = S.of(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -182,7 +184,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Set New Password',
+                        s.changePassword,
                         style: GoogleFonts.barlowCondensed(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
@@ -239,7 +241,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                         child: SlideTransition(
                           position: _descSlide,
                           child: Text(
-                            'Please set a new password to continue.',
+                            s.createNewPassword,
                             textAlign: TextAlign.center,
                             style: GoogleFonts.barlow(
                               fontSize: 15,
@@ -263,7 +265,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                 obscureText: _obscurePassword,
                                 onChanged: (_) => setState(() {}),
                                 decoration: InputDecoration(
-                                  labelText: 'New Password',
+                                  labelText: s.newPassword,
                                   prefixIcon: const Icon(
                                       Icons.lock_outline,
                                       size: 20),
@@ -280,7 +282,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                 ),
                                 validator: (v) {
                                   if (v == null || v.length < 6) {
-                                    return 'At least 6 characters';
+                                    return s.passwordTooShort;
                                   }
                                   return null;
                                 },
@@ -305,7 +307,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                     ),
                                     const SizedBox(width: 10),
                                     Text(
-                                      _strengthLabel,
+                                      _strengthLabel(s),
                                       style: GoogleFonts.barlow(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -338,7 +340,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                             controller: _confirmController,
                             obscureText: _obscureConfirm,
                             decoration: InputDecoration(
-                              labelText: 'Confirm Password',
+                              labelText: s.confirmPassword,
                               prefixIcon: const Icon(
                                   Icons.lock_outline, size: 20),
                               suffixIcon: IconButton(
@@ -354,7 +356,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                             ),
                             validator: (v) {
                               if (v != _passwordController.text) {
-                                return 'Passwords do not match';
+                                return s.passwordsMustMatch;
                               }
                               return null;
                             },
@@ -463,7 +465,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                         ),
                                       )
                                     : Text(
-                                        'Set Password',
+                                        s.setPassword,
                                         style: GoogleFonts.barlow(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w600,
