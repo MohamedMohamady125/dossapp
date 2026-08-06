@@ -106,27 +106,36 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     if not athlete:
         return BillResponse(period=period, no_enrollment=True, branch_name=roster.branch_name)
 
-    # Check if already paid (DB payment OR Excel pay column)
-    result = await db.execute(
-        select(Payment).where(
-            Payment.branch_id == account.branch_id,
-            Payment.athlete_number == account.athlete_number,
-            Payment.period == period,
-            Payment.status == "paid",
-        )
-    )
-    payment = result.scalars().first()
+    # Source of truth: Excel Pay column (cash/card payments recorded by admin in Excel)
+    excel_paid = bool(athlete.pay)
+    try:
+        excel_amount = float(athlete.pay) if athlete.pay else 0
+        excel_paid = excel_amount > 0
+    except (ValueError, TypeError):
+        excel_paid = False
 
+    # Also check DB for online payments (EasyKash) not yet reflected in Excel
     receipt_number = None
-    if payment:
-        receipt_result = await db.execute(
-            select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
+    online_paid = False
+    if not excel_paid:
+        result = await db.execute(
+            select(Payment).where(
+                Payment.branch_id == account.branch_id,
+                Payment.athlete_number == account.athlete_number,
+                Payment.period == period,
+                Payment.status == "paid",
+                Payment.source == "easykash",
+            )
         )
-        receipt_number = receipt_result.scalar_one_or_none()
+        payment = result.scalars().first()
+        if payment:
+            online_paid = True
+            receipt_result = await db.execute(
+                select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
+            )
+            receipt_number = receipt_result.scalar_one_or_none()
 
-    # Also check Excel pay column — athlete is paid if EITHER DB or Excel says so
-    excel_paid = bool(athlete.pay and athlete.receipt_no)
-    is_paid = payment is not None or excel_paid
+    is_paid = excel_paid or online_paid
 
     # Auto-suspend if payment window closed and athlete hasn't paid
     # But skip if admin approved a reinstatement this month (don't re-suspend)
