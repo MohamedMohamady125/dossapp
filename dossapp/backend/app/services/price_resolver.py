@@ -186,8 +186,14 @@ def resolve_price_from_catalog(
         if (c, seg_lower, sess_lower) in catalog:
             return catalog[(c, seg_lower, sess_lower)]
         # Try without segment (e.g., no GEMS/Outsider distinction)
-        if seg_lower and (c, None, sess_lower) in catalog:
+        if (c, None, sess_lower) in catalog:
             return catalog[(c, None, sess_lower)]
+        # If segment is unknown, try "student" first (most common), then "outsider"
+        if seg_lower is None:
+            if (c, "student", sess_lower) in catalog:
+                return catalog[(c, "student", sess_lower)]
+            if (c, "outsider", sess_lower) in catalog:
+                return catalog[(c, "outsider", sess_lower)]
 
     return None
 
