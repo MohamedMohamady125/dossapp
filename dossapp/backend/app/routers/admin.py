@@ -1017,7 +1017,7 @@ async def list_payments(
             level=a.step,
             athlete_type=a.type,
             period=period,
-            source=db_p.source if db_p else ("excel" if is_paid else None),
+            source=db_p.source if db_p else ("excel" if is_paid else "pending"),
             amount_paid=str(excel_amount) if is_paid else "0",
             status="paid" if is_paid else "pending",
             paid_at=db_p.paid_at if db_p else None,
