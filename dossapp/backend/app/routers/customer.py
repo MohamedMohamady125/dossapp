@@ -252,7 +252,7 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
 
 
 @router.get("/receipts", response_model=list[ReceiptOut])
-async def list_receipts(account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+async def list_receipts(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Receipt)
         .join(Payment, Receipt.payment_id == Payment.id)
@@ -282,7 +282,7 @@ async def list_receipts(account: Account = Depends(get_current_customer), db: As
 
 
 @router.get("/receipts/{receipt_id}/pdf")
-async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Receipt)
         .join(Payment, Receipt.payment_id == Payment.id)
@@ -304,7 +304,7 @@ async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_c
 
 
 @router.post("/receipts/{receipt_id}/resend")
-async def resend_receipt(receipt_id: int, account: Account = Depends(get_current_customer), db: AsyncSession = Depends(get_db)):
+async def resend_receipt(receipt_id: int, account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Receipt)
         .join(Payment, Receipt.payment_id == Payment.id)
