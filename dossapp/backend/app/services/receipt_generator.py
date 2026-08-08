@@ -1,29 +1,53 @@
-"""Receipt PDF generation using xhtml2pdf (pure Python, no system deps)."""
+"""Receipt PDF generation using weasyprint with Arabic RTL template."""
 
 import io
 from datetime import datetime, timezone
+from pathlib import Path
 
-from xhtml2pdf import pisa
+from weasyprint import HTML
 
 
-_MONTHS = {
-    1: "January", 2: "February", 3: "March", 4: "April",
-    5: "May", 6: "June", 7: "July", 8: "August",
-    9: "September", 10: "October", 11: "November", 12: "December",
+_DIR = Path(__file__).parent
+
+# Load template once
+_TEMPLATE = (_DIR / "receipt_template.html").read_text(encoding="utf-8")
+
+# Load logo base64 once
+_LOGO_B64 = (_DIR / "logo.b64").read_text(encoding="utf-8").strip()
+
+_MONTHS_AR = {
+    1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
+    5: "مايو", 6: "يونيو", 7: "يوليو", 8: "أغسطس",
+    9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
 }
 
+_EASTERN_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")
 
-def _format_period(period: str) -> str:
-    """Convert '2026-08' to 'August 2026'."""
+
+def _to_eastern(s: str) -> str:
+    return s.translate(_EASTERN_DIGITS)
+
+
+def _format_period_ar(period: str) -> str:
+    """Convert '2026-08' to 'أغسطس ٢٠٢٦'."""
     try:
         parts = period.split("-")
-        return f"{_MONTHS.get(int(parts[1]), period)} {parts[0]}"
+        month = _MONTHS_AR.get(int(parts[1]), period)
+        year = _to_eastern(parts[0])
+        return f"{month} {year}"
     except (IndexError, ValueError):
         return period
 
 
-def _format_date(dt: datetime) -> str:
-    return f"{dt.day} {_MONTHS.get(dt.month, str(dt.month))} {dt.year}"
+def _format_date_ar(dt: datetime) -> str:
+    day = _to_eastern(str(dt.day))
+    month = _MONTHS_AR.get(dt.month, str(dt.month))
+    year = _to_eastern(str(dt.year))
+    hour = dt.hour % 12 or 12
+    minute = _to_eastern(f"{dt.minute:02d}")
+    hour_str = _to_eastern(str(hour))
+    ampm = "م" if dt.hour >= 12 else "ص"
+    return f"{day} {month} {year} - {hour_str}:{minute} {ampm}"
 
 
 def _clean_amount(amount: str) -> str:
@@ -33,14 +57,15 @@ def _clean_amount(amount: str) -> str:
     return amount
 
 
-def _channel_label(channel: str) -> str:
-    mapping = {
-        "online": "Online — EasyKash",
-        "cash": "Cash",
-        "card": "Card",
-        "manual": "Manual",
-    }
-    return mapping.get(channel.lower(), channel)
+def _channel_note(channel: str, txn_id: str | None) -> str:
+    ch = channel.lower()
+    if ch == "online":
+        txn = txn_id or ""
+        return f"تم السداد إلكترونيًا بالبطاقة أو المحفظة — رقم العملية {txn}."
+    elif ch == "card":
+        return "تم الدفع بالبطاقة في مكتب استقبال الفرع."
+    else:
+        return "تم استلام المبلغ نقدًا بمكتب استقبال الفرع."
 
 
 def generate_receipt_pdf(
@@ -57,213 +82,40 @@ def generate_receipt_pdf(
     paymob_transaction_id: str | None = None,
     issued_at: datetime | None = None,
 ) -> bytes:
-    """Generate a branded receipt PDF. Returns PDF bytes."""
+    """Generate a branded Arabic receipt PDF. Returns PDF bytes."""
     if issued_at is None:
         issued_at = datetime.now(timezone.utc)
 
     amount_paid = _clean_amount(amount_paid)
+    amount_ar = _to_eastern(amount_paid) + " جنيه"
+    period_ar = _format_period_ar(period)
 
+    # Build detail line
     detail_parts = []
-    if level:
-        detail_parts.append(f"Level: {level}")
     if athlete_type:
-        detail_parts.append(f"Type: {athlete_type}")
-    detail_line = " · ".join(detail_parts) if detail_parts else ""
+        detail_parts.append(athlete_type)
+    if level:
+        detail_parts.append(level)
+    detail_parts.append(branch_name)
+    line_detail = " · ".join(detail_parts)
 
-    channel = _channel_label(payment_channel)
-    txn_line = f'<tr><td class="label">Transaction ID</td><td class="value mono">{paymob_transaction_id}</td></tr>' if paymob_transaction_id else ""
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  @page {{
-    size: A4;
-    margin: 20mm 25mm;
-  }}
-  body {{
-    font-family: Helvetica, Arial, sans-serif;
-    color: #1E293B;
-    font-size: 11pt;
-    line-height: 1.5;
-    margin: 0;
-    padding: 0;
-  }}
-  .header {{
-    text-align: center;
-    border-bottom: 3px solid #F9A825;
-    padding-bottom: 12px;
-    margin-bottom: 20px;
-  }}
-  .brand {{
-    font-size: 28pt;
-    font-weight: bold;
-    color: #0D1B2A;
-    letter-spacing: 2px;
-    margin: 0;
-  }}
-  .tagline {{
-    font-size: 10pt;
-    color: #1565C0;
-    font-style: italic;
-    margin: 2px 0;
-  }}
-  .branch {{
-    font-size: 12pt;
-    color: #64748B;
-    font-weight: bold;
-    margin: 4px 0 0;
-  }}
-  .receipt-title {{
-    text-align: center;
-    font-size: 14pt;
-    font-weight: bold;
-    color: #1565C0;
-    margin: 10px 0 5px;
-  }}
-  .meta-table {{
-    width: 100%;
-    margin-bottom: 15px;
-  }}
-  .meta-table td {{
-    padding: 3px 0;
-  }}
-  .meta-right {{
-    text-align: right;
-  }}
-  .divider {{
-    border: none;
-    border-top: 1px solid #E2E8F0;
-    margin: 12px 0;
-  }}
-  .paid-box {{
-    text-align: center;
-    padding: 15px 0;
-  }}
-  .paid-badge {{
-    font-size: 16pt;
-    font-weight: bold;
-    color: #16A34A;
-  }}
-  .amount {{
-    font-size: 32pt;
-    font-weight: bold;
-    color: #16A34A;
-    margin: 5px 0;
-  }}
-  .method {{
-    font-size: 10pt;
-    color: #94A3B8;
-  }}
-  .details {{
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-  }}
-  .details .section-head {{
-    background-color: #F8FAFC;
-    font-size: 9pt;
-    font-weight: bold;
-    color: #1565C0;
-    padding: 7px 10px;
-    border-top: 1px solid #1565C0;
-  }}
-  .details .label {{
-    width: 35%;
-    padding: 7px 10px;
-    font-size: 10pt;
-    color: #64748B;
-    border-bottom: 1px solid #E2E8F0;
-  }}
-  .details .value {{
-    padding: 7px 10px;
-    font-weight: bold;
-    border-bottom: 1px solid #E2E8F0;
-  }}
-  .details .value.success {{
-    color: #16A34A;
-  }}
-  .details .value.mono {{
-    font-family: Courier;
-    font-size: 9pt;
-  }}
-  .footer {{
-    text-align: center;
-    margin-top: 30px;
-    padding-top: 10px;
-    border-top: 1px solid #E2E8F0;
-  }}
-  .footer .thanks {{
-    font-size: 11pt;
-    font-weight: bold;
-    color: #1565C0;
-    margin-bottom: 4px;
-  }}
-  .footer .contact {{
-    font-size: 9pt;
-    color: #94A3B8;
-  }}
-  .footer .legal {{
-    font-size: 8pt;
-    color: #94A3B8;
-    font-style: italic;
-    margin-top: 10px;
-  }}
-</style>
-</head>
-<body>
-
-<div class="header">
-  <p class="brand">AQUATHLETIC</p>
-  <p class="tagline">Swimming Academy</p>
-  <p class="branch">{branch_name} Branch</p>
-</div>
-
-<p class="receipt-title">PAYMENT RECEIPT</p>
-
-<table class="meta-table">
-  <tr>
-    <td><b>Receipt No.</b> {receipt_number}</td>
-    <td class="meta-right"><b>Date:</b> {_format_date(issued_at)}</td>
-  </tr>
-</table>
-
-<hr class="divider">
-
-<div class="paid-box">
-  <div class="paid-badge">&#10003; PAID</div>
-  <div class="amount">{amount_paid} EGP</div>
-  <div class="method">Payment Method: {channel}</div>
-</div>
-
-<hr class="divider">
-
-<table class="details">
-  <tr><td colspan="2" class="section-head">ATHLETE DETAILS</td></tr>
-  <tr><td class="label">Name</td><td class="value">{athlete_name}</td></tr>
-  <tr><td class="label">Athlete No.</td><td class="value">M{athlete_number}</td></tr>
-  <tr><td class="label">Branch</td><td class="value">{branch_name}</td></tr>
-  {"<tr><td class='label'>Level</td><td class='value'>" + level + "</td></tr>" if level else ""}
-  {"<tr><td class='label'>Training Type</td><td class='value'>" + athlete_type + "</td></tr>" if athlete_type else ""}
-  {"<tr><td class='label'>Phone</td><td class='value'>" + (phone or "") + "</td></tr>" if phone else ""}
-  <tr><td colspan="2" class="section-head">PAYMENT DETAILS</td></tr>
-  <tr><td class="label">Period</td><td class="value">{_format_period(period)}</td></tr>
-  <tr><td class="label">Amount Paid</td><td class="value success">{amount_paid} EGP</td></tr>
-  <tr><td class="label">Payment Method</td><td class="value">{channel}</td></tr>
-  {txn_line}
-</table>
-
-<div class="footer">
-  <p class="thanks">Thank you for choosing Aquathletic Swimming Academy!</p>
-  <p class="contact">For inquiries, please contact your branch reception.</p>
-  <p class="legal">This is an electronically generated receipt and does not require a signature.</p>
-  <p class="legal">Receipt ID: {receipt_number} | Generated: {issued_at.strftime('%Y-%m-%d %H:%M UTC')}</p>
-</div>
-
-</body>
-</html>"""
+    html = _TEMPLATE.format(
+        logo_b64=_LOGO_B64,
+        receipt_number=receipt_number,
+        issued_at=_format_date_ar(issued_at),
+        swimmer_name=athlete_name,
+        branch_name=branch_name,
+        period=period_ar,
+        phone=phone or "",
+        sessions="",
+        line_title=f"رسوم التدريب الشهرية — {period_ar}",
+        line_detail=line_detail,
+        amount_line=amount_ar,
+        amount_total=amount_ar,
+        channel_note=_channel_note(payment_channel, paymob_transaction_id),
+        contact_line="aquathletic.eg",
+    )
 
     buffer = io.BytesIO()
-    pisa.CreatePDF(html, dest=buffer)
+    HTML(string=html).write_pdf(buffer)
     return buffer.getvalue()
