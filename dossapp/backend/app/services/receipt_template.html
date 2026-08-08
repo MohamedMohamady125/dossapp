@@ -1,124 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html dir="rtl" lang="ar">
 <head>
 <meta charset="utf-8">
 <style>
   @page {{
     size: A4;
-    margin: 0;
+    margin: 16mm 16mm 12mm 16mm;
   }}
-  :root {{
-    --color-bg: #f3f2f2;
-    --color-surface: #eae9e9;
-    --color-text: #201e1d;
-    --color-accent: #ec3013;
-    --color-accent-700: #ae1800;
-    --color-neutral-300: #d7d3d3;
-    --color-neutral-600: #7d7979;
-    --color-neutral-700: #605d5d;
-    --font-heading: 'Archivo', 'Noto Kufi Arabic', system-ui, sans-serif;
-    --font-body: 'Noto Kufi Arabic', 'Archivo', system-ui, sans-serif;
-  }}
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
-    font-family: var(--font-body);
-    color: var(--color-text);
+    font-family: 'Noto Kufi Arabic', 'Noto Sans Arabic', 'Noto Sans', sans-serif;
+    color: #201e1d;
     font-size: 11pt;
     line-height: 1.55;
+    margin: 0;
+    padding: 0;
+  }}
+  table {{
+    border-collapse: collapse;
+  }}
+  .label {{
+    font-size: 8.5pt;
+    color: #7d7979;
+  }}
+  .heading {{
+    font-weight: 700;
   }}
 </style>
 </head>
 <body>
-<div style="display:flex;flex-direction:column;padding:16mm 16mm 12mm;background:#fff;color:var(--color-text);font-family:'Noto Kufi Arabic','Archivo',system-ui,sans-serif;box-sizing:border-box;height:297mm;width:210mm" dir="rtl" lang="ar">
 
-  <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:10mm;padding-bottom:6mm;border-bottom:2px solid var(--color-text)">
-    <div style="display:flex;align-items:center;gap:5mm;flex:1 1 auto;min-width:0">
-      <img src="data:image/png;base64,{logo_b64}" alt="أكواثليتك" style="width:24mm;height:24mm;object-fit:contain;display:block;flex:none">
-      <div style="display:flex;flex-direction:column;gap:2mm;min-width:0">
-        <div style="font-family:var(--font-heading);font-weight:700;font-size:21pt;line-height:0.95;letter-spacing:-0.01em;text-transform:uppercase;white-space:nowrap;direction:ltr">Aquathletic</div>
-        <div style="font-size:9.5pt;color:var(--color-neutral-600)">أكاديمية أكواثليتك للسباحة</div>
-      </div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:2mm;flex:none;white-space:nowrap">
-      <div style="font-size:8.5pt;color:var(--color-neutral-600)">رقم الإيصال</div>
-      <div style="font-family:var(--font-heading);font-weight:700;font-size:20pt;line-height:1;color:var(--color-accent-700);direction:ltr">{receipt_number}</div>
-      <div style="font-size:9pt;color:var(--color-neutral-700)">تاريخ الإصدار: {issued_at}</div>
-    </div>
-  </div>
+<!-- ═══ HEADER ═══ -->
+<table style="width:100%;border-bottom:2px solid #201e1d;padding-bottom:6mm;margin-bottom:0">
+  <tr>
+    <td style="vertical-align:middle;width:24mm;padding-left:5mm">
+      <img src="data:image/png;base64,{logo_b64}" alt="أكواثليتك" style="width:24mm;height:24mm">
+    </td>
+    <td style="vertical-align:middle;padding-left:5mm">
+      <div style="font-weight:700;font-size:21pt;line-height:0.95;letter-spacing:-0.01em;text-transform:uppercase;direction:ltr;text-align:left">AQUATHLETIC</div>
+      <div style="font-size:9.5pt;color:#7d7979;margin-top:2mm">أكاديمية أكواثليتك للسباحة</div>
+    </td>
+    <td style="vertical-align:middle;text-align:left;white-space:nowrap">
+      <div style="font-size:8.5pt;color:#7d7979">رقم الإيصال</div>
+      <div style="font-weight:700;font-size:20pt;line-height:1.2;color:#ae1800;direction:ltr;text-align:left">{receipt_number}</div>
+      <div style="font-size:9pt;color:#605d5d;margin-top:2mm">تاريخ الإصدار: {issued_at}</div>
+    </td>
+  </tr>
+</table>
 
-  <!-- Title -->
-  <div style="padding:5mm 0 6mm;border-bottom:1px solid var(--color-neutral-300)">
-    <h1 style="margin:0;font-weight:700;font-size:15pt;letter-spacing:0.06em">إيصال سداد رسوم</h1>
-  </div>
-
-  <!-- Swimmer info grid -->
-  <div style="display:flex;padding:7mm 0;border-bottom:1px solid var(--color-neutral-300)">
-    <div style="flex:1;display:flex;flex-direction:column;gap:1.5mm">
-      <div style="font-size:8.5pt;color:var(--color-neutral-600)">اسم السباح</div>
-      <div style="font-weight:700;font-size:16pt;line-height:1.3">{swimmer_name}</div>
-    </div>
-    <div style="flex:1;display:flex;flex-direction:column;gap:5mm;border-right:1px solid var(--color-neutral-300);padding-right:10mm">
-      <div style="display:flex;flex-direction:column;gap:1.5mm">
-        <div style="font-size:8.5pt;color:var(--color-neutral-600)">الفرع</div>
-        <div style="font-weight:700;font-size:16pt;line-height:1.3">{branch_name}</div>
-      </div>
-      <div style="display:flex;gap:5mm">
-        <div style="flex:1;display:flex;flex-direction:column;gap:1.5mm">
-          <div style="font-size:8.5pt;color:var(--color-neutral-600)">الشهر</div>
-          <div style="font-size:12pt;font-weight:600">{period}</div>
-        </div>
-        <div style="flex:1;display:flex;flex-direction:column;gap:1.5mm">
-          <div style="font-size:8.5pt;color:var(--color-neutral-600)">رقم الهاتف</div>
-          <div style="font-size:12pt;font-weight:600;direction:ltr;text-align:right;white-space:nowrap">{phone}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Line items table -->
-  <table style="width:100%;border-collapse:collapse;margin-top:7mm;font-size:11pt">
-    <thead>
-      <tr>
-        <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:var(--color-neutral-600);font-weight:600;border-bottom:2px solid var(--color-text)">البيان</th>
-        <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:var(--color-neutral-600);font-weight:600;border-bottom:2px solid var(--color-text);width:34mm">عدد الحصص</th>
-        <th style="text-align:left;padding:0 0 3mm;font-size:8.5pt;color:var(--color-neutral-600);font-weight:600;border-bottom:2px solid var(--color-text);width:40mm">المبلغ</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td style="padding:4.5mm 0;border-bottom:1px solid var(--color-neutral-300);vertical-align:top">
-          <div style="font-weight:600">{line_title}</div>
-          <div style="font-size:9.5pt;color:var(--color-neutral-700);margin-top:1mm">{line_detail}</div>
-        </td>
-        <td style="padding:4.5mm 0;border-bottom:1px solid var(--color-neutral-300);vertical-align:top">{sessions}</td>
-        <td style="padding:4.5mm 0;border-bottom:1px solid var(--color-neutral-300);vertical-align:top;text-align:left;font-variant-numeric:tabular-nums">{amount_line}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- Total + paid badge -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:10mm;margin-top:7mm;padding-top:5mm;border-top:2px solid var(--color-text)">
-    <div style="display:flex;flex-direction:column;gap:3mm">
-      <div style="display:inline-flex;align-self:flex-start;background:var(--color-accent);color:#fff;padding:2.5mm 6mm">
-        <span style="font-weight:700;font-size:14pt;letter-spacing:0.08em">مدفوع</span>
-      </div>
-      <div style="font-size:9.5pt;color:var(--color-neutral-700);max-width:80mm">{channel_note}</div>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:1.5mm">
-      <div style="font-size:8.5pt;color:var(--color-neutral-600)">الإجمالي المدفوع</div>
-      <div style="font-family:var(--font-heading);font-weight:700;font-size:30pt;line-height:1;font-variant-numeric:tabular-nums;direction:rtl">{amount_total}</div>
-    </div>
-  </div>
-
-  <div style="flex:1"></div>
-
-  <!-- Footer -->
-  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8mm;margin-top:8mm;padding-top:4mm;border-top:2px solid var(--color-text);font-size:9pt;color:var(--color-neutral-700)">
-    <div>شكرًا لكم — يُرجى الاحتفاظ بهذا الإيصال كإثبات للسداد.</div>
-    <div style="direction:ltr">{contact_line}</div>
-  </div>
-
+<!-- ═══ TITLE ═══ -->
+<div style="padding:5mm 0 6mm;border-bottom:1px solid #d7d3d3">
+  <div style="font-weight:700;font-size:15pt;letter-spacing:0.06em">إيصال سداد رسوم</div>
 </div>
+
+<!-- ═══ SWIMMER INFO ═══ -->
+<table style="width:100%;padding:7mm 0;border-bottom:1px solid #d7d3d3">
+  <tr>
+    <td style="vertical-align:top;width:50%;padding:0 10mm 0 0">
+      <div class="label">اسم السباح</div>
+      <div style="font-weight:700;font-size:16pt;line-height:1.3;margin-top:1.5mm">{swimmer_name}</div>
+    </td>
+    <td style="vertical-align:top;width:50%;border-right:1px solid #d7d3d3;padding-right:10mm">
+      <div class="label">الفرع</div>
+      <div style="font-weight:700;font-size:16pt;line-height:1.3;margin-top:1.5mm">{branch_name}</div>
+      <table style="width:100%;margin-top:5mm">
+        <tr>
+          <td style="vertical-align:top;width:50%">
+            <div class="label">الشهر</div>
+            <div style="font-size:12pt;font-weight:600;margin-top:1.5mm">{period}</div>
+          </td>
+          <td style="vertical-align:top;width:50%">
+            <div class="label">رقم الهاتف</div>
+            <div style="font-size:12pt;font-weight:600;direction:ltr;text-align:right;white-space:nowrap;margin-top:1.5mm">{phone}</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- ═══ LINE ITEMS ═══ -->
+<table style="width:100%;margin-top:7mm;font-size:11pt">
+  <thead>
+    <tr>
+      <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d">البيان</th>
+      <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:34mm">عدد الحصص</th>
+      <th style="text-align:left;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:40mm">المبلغ</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top">
+        <div style="font-weight:600">{line_title}</div>
+        <div style="font-size:9.5pt;color:#605d5d;margin-top:1mm">{line_detail}</div>
+      </td>
+      <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top">{sessions}</td>
+      <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top;text-align:left">{amount_line}</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══ TOTAL + PAID ═══ -->
+<table style="width:100%;margin-top:7mm;padding-top:5mm;border-top:2px solid #201e1d">
+  <tr>
+    <td style="vertical-align:bottom;width:55%">
+      <table><tr><td style="background:#ec3013;color:#fff;padding:2.5mm 6mm;font-weight:700;font-size:14pt;letter-spacing:0.08em">مدفوع</td></tr></table>
+      <div style="font-size:9.5pt;color:#605d5d;margin-top:3mm;max-width:80mm">{channel_note}</div>
+    </td>
+    <td style="vertical-align:bottom;text-align:left">
+      <div style="font-size:8.5pt;color:#7d7979">الإجمالي المدفوع</div>
+      <div style="font-weight:700;font-size:30pt;line-height:1;margin-top:1.5mm;direction:rtl">{amount_total}</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ═══ FOOTER ═══ -->
+<div style="position:fixed;bottom:12mm;left:16mm;right:16mm;border-top:2px solid #201e1d;padding-top:4mm">
+  <table style="width:100%;font-size:9pt;color:#605d5d">
+    <tr>
+      <td style="text-align:right">شكرًا لكم — يُرجى الاحتفاظ بهذا الإيصال كإثبات للسداد.</td>
+      <td style="text-align:left;direction:ltr;white-space:nowrap">{contact_line}</td>
+    </tr>
+  </table>
+</div>
+
 </body>
 </html>
