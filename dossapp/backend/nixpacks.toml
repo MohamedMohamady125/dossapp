@@ -8,5 +8,8 @@ aptPkgs = [
   "shared-mime-info",
   "libcairo2",
   "libglib2.0-0",
+  "libgobject-2.0-0",
+  "libharfbuzz0b",
+  "libfontconfig1",
   "fonts-noto",
 ]
