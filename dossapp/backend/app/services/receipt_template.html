@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  @page {{
+    size: A4;
+    margin: 0;
+  }}
+
+  /* --- Design-system tokens --- */
+  :root {{
+    --color-bg: #f3f2f2;
+    --color-text: #201e1d;
+    --color-accent: #ec3013;
+    --color-accent-700: #ae1800;
+    --color-neutral-300: #d7d3d3;
+    --color-neutral-600: #7d7979;
+    --color-neutral-700: #605d5d;
+    --font-heading: "Archivo", system-ui, sans-serif;
+    --font-body: "Noto Kufi Arabic", "Archivo", system-ui, sans-serif;
+  }}
+
+  /* --- Reset --- */
+  *, *::before, *::after {{ box-sizing: border-box; }}
+  body {{
+    margin: 0;
+    padding: 0;
+    font-size: 15px;
+    line-height: 1.55;
+    font-weight: 400;
+    font-family: var(--font-body);
+    color: var(--color-text);
+    background: #fff;
+  }}
+
+  /* --- Page container (A4: 210mm x 297mm) --- */
+  .page {{
+    width: 210mm;
+    height: 297mm;
+    display: flex;
+    flex-direction: column;
+    padding: 16mm 16mm 12mm;
+    background: #fff;
+    color: var(--color-text);
+    font-family: var(--font-body);
+    box-sizing: border-box;
+  }}
+
+  /* --- Header --- */
+  .header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10mm;
+    padding-bottom: 6mm;
+    border-bottom: 2px solid var(--color-text);
+  }}
+  .header-brand {{
+    display: flex;
+    align-items: center;
+    gap: 5mm;
+    flex: 1 1 auto;
+    min-width: 0;
+  }}
+  .header-logo {{
+    width: 24mm;
+    height: 24mm;
+    object-fit: contain;
+    display: block;
+    flex: none;
+  }}
+  .header-titles {{
+    display: flex;
+    flex-direction: column;
+    gap: 2mm;
+    min-width: 0;
+  }}
+  .header-brand-name {{
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 21pt;
+    line-height: 0.95;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    direction: ltr;
+  }}
+  .header-brand-sub {{
+    font-size: 9.5pt;
+    color: var(--color-neutral-600);
+  }}
+  .header-meta {{
+    display: flex;
+    flex-direction: column;
+    gap: 2mm;
+    flex: none;
+    white-space: nowrap;
+  }}
+  .header-meta-label {{
+    font-size: 8.5pt;
+    color: var(--color-neutral-600);
+  }}
+  .receipt-number {{
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 20pt;
+    line-height: 1;
+    color: var(--color-accent-700);
+    direction: ltr;
+  }}
+  .receipt-date {{
+    font-size: 9pt;
+    color: var(--color-neutral-700);
+  }}
+
+  /* --- Section title --- */
+  .section-title {{
+    padding: 5mm 0 6mm;
+    border-bottom: 1px solid var(--color-neutral-300);
+  }}
+  .section-title h1 {{
+    margin: 0;
+    font-weight: 700;
+    font-size: 15pt;
+    letter-spacing: 0.06em;
+    font-family: var(--font-body);
+  }}
+
+  /* --- Info grid --- */
+  .info-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 10mm;
+    padding: 7mm 0;
+    border-bottom: 1px solid var(--color-neutral-300);
+  }}
+  .info-label {{
+    font-size: 8.5pt;
+    color: var(--color-neutral-600);
+  }}
+  .info-value {{
+    font-weight: 700;
+    font-size: 16pt;
+    line-height: 1.3;
+  }}
+  .info-value-sm {{
+    font-size: 12pt;
+    font-weight: 600;
+  }}
+  .info-right-col {{
+    display: flex;
+    flex-direction: column;
+    gap: 5mm;
+    border-right: 1px solid var(--color-neutral-300);
+    padding-right: 10mm;
+  }}
+  .info-sub-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm;
+  }}
+  .info-cell {{
+    display: flex;
+    flex-direction: column;
+    gap: 1.5mm;
+  }}
+  .ltr-value {{
+    direction: ltr;
+    text-align: right;
+    white-space: nowrap;
+  }}
+
+  /* --- Table --- */
+  .line-items {{
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 7mm;
+    font-size: 11pt;
+  }}
+  .line-items th {{
+    text-align: right;
+    padding: 0 0 3mm;
+    font-size: 8.5pt;
+    color: var(--color-neutral-600);
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-text);
+  }}
+  .line-items th.col-amount {{
+    text-align: left;
+    width: 40mm;
+  }}
+  .line-items th.col-sessions {{
+    width: 34mm;
+  }}
+  .line-items td {{
+    padding: 4.5mm 0;
+    border-bottom: 1px solid var(--color-neutral-300);
+    vertical-align: top;
+  }}
+  .line-items td.col-amount {{
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+  }}
+  .line-title {{
+    font-weight: 600;
+  }}
+  .line-detail {{
+    font-size: 9.5pt;
+    color: var(--color-neutral-700);
+    margin-top: 1mm;
+  }}
+
+  /* --- Totals / payment status --- */
+  .totals {{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10mm;
+    margin-top: 7mm;
+    padding-top: 5mm;
+    border-top: 2px solid var(--color-text);
+  }}
+  .paid-badge {{
+    display: inline-flex;
+    align-self: flex-start;
+    background: var(--color-accent);
+    color: #fff;
+    padding: 2.5mm 6mm;
+  }}
+  .paid-badge span {{
+    font-weight: 700;
+    font-size: 14pt;
+    letter-spacing: 0.08em;
+  }}
+  .channel-note {{
+    font-size: 9.5pt;
+    color: var(--color-neutral-700);
+    max-width: 80mm;
+    margin-top: 3mm;
+  }}
+  .total-label {{
+    font-size: 8.5pt;
+    color: var(--color-neutral-600);
+  }}
+  .total-amount {{
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 30pt;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    direction: rtl;
+  }}
+  .total-col {{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1.5mm;
+  }}
+
+  /* --- Spacer + Footer --- */
+  .spacer {{ flex: 1; }}
+  .footer {{
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8mm;
+    margin-top: 8mm;
+    padding-top: 4mm;
+    border-top: 2px solid var(--color-text);
+    font-size: 9pt;
+    color: var(--color-neutral-700);
+  }}
+  .footer-contact {{
+    direction: ltr;
+  }}
+</style>
+</head>
+<body>
+
+<div class="page" dir="rtl" lang="ar">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <img src="data:image/png;base64,{logo_base64}" alt="Aquathletic" class="header-logo">
+      <div class="header-titles">
+        <div class="header-brand-name">Aquathletic</div>
+        <div class="header-brand-sub">أكاديمية أكواثليتك للسباحة</div>
+      </div>
+    </div>
+    <div class="header-meta">
+      <div class="header-meta-label">رقم الإيصال</div>
+      <div class="receipt-number">{receipt_number}</div>
+      <div class="receipt-date">تاريخ الإصدار: {issued_at}</div>
+    </div>
+  </header>
+
+  <!-- Section title -->
+  <div class="section-title">
+    <h1>إيصال سداد رسوم</h1>
+  </div>
+
+  <!-- Swimmer info grid -->
+  <div class="info-grid">
+    <div class="info-cell">
+      <div class="info-label">اسم السباح</div>
+      <div class="info-value">{swimmer_name}</div>
+    </div>
+    <div class="info-right-col">
+      <div class="info-cell">
+        <div class="info-label">الفرع</div>
+        <div class="info-value">{branch_name}</div>
+      </div>
+      <div class="info-sub-grid">
+        <div class="info-cell">
+          <div class="info-label">الشهر</div>
+          <div class="info-value-sm">{period}</div>
+        </div>
+        <div class="info-cell">
+          <div class="info-label">رقم الهاتف</div>
+          <div class="info-value-sm ltr-value">{phone}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Line items table -->
+  <table class="line-items">
+    <thead>
+      <tr>
+        <th>البيان</th>
+        <th class="col-sessions">عدد الحصص</th>
+        <th class="col-amount">المبلغ</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <div class="line-title">{line_title}</div>
+          <div class="line-detail">{line_detail}</div>
+        </td>
+        <td>{sessions}</td>
+        <td class="col-amount">{amount_line}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Totals + payment status -->
+  <div class="totals">
+    <div>
+      <div class="paid-badge">
+        <span>مدفوع</span>
+      </div>
+      <div class="channel-note">{channel_note}</div>
+    </div>
+    <div class="total-col">
+      <div class="total-label">الإجمالي المدفوع</div>
+      <div class="total-amount">{amount_total}</div>
+    </div>
+  </div>
+
+  <!-- Spacer pushes footer to bottom -->
+  <div class="spacer"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>شكرًا لكم — يُرجى الاحتفاظ بهذا الإيصال كإثبات للسداد.</div>
+    <div class="footer-contact">{contact_line}</div>
+  </footer>
+
+</div>
+
+</body>
+</html>
