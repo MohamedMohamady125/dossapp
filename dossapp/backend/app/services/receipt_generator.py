@@ -6,25 +6,31 @@ from datetime import datetime, timezone
 from xhtml2pdf import pisa
 
 
-# Arabic month names
-_AR_MONTHS = {
-    1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
-    5: "مايو", 6: "يونيو", 7: "يوليو", 8: "أغسطس",
-    9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
+_MONTHS = {
+    1: "January", 2: "February", 3: "March", 4: "April",
+    5: "May", 6: "June", 7: "July", 8: "August",
+    9: "September", 10: "October", 11: "November", 12: "December",
 }
 
 
 def _format_period(period: str) -> str:
-    """Convert '2026-08' to 'أغسطس 2026'."""
+    """Convert '2026-08' to 'August 2026'."""
     try:
         parts = period.split("-")
-        return f"{_AR_MONTHS.get(int(parts[1]), period)} {parts[0]}"
+        return f"{_MONTHS.get(int(parts[1]), period)} {parts[0]}"
     except (IndexError, ValueError):
         return period
 
 
 def _format_date(dt: datetime) -> str:
-    return f"{dt.day} {_AR_MONTHS.get(dt.month, str(dt.month))} {dt.year}"
+    return f"{dt.day} {_MONTHS.get(dt.month, str(dt.month))} {dt.year}"
+
+
+def _clean_amount(amount: str) -> str:
+    """Remove trailing zeros: '1000.00' -> '1000', '1250.50' -> '1250.5'."""
+    if "." in amount:
+        return amount.rstrip("0").rstrip(".")
+    return amount
 
 
 def _channel_label(channel: str) -> str:
@@ -54,6 +60,8 @@ def generate_receipt_pdf(
     """Generate a branded receipt PDF. Returns PDF bytes."""
     if issued_at is None:
         issued_at = datetime.now(timezone.utc)
+
+    amount_paid = _clean_amount(amount_paid)
 
     detail_parts = []
     if level:
