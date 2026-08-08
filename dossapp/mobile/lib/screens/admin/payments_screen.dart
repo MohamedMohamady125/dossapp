@@ -21,7 +21,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   List<Map<String, dynamic>>? _payments;
   bool _loading = true;
   String? _error;
-  String _statusFilter = '';
+  String _statusFilter = 'paid';
   String _search = '';
   late AnimationController _animController;
 

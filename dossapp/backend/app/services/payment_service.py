@@ -180,7 +180,7 @@ async def record_cash_payment(
     db.add(payment)
     await db.flush()
 
-    receipt_number = f"C-{excel_receipt_no}"
+    receipt_number = str(excel_receipt_no)
 
     normalized_phone = normalize_phone(phone)
     pdf_data = generate_receipt_pdf(
