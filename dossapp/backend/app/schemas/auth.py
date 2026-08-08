@@ -25,3 +25,35 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class SendVerificationRequest(BaseModel):
+    email: str
+
+
+class VerifyCodeRequest(BaseModel):
+    email: str
+    code: str
+
+
+class SetPasswordWithEmailRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    login_code: str
+
+
+class ForgotPasswordVerifyRequest(BaseModel):
+    login_code: str
+    email: str
+    code: str
+
+
+class ForgotPasswordResetRequest(BaseModel):
+    login_code: str
+    email: str
+    code: str
+    new_password: str

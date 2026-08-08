@@ -93,6 +93,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> completeOnboarding(String email, String code, String newPassword) async {
+    await ApiService.completeOnboarding(email, code, newPassword);
+    _mustChangePassword = false;
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     if (isCustomer) {
       await NotificationService.unregisterToken();

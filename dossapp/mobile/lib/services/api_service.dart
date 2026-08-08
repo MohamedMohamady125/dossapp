@@ -190,6 +190,72 @@ class ApiService {
     }
   }
 
+  // ── Email Verification (Onboarding) ──
+
+  static Future<void> sendVerificationCode(String email) async {
+    final resp = await _post('/auth/customer/send-verification', {'email': email});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to send code'));
+    }
+  }
+
+  static Future<bool> verifyCode(String email, String code) async {
+    final resp = await _post('/auth/customer/verify-code', {'email': email, 'code': code});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Verification failed'));
+    }
+    final data = jsonDecode(resp.body);
+    return data['verified'] == true;
+  }
+
+  static Future<void> completeOnboarding(String email, String code, String newPassword) async {
+    final resp = await _post('/auth/customer/complete-onboarding', {
+      'email': email, 'code': code, 'new_password': newPassword,
+    });
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to complete setup'));
+    }
+  }
+
+  // ── Forgot Password ──
+
+  static Future<void> forgotPasswordSendCode(String loginCode) async {
+    final resp = await _safeRequest(() async => http.post(
+      Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/send-code'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'login_code': loginCode}),
+    ));
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed'));
+    }
+  }
+
+  static Future<bool> forgotPasswordVerify(String loginCode, String email, String code) async {
+    final resp = await _safeRequest(() async => http.post(
+      Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'login_code': loginCode, 'email': email, 'code': code}),
+    ));
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Verification failed'));
+    }
+    return true;
+  }
+
+  static Future<void> forgotPasswordReset(String loginCode, String email, String code, String newPassword) async {
+    final resp = await _safeRequest(() async => http.post(
+      Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/reset'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'login_code': loginCode, 'email': email,
+        'code': code, 'new_password': newPassword,
+      }),
+    ));
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Password reset failed'));
+    }
+  }
+
   // ── Admin Auth ──
 
   static Future<Map<String, dynamic>> adminLogin(String username, String password) async {

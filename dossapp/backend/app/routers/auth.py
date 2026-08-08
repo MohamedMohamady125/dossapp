@@ -1,24 +1,30 @@
-"""Auth endpoints — customer + admin login, token refresh, password change."""
+"""Auth endpoints — customer + admin login, token refresh, password change, email verification."""
 
 import logging
-from datetime import datetime, timezone
+import random
+import re
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.account import Account
 from app.models.admin_user import AdminUser
+from app.models.email_verification import EmailVerification
 from app.schemas.auth import (
     CustomerLoginRequest, AdminLoginRequest, ChangePasswordRequest,
     TokenResponse, RefreshRequest,
+    SendVerificationRequest, VerifyCodeRequest, SetPasswordWithEmailRequest,
+    ForgotPasswordRequest, ForgotPasswordVerifyRequest, ForgotPasswordResetRequest,
 )
 from app.utils.auth import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, decode_token,
 )
-from app.routers.deps import get_current_customer, get_current_staff
+from app.routers.deps import get_current_customer, get_current_customer_allow_suspended, get_current_staff
+from app.services.notifications import get_notification_provider
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -121,6 +127,266 @@ async def customer_change_password(
     account.must_change_password = False
     db.add(account)
     return {"message": "Password changed successfully"}
+
+
+# ── Email validation helper ──
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+
+def _validate_email(email: str):
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+
+
+def _generate_code() -> str:
+    return f"{random.randint(100000, 999999)}"
+
+
+async def _send_verification_email(email: str, code: str):
+    provider = get_notification_provider()
+    await provider.send_email(
+        email,
+        "Aquathletic - Verification Code",
+        f"Your verification code is: {code}\n\nThis code expires in 10 minutes.",
+    )
+
+
+# ── Onboarding: send verification code ──
+@router.post("/customer/send-verification")
+async def customer_send_verification(
+    req: SendVerificationRequest,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    _validate_email(req.email)
+
+    code = _generate_code()
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    # Delete any previous unverified codes for this account + purpose
+    await db.execute(
+        delete(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.purpose == "onboarding",
+                EmailVerification.verified == False,
+            )
+        )
+    )
+
+    verification = EmailVerification(
+        account_id=account.id,
+        email=req.email,
+        code=code,
+        purpose="onboarding",
+        expires_at=expires,
+    )
+    db.add(verification)
+    await db.flush()
+
+    await _send_verification_email(req.email, code)
+
+    return {"message": "Verification code sent"}
+
+
+# ── Onboarding: verify the code ──
+@router.post("/customer/verify-code")
+async def customer_verify_code(
+    req: VerifyCodeRequest,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.email == req.email,
+                EmailVerification.purpose == "onboarding",
+                EmailVerification.verified == False,
+            )
+        ).order_by(EmailVerification.created_at.desc())
+    )
+    verification = result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="No pending verification found")
+
+    if verification.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code expired")
+
+    if verification.attempts >= 5:
+        raise HTTPException(status_code=400, detail="Too many failed attempts. Request a new code.")
+
+    if verification.code != req.code:
+        verification.attempts += 1
+        db.add(verification)
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    verification.verified = True
+    account.email = req.email
+    db.add(verification)
+    db.add(account)
+
+    return {"verified": True}
+
+
+# ── Onboarding: complete (set password after email verified) ──
+@router.post("/customer/complete-onboarding")
+async def customer_complete_onboarding(
+    req: SetPasswordWithEmailRequest,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    # Check for a verified EmailVerification for this account
+    result = await db.execute(
+        select(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.email == req.email,
+                EmailVerification.purpose == "onboarding",
+                EmailVerification.verified == True,
+            )
+        )
+    )
+    verification = result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="Email not verified. Complete verification first.")
+
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    account.password_hash = hash_password(req.new_password)
+    account.must_change_password = False
+    account.email = req.email
+    db.add(account)
+
+    return {"message": "Account setup complete"}
+
+
+# ── Forgot password: send code ──
+@router.post("/forgot-password/send-code")
+async def forgot_password_send_code(
+    req: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    generic_msg = "If an account exists with a verified email, a code has been sent"
+
+    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
+    account = result.scalar_one_or_none()
+
+    if not account or not account.email:
+        return {"message": generic_msg}
+
+    code = _generate_code()
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    # Delete any previous unverified forgot-password codes for this account
+    await db.execute(
+        delete(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.purpose == "forgot_password",
+                EmailVerification.verified == False,
+            )
+        )
+    )
+
+    verification = EmailVerification(
+        account_id=account.id,
+        email=account.email,
+        code=code,
+        purpose="forgot_password",
+        expires_at=expires,
+    )
+    db.add(verification)
+    await db.flush()
+
+    await _send_verification_email(account.email, code)
+
+    return {"message": generic_msg}
+
+
+# ── Forgot password: verify code ──
+@router.post("/forgot-password/verify")
+async def forgot_password_verify(
+    req: ForgotPasswordVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    ver_result = await db.execute(
+        select(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.email == req.email,
+                EmailVerification.purpose == "forgot_password",
+                EmailVerification.verified == False,
+            )
+        ).order_by(EmailVerification.created_at.desc())
+    )
+    verification = ver_result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="No pending verification found")
+
+    if verification.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code expired")
+
+    if verification.attempts >= 5:
+        raise HTTPException(status_code=400, detail="Too many failed attempts. Request a new code.")
+
+    if verification.code != req.code:
+        verification.attempts += 1
+        db.add(verification)
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    verification.verified = True
+    db.add(verification)
+
+    return {"verified": True}
+
+
+# ── Forgot password: reset password ──
+@router.post("/forgot-password/reset")
+async def forgot_password_reset(
+    req: ForgotPasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid request")
+
+    # Check for a verified forgot-password verification
+    ver_result = await db.execute(
+        select(EmailVerification).where(
+            and_(
+                EmailVerification.account_id == account.id,
+                EmailVerification.email == req.email,
+                EmailVerification.purpose == "forgot_password",
+                EmailVerification.verified == True,
+            )
+        )
+    )
+    verification = ver_result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(status_code=400, detail="Email not verified. Complete verification first.")
+
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    account.password_hash = hash_password(req.new_password)
+    account.must_change_password = False
+    db.add(account)
+
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/admin/login", response_model=TokenResponse)

@@ -6,6 +6,7 @@ import '../../services/locale_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
 import '../../widgets/press_feedback.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -121,36 +122,9 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _showForgotPassword() {
-    final s = S.of(context);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.primarySurface,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.lock_reset, size: 22, color: AppColors.primary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(s.forgotPasswordTitle)),
-          ],
-        ),
-        content: Text(
-          s.forgotPasswordBody,
-          style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.ok),
-          ),
-        ],
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
     );
   }
 

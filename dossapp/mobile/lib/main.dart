@@ -7,6 +7,7 @@ import 'services/locale_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/change_password_screen.dart';
+import 'screens/auth/onboarding_screen.dart';
 import 'screens/customer/home_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 import 'screens/coach/coach_home_screen.dart';
@@ -60,7 +61,9 @@ class AquaAthleticApp extends StatelessWidget {
           final Widget screen;
           if (!auth.isLoggedIn) {
             screen = const LoginScreen();
-          } else if ((auth.isCustomer || auth.isCoach) && auth.mustChangePassword) {
+          } else if (auth.isCustomer && auth.mustChangePassword) {
+            screen = const OnboardingScreen();
+          } else if (auth.isCoach && auth.mustChangePassword) {
             screen = const ChangePasswordScreen();
           } else if (auth.isCoach) {
             screen = const CoachHomeScreen();
