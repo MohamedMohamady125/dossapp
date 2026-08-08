@@ -472,10 +472,23 @@ async def list_athletes(
         select(BillOverride).where(BillOverride.branch_id == branch_id)
     )
     override_map = {o.athlete_number: o.amount for o in override_result.scalars().all()}
+
+    # Also check DB payments (covers mark-paid before Excel cache refreshes)
+    period = roster.period or current_billing_period()
+    db_paid_result = await db.execute(
+        select(Payment.athlete_number).where(
+            Payment.branch_id == branch_id,
+            Payment.period == period,
+            Payment.status == "paid",
+        )
+    )
+    db_paid_set = {row[0] for row in db_paid_result.all()}
+
     athletes_out = []
     for a in roster.athletes:
         bill = override_map.get(a.athlete_number) or resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
         bill_missing = None if bill else diagnose_missing_bill(catalog, a.type, a.step, a.segment, a.sessions)
+        excel_paid = bool(a.pay and a.receipt_no)
         athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
             branch_id=branch_id,
@@ -497,7 +510,7 @@ async def list_athletes(
             comment=a.comment,
             receipt_no=a.receipt_no,
             has_account=a.athlete_number in provisioned,
-            is_paid=bool(a.pay and a.receipt_no),
+            is_paid=excel_paid or a.athlete_number in db_paid_set,
             schedule=[
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
                 for s in a.schedule
@@ -533,6 +546,21 @@ async def get_athlete_detail(
     catalog = await load_branch_catalog(db, branch_id)
     bill_missing = None if bill else diagnose_missing_bill(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
 
+    # Check DB payments too (covers mark-paid before Excel cache refreshes)
+    excel_paid = bool(athlete.pay and athlete.receipt_no)
+    if not excel_paid:
+        period = roster.period or current_billing_period()
+        db_paid = await db.execute(
+            select(Payment.id).where(
+                Payment.branch_id == branch_id,
+                Payment.athlete_number == athlete_number,
+                Payment.period == period,
+                Payment.status == "paid",
+            ).limit(1)
+        )
+        if db_paid.scalar_one_or_none():
+            excel_paid = True
+
     return AthleteDetail(
         branch=roster.branch_name,
         branch_id=branch_id,
@@ -554,7 +582,7 @@ async def get_athlete_detail(
         comment=athlete.comment,
         receipt_no=athlete.receipt_no,
         has_account=has_account,
-        is_paid=bool(athlete.pay and athlete.receipt_no),
+        is_paid=excel_paid,
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
             for s in athlete.schedule

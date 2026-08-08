@@ -1,28 +1,40 @@
-"""Professional receipt PDF generation using ReportLab."""
+"""Receipt PDF generation using xhtml2pdf (pure Python, no system deps)."""
 
 import io
 from datetime import datetime, timezone
 
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from xhtml2pdf import pisa
 
 
-# Brand colors
-_BRAND_DARK = colors.HexColor("#0D1B2A")
-_BRAND_PRIMARY = colors.HexColor("#1565C0")
-_BRAND_ACCENT = colors.HexColor("#00897B")
-_BRAND_GOLD = colors.HexColor("#F9A825")
-_BRAND_LIGHT_BG = colors.HexColor("#F8FAFC")
-_BRAND_BORDER = colors.HexColor("#E2E8F0")
-_TEXT_PRIMARY = colors.HexColor("#1E293B")
-_TEXT_SECONDARY = colors.HexColor("#64748B")
-_TEXT_MUTED = colors.HexColor("#94A3B8")
-_SUCCESS = colors.HexColor("#16A34A")
-_SUCCESS_BG = colors.HexColor("#F0FDF4")
+# Arabic month names
+_AR_MONTHS = {
+    1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
+    5: "مايو", 6: "يونيو", 7: "يوليو", 8: "أغسطس",
+    9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
+}
+
+
+def _format_period(period: str) -> str:
+    """Convert '2026-08' to 'أغسطس 2026'."""
+    try:
+        parts = period.split("-")
+        return f"{_AR_MONTHS.get(int(parts[1]), period)} {parts[0]}"
+    except (IndexError, ValueError):
+        return period
+
+
+def _format_date(dt: datetime) -> str:
+    return f"{dt.day} {_AR_MONTHS.get(dt.month, str(dt.month))} {dt.year}"
+
+
+def _channel_label(channel: str) -> str:
+    mapping = {
+        "online": "Online — EasyKash",
+        "cash": "Cash",
+        "card": "Card",
+        "manual": "Manual",
+    }
+    return mapping.get(channel.lower(), channel)
 
 
 def generate_receipt_pdf(
@@ -39,273 +51,211 @@ def generate_receipt_pdf(
     paymob_transaction_id: str | None = None,
     issued_at: datetime | None = None,
 ) -> bytes:
-    """Generate a professional branded receipt PDF. Returns PDF bytes."""
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=A4,
-        rightMargin=25 * mm,
-        leftMargin=25 * mm,
-        topMargin=20 * mm,
-        bottomMargin=20 * mm,
-    )
-
-    styles = getSampleStyleSheet()
-
-    # ── Custom styles ──
-    brand_name_style = ParagraphStyle(
-        "BrandName", parent=styles["Heading1"],
-        fontSize=28, fontName="Helvetica-Bold",
-        alignment=TA_CENTER, spaceAfter=1 * mm,
-        textColor=_BRAND_DARK,
-    )
-    tagline_style = ParagraphStyle(
-        "Tagline", parent=styles["Normal"],
-        fontSize=10, alignment=TA_CENTER,
-        spaceAfter=1 * mm, textColor=_BRAND_PRIMARY,
-        fontName="Helvetica-Oblique",
-    )
-    branch_style = ParagraphStyle(
-        "Branch", parent=styles["Normal"],
-        fontSize=12, alignment=TA_CENTER,
-        spaceAfter=4 * mm, textColor=_TEXT_SECONDARY,
-        fontName="Helvetica-Bold",
-    )
-    receipt_title_style = ParagraphStyle(
-        "ReceiptTitle", parent=styles["Normal"],
-        fontSize=14, alignment=TA_CENTER,
-        spaceAfter=2 * mm, textColor=_BRAND_PRIMARY,
-        fontName="Helvetica-Bold",
-    )
-    label_style = ParagraphStyle(
-        "Label", parent=styles["Normal"],
-        fontSize=10, textColor=_TEXT_SECONDARY,
-        fontName="Helvetica",
-    )
-    value_style = ParagraphStyle(
-        "Value", parent=styles["Normal"],
-        fontSize=11, textColor=_TEXT_PRIMARY,
-        fontName="Helvetica-Bold",
-    )
-    amount_style = ParagraphStyle(
-        "Amount", parent=styles["Heading1"],
-        fontSize=32, alignment=TA_CENTER,
-        textColor=_SUCCESS, fontName="Helvetica-Bold",
-        spaceAfter=2 * mm,
-    )
-    amount_label_style = ParagraphStyle(
-        "AmountLabel", parent=styles["Normal"],
-        fontSize=10, alignment=TA_CENTER,
-        textColor=_TEXT_MUTED, fontName="Helvetica",
-        spaceAfter=4 * mm,
-    )
-    paid_badge_style = ParagraphStyle(
-        "PaidBadge", parent=styles["Heading1"],
-        fontSize=16, alignment=TA_CENTER,
-        textColor=_SUCCESS, fontName="Helvetica-Bold",
-    )
-    footer_style = ParagraphStyle(
-        "Footer", parent=styles["Normal"],
-        fontSize=9, alignment=TA_CENTER,
-        textColor=_TEXT_MUTED,
-    )
-    legal_style = ParagraphStyle(
-        "Legal", parent=styles["Normal"],
-        fontSize=8, alignment=TA_CENTER,
-        textColor=_TEXT_MUTED, fontName="Helvetica-Oblique",
-    )
-
+    """Generate a branded receipt PDF. Returns PDF bytes."""
     if issued_at is None:
         issued_at = datetime.now(timezone.utc)
 
-    elements = []
-
-    # ══════════════════════════════════════════════════════════
-    # HEADER — Brand identity
-    # ══════════════════════════════════════════════════════════
-    elements.append(Paragraph("AQUATHLETIC", brand_name_style))
-    elements.append(Paragraph("Swimming Academy", tagline_style))
-    elements.append(Paragraph(f"{branch_name} Branch", branch_style))
-
-    # Gold accent line
-    elements.append(HRFlowable(width="60%", thickness=2, color=_BRAND_GOLD, hAlign="CENTER"))
-    elements.append(Spacer(1, 6 * mm))
-
-    # ══════════════════════════════════════════════════════════
-    # RECEIPT HEADER
-    # ══════════════════════════════════════════════════════════
-    elements.append(Paragraph("PAYMENT RECEIPT", receipt_title_style))
-    elements.append(Spacer(1, 3 * mm))
-
-    # Receipt number + date row
-    meta_data = [
-        [
-            Paragraph(f"<b>Receipt No.</b>", label_style),
-            Paragraph(f"<b>Date</b>", ParagraphStyle("RightLabel", parent=label_style, alignment=TA_RIGHT)),
-        ],
-        [
-            Paragraph(f"{receipt_number}", value_style),
-            Paragraph(
-                f"{issued_at.strftime('%d %b %Y, %I:%M %p')}",
-                ParagraphStyle("RightValue", parent=value_style, alignment=TA_RIGHT),
-            ),
-        ],
-    ]
-    meta_table = Table(meta_data, colWidths=["50%", "50%"])
-    meta_table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
-        ("TOPPADDING", (0, 1), (-1, 1), 0),
-    ]))
-    elements.append(meta_table)
-    elements.append(Spacer(1, 5 * mm))
-
-    # ══════════════════════════════════════════════════════════
-    # AMOUNT — Big and prominent
-    # ══════════════════════════════════════════════════════════
-    # Paid badge + amount in a styled box
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=_BRAND_BORDER))
-    elements.append(Spacer(1, 5 * mm))
-
-    elements.append(Paragraph("✓ PAID", paid_badge_style))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(f"{amount_paid} EGP", amount_style))
-    elements.append(Paragraph(f"Payment Method: {payment_channel}", amount_label_style))
-
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=_BRAND_BORDER))
-    elements.append(Spacer(1, 5 * mm))
-
-    # ══════════════════════════════════════════════════════════
-    # DETAILS TABLE
-    # ══════════════════════════════════════════════════════════
-    detail_rows = [
-        [Paragraph("ATHLETE DETAILS", ParagraphStyle(
-            "SectionHead", parent=label_style,
-            fontName="Helvetica-Bold", fontSize=9, textColor=_BRAND_PRIMARY,
-        )), ""],
-    ]
-    detail_rows.append([
-        Paragraph("Name", label_style),
-        Paragraph(athlete_name, value_style),
-    ])
-    detail_rows.append([
-        Paragraph("Athlete No.", label_style),
-        Paragraph(f"M{athlete_number}", value_style),
-    ])
-    detail_rows.append([
-        Paragraph("Branch", label_style),
-        Paragraph(branch_name, value_style),
-    ])
+    detail_parts = []
     if level:
-        detail_rows.append([
-            Paragraph("Level", label_style),
-            Paragraph(level, value_style),
-        ])
+        detail_parts.append(f"Level: {level}")
     if athlete_type:
-        detail_rows.append([
-            Paragraph("Training Type", label_style),
-            Paragraph(athlete_type, value_style),
-        ])
-    if phone:
-        detail_rows.append([
-            Paragraph("Phone", label_style),
-            Paragraph(phone, value_style),
-        ])
+        detail_parts.append(f"Type: {athlete_type}")
+    detail_line = " · ".join(detail_parts) if detail_parts else ""
 
-    # Separator row
-    detail_rows.append(["", ""])
+    channel = _channel_label(payment_channel)
+    txn_line = f'<tr><td class="label">Transaction ID</td><td class="value mono">{paymob_transaction_id}</td></tr>' if paymob_transaction_id else ""
 
-    detail_rows.append([
-        Paragraph("PAYMENT DETAILS", ParagraphStyle(
-            "SectionHead2", parent=label_style,
-            fontName="Helvetica-Bold", fontSize=9, textColor=_BRAND_PRIMARY,
-        )), "",
-    ])
-    detail_rows.append([
-        Paragraph("Period", label_style),
-        Paragraph(period, value_style),
-    ])
-    detail_rows.append([
-        Paragraph("Amount Paid", label_style),
-        Paragraph(f"{amount_paid} EGP", ParagraphStyle(
-            "AmountValue", parent=value_style, textColor=_SUCCESS,
-        )),
-    ])
-    detail_rows.append([
-        Paragraph("Payment Method", label_style),
-        Paragraph(payment_channel, value_style),
-    ])
-    if paymob_transaction_id:
-        detail_rows.append([
-            Paragraph("Transaction ID", label_style),
-            Paragraph(paymob_transaction_id, ParagraphStyle(
-                "TxnId", parent=value_style, fontSize=9, fontName="Courier",
-            )),
-        ])
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {{
+    size: A4;
+    margin: 20mm 25mm;
+  }}
+  body {{
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1E293B;
+    font-size: 11pt;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+  }}
+  .header {{
+    text-align: center;
+    border-bottom: 3px solid #F9A825;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }}
+  .brand {{
+    font-size: 28pt;
+    font-weight: bold;
+    color: #0D1B2A;
+    letter-spacing: 2px;
+    margin: 0;
+  }}
+  .tagline {{
+    font-size: 10pt;
+    color: #1565C0;
+    font-style: italic;
+    margin: 2px 0;
+  }}
+  .branch {{
+    font-size: 12pt;
+    color: #64748B;
+    font-weight: bold;
+    margin: 4px 0 0;
+  }}
+  .receipt-title {{
+    text-align: center;
+    font-size: 14pt;
+    font-weight: bold;
+    color: #1565C0;
+    margin: 10px 0 5px;
+  }}
+  .meta-table {{
+    width: 100%;
+    margin-bottom: 15px;
+  }}
+  .meta-table td {{
+    padding: 3px 0;
+  }}
+  .meta-right {{
+    text-align: right;
+  }}
+  .divider {{
+    border: none;
+    border-top: 1px solid #E2E8F0;
+    margin: 12px 0;
+  }}
+  .paid-box {{
+    text-align: center;
+    padding: 15px 0;
+  }}
+  .paid-badge {{
+    font-size: 16pt;
+    font-weight: bold;
+    color: #16A34A;
+  }}
+  .amount {{
+    font-size: 32pt;
+    font-weight: bold;
+    color: #16A34A;
+    margin: 5px 0;
+  }}
+  .method {{
+    font-size: 10pt;
+    color: #94A3B8;
+  }}
+  .details {{
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }}
+  .details .section-head {{
+    background-color: #F8FAFC;
+    font-size: 9pt;
+    font-weight: bold;
+    color: #1565C0;
+    padding: 7px 10px;
+    border-top: 1px solid #1565C0;
+  }}
+  .details .label {{
+    width: 35%;
+    padding: 7px 10px;
+    font-size: 10pt;
+    color: #64748B;
+    border-bottom: 1px solid #E2E8F0;
+  }}
+  .details .value {{
+    padding: 7px 10px;
+    font-weight: bold;
+    border-bottom: 1px solid #E2E8F0;
+  }}
+  .details .value.success {{
+    color: #16A34A;
+  }}
+  .details .value.mono {{
+    font-family: Courier;
+    font-size: 9pt;
+  }}
+  .footer {{
+    text-align: center;
+    margin-top: 30px;
+    padding-top: 10px;
+    border-top: 1px solid #E2E8F0;
+  }}
+  .footer .thanks {{
+    font-size: 11pt;
+    font-weight: bold;
+    color: #1565C0;
+    margin-bottom: 4px;
+  }}
+  .footer .contact {{
+    font-size: 9pt;
+    color: #94A3B8;
+  }}
+  .footer .legal {{
+    font-size: 8pt;
+    color: #94A3B8;
+    font-style: italic;
+    margin-top: 10px;
+  }}
+</style>
+</head>
+<body>
 
-    detail_table = Table(detail_rows, colWidths=[45 * mm, 115 * mm])
-    detail_table.setStyle(TableStyle([
-        # Section headers
-        ("SPAN", (0, 0), (1, 0)),
-        ("BACKGROUND", (0, 0), (1, 0), _BRAND_LIGHT_BG),
-        # Data rows
-        ("FONTSIZE", (0, 0), (-1, -1), 11),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-        # Borders
-        ("LINEBELOW", (0, 0), (-1, -2), 0.5, _BRAND_BORDER),
-        ("LINEABOVE", (0, 0), (-1, 0), 1, _BRAND_PRIMARY),
-        ("LINEBELOW", (0, -1), (-1, -1), 1, _BRAND_PRIMARY),
-        # Alternating rows
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, _BRAND_LIGHT_BG]),
-    ]))
+<div class="header">
+  <p class="brand">AQUATHLETIC</p>
+  <p class="tagline">Swimming Academy</p>
+  <p class="branch">{branch_name} Branch</p>
+</div>
 
-    # Find and style separator + payment section header rows
-    sep_idx = len(detail_rows) - 5  # approximate separator row
-    for i, row in enumerate(detail_rows):
-        if row == ["", ""]:
-            detail_table.setStyle(TableStyle([
-                ("SPAN", (0, i), (1, i)),
-                ("TOPPADDING", (0, i), (-1, i), 2),
-                ("BOTTOMPADDING", (0, i), (-1, i), 2),
-                ("LINEBELOW", (0, i), (-1, i), 0, colors.white),
-            ]))
-        if isinstance(row[0], Paragraph) and "PAYMENT DETAILS" in str(row[0]):
-            detail_table.setStyle(TableStyle([
-                ("SPAN", (0, i), (1, i)),
-                ("BACKGROUND", (0, i), (1, i), _BRAND_LIGHT_BG),
-            ]))
+<p class="receipt-title">PAYMENT RECEIPT</p>
 
-    elements.append(detail_table)
+<table class="meta-table">
+  <tr>
+    <td><b>Receipt No.</b> {receipt_number}</td>
+    <td class="meta-right"><b>Date:</b> {_format_date(issued_at)}</td>
+  </tr>
+</table>
 
-    # ══════════════════════════════════════════════════════════
-    # FOOTER
-    # ══════════════════════════════════════════════════════════
-    elements.append(Spacer(1, 15 * mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=_BRAND_BORDER))
-    elements.append(Spacer(1, 4 * mm))
+<hr class="divider">
 
-    elements.append(Paragraph(
-        "Thank you for choosing Aquathletic Swimming Academy!",
-        ParagraphStyle("ThankYou", parent=footer_style, fontSize=11,
-                       textColor=_BRAND_PRIMARY, fontName="Helvetica-Bold"),
-    ))
-    elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph(
-        "For inquiries, please contact your branch reception.",
-        footer_style,
-    ))
-    elements.append(Spacer(1, 6 * mm))
-    elements.append(Paragraph(
-        "This is an electronically generated receipt and does not require a signature.",
-        legal_style,
-    ))
-    elements.append(Paragraph(
-        f"Receipt ID: {receipt_number} | Generated: {issued_at.strftime('%Y-%m-%d %H:%M UTC')}",
-        legal_style,
-    ))
+<div class="paid-box">
+  <div class="paid-badge">&#10003; PAID</div>
+  <div class="amount">{amount_paid} EGP</div>
+  <div class="method">Payment Method: {channel}</div>
+</div>
 
-    doc.build(elements)
+<hr class="divider">
+
+<table class="details">
+  <tr><td colspan="2" class="section-head">ATHLETE DETAILS</td></tr>
+  <tr><td class="label">Name</td><td class="value">{athlete_name}</td></tr>
+  <tr><td class="label">Athlete No.</td><td class="value">M{athlete_number}</td></tr>
+  <tr><td class="label">Branch</td><td class="value">{branch_name}</td></tr>
+  {"<tr><td class='label'>Level</td><td class='value'>" + level + "</td></tr>" if level else ""}
+  {"<tr><td class='label'>Training Type</td><td class='value'>" + athlete_type + "</td></tr>" if athlete_type else ""}
+  {"<tr><td class='label'>Phone</td><td class='value'>" + (phone or "") + "</td></tr>" if phone else ""}
+  <tr><td colspan="2" class="section-head">PAYMENT DETAILS</td></tr>
+  <tr><td class="label">Period</td><td class="value">{_format_period(period)}</td></tr>
+  <tr><td class="label">Amount Paid</td><td class="value success">{amount_paid} EGP</td></tr>
+  <tr><td class="label">Payment Method</td><td class="value">{channel}</td></tr>
+  {txn_line}
+</table>
+
+<div class="footer">
+  <p class="thanks">Thank you for choosing Aquathletic Swimming Academy!</p>
+  <p class="contact">For inquiries, please contact your branch reception.</p>
+  <p class="legal">This is an electronically generated receipt and does not require a signature.</p>
+  <p class="legal">Receipt ID: {receipt_number} | Generated: {issued_at.strftime('%Y-%m-%d %H:%M UTC')}</p>
+</div>
+
+</body>
+</html>"""
+
+    buffer = io.BytesIO()
+    pisa.CreatePDF(html, dest=buffer)
     return buffer.getvalue()
