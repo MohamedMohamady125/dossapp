@@ -674,10 +674,28 @@ async def reprovision_account(
     if not account:
         raise HTTPException(status_code=404, detail="No account exists for this athlete")
 
+    was_suspended = account.status == "suspended"
     temp_password = generate_temp_password()
     account.password_hash = hash_password(temp_password)
     account.must_change_password = True
+    account.status = "active"
     db.add(account)
+
+    # If account was suspended, create an approved reinstatement so
+    # the auto-suspend check in /bill won't re-suspend immediately
+    if was_suspended:
+        from app.models.reinstatement_request import ReinstatementRequest
+        from datetime import datetime, timezone
+        db.add(ReinstatementRequest(
+            account_id=account.id,
+            branch_id=branch_id,
+            athlete_number=athlete_number,
+            status="approved",
+            message="Admin reprovisioned account",
+            admin_note="Auto-approved via reprovision",
+            reviewed_by=admin.id,
+            reviewed_at=datetime.now(timezone.utc),
+        ))
 
     sent_to = None
     if req.delivery_method in ("auto_send", "both"):

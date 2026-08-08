@@ -453,6 +453,15 @@ class _HomeTabState extends State<_HomeTab> {
                 title: 'Checking Availability',
                 subtitle: 'Your request has been submitted. The system is checking for available spots in your class. You\'ll be notified once confirmed.',
               ),
+            ] else if (r.isApproved) ...[
+              _reinstatementStatusCard(
+                icon: Icons.check_circle_rounded,
+                iconColor: AppColors.success,
+                bgColor: AppColors.success.withValues(alpha: 0.06),
+                borderColor: AppColors.success.withValues(alpha: 0.3),
+                title: 'Spot Confirmed',
+                subtitle: r.adminNote ?? 'Your spot has been confirmed. Please complete your payment to resume training.',
+              ),
             ] else if (r.isDeclined) ...[
               _reinstatementStatusCard(
                 icon: Icons.event_busy_rounded,
