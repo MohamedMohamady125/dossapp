@@ -1,19 +1,29 @@
 """Receipt PDF generation using weasyprint with Arabic RTL template."""
 
 import io
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from weasyprint import HTML
-
+logger = logging.getLogger(__name__)
 
 _DIR = Path(__file__).parent
+_TEMPLATE: str | None = None
+_LOGO_B64: str | None = None
 
-# Load template once
-_TEMPLATE = (_DIR / "receipt_template.html").read_text(encoding="utf-8")
 
-# Load logo base64 once
-_LOGO_B64 = (_DIR / "logo.b64").read_text(encoding="utf-8").strip()
+def _get_template() -> str:
+    global _TEMPLATE
+    if _TEMPLATE is None:
+        _TEMPLATE = (_DIR / "receipt_template.html").read_text(encoding="utf-8")
+    return _TEMPLATE
+
+
+def _get_logo() -> str:
+    global _LOGO_B64
+    if _LOGO_B64 is None:
+        _LOGO_B64 = (_DIR / "logo.b64").read_text(encoding="utf-8").strip()
+    return _LOGO_B64
 
 _MONTHS_AR = {
     1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل",
@@ -99,8 +109,8 @@ def generate_receipt_pdf(
     detail_parts.append(branch_name)
     line_detail = " · ".join(detail_parts)
 
-    html = _TEMPLATE.format(
-        logo_b64=_LOGO_B64,
+    html = _get_template().format(
+        logo_b64=_get_logo(),
         receipt_number=receipt_number,
         issued_at=_format_date_ar(issued_at),
         swimmer_name=athlete_name,
@@ -116,6 +126,7 @@ def generate_receipt_pdf(
         contact_line="aquathletic.eg",
     )
 
+    from weasyprint import HTML
     buffer = io.BytesIO()
     HTML(string=html).write_pdf(buffer)
     return buffer.getvalue()
