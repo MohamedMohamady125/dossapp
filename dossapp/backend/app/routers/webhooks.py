@@ -177,7 +177,9 @@ async def _process_callback(payload: dict, skip_signature: bool = False) -> dict
             if drive_file_id:
                 import asyncio as _aio
                 from app.services.drive_writer import update_athlete_payment
-                pay_str = str(amount_egp).rstrip("0").rstrip(".")
+                # Format: 200.00 → "200", 1250.50 → "1250.5" (only strip decimal zeros)
+                raw = str(amount_egp)
+                pay_str = raw.rstrip("0").rstrip(".") if "." in raw else raw
                 await _aio.to_thread(
                     update_athlete_payment,
                     drive_file_id,

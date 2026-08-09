@@ -841,8 +841,9 @@ async def mark_athlete_paid(
         receipt_number = receipt.receipt_number
         receipt_id = receipt.id
 
-        # Format amount as clean string (1250.00 → "1250")
-        pay_str = str(bill_amount).rstrip("0").rstrip(".")
+        # Format amount as clean string (1250.00 → "1250", 200.00 → "200")
+        raw = str(bill_amount)
+        pay_str = raw.rstrip("0").rstrip(".") if "." in raw else raw
 
         # Write Pay + Receipt back to the Google Drive Excel sheet (best-effort)
         excel_written = False
