@@ -22,4 +22,4 @@ apscheduler==3.10.4
 python-dotenv==1.0.1
 tenacity==8.4.1
 phonenumbers==8.13.39
-resend==2.5.0
+resend==2.5.1
