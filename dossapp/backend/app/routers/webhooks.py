@@ -77,9 +77,9 @@ async def _process_callback(payload: dict) -> dict:
         logger.info(f"Easykash callback: non-success status '{status}' — ignored")
         return {"status": "ignored", "reason": f"status={status or 'missing'}"}
 
-    # ── Parse customerReference: AQUA-{branch_id}-{athlete_number}-{period} ──
+    # ── Parse customerReference: AQUA-{branch_id}-{athlete_number}-{period}[-{timestamp}] ──
     customer_ref = _get_ci(payload, "customerReference", "CustomerReference")
-    match = re.match(r"AQUA-(\d+)-(\d+)-(.+)", customer_ref)
+    match = re.match(r"AQUA-(\d+)-(\d+)-(\d{4}-\d{2})", customer_ref)
     if not match:
         logger.error(f"Cannot parse Easykash customerReference: {customer_ref!r}")
         return {"status": "error", "reason": "invalid customerReference format"}
