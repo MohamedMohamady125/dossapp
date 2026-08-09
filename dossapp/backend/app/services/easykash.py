@@ -9,6 +9,7 @@ support are a config change, not a code change.
 import hashlib
 import hmac
 import logging
+import time
 from decimal import Decimal
 from typing import Optional
 
@@ -60,7 +61,7 @@ async def create_checkout(
         "email": email or "customer@aquaathletic.com",
         "mobile": phone or "+201000000000",
         "redirectUrl": f"{settings.public_base_url}/pay/success",
-        "customerReference": f"AQUA-{branch_id}-{athlete_number}-{period}",
+        "customerReference": f"AQUA-{branch_id}-{athlete_number}-{period}-{int(time.time())}",
     }
 
     try:
