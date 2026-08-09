@@ -27,10 +27,12 @@ class AuthProvider extends ChangeNotifier {
     if (hasToken) {
       final role = await _storage.read(key: 'role');
       final branchId = await _storage.read(key: 'branch_id');
+      final mustChange = await _storage.read(key: 'must_change_password');
       if (role != null) {
         _isLoggedIn = true;
         _role = role;
         _branchId = branchId != null ? int.tryParse(branchId) : null;
+        _mustChangePassword = mustChange == 'true';
         notifyListeners();
         if (_role == 'customer') {
           NotificationService.registerToken();
@@ -58,6 +60,7 @@ class AuthProvider extends ChangeNotifier {
     if (_branchId != null) {
       await _storage.write(key: 'branch_id', value: _branchId.toString());
     }
+    await _storage.write(key: 'must_change_password', value: _mustChangePassword.toString());
     notifyListeners();
     NotificationService.registerToken();
   }
@@ -90,12 +93,14 @@ class AuthProvider extends ChangeNotifier {
       await ApiService.changePassword(newPassword);
     }
     _mustChangePassword = false;
+    await _storage.write(key: 'must_change_password', value: 'false');
     notifyListeners();
   }
 
   Future<void> completeOnboarding(String email, String code, String newPassword) async {
     await ApiService.completeOnboarding(email, code, newPassword);
     _mustChangePassword = false;
+    await _storage.write(key: 'must_change_password', value: 'false');
     notifyListeners();
   }
 

@@ -114,9 +114,9 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     except (ValueError, TypeError):
         excel_paid = False
 
-    # Also check DB for online payments (EasyKash) not yet reflected in Excel
+    # Also check DB for any payments (online via EasyKash, or admin-marked cash/card)
     receipt_number = None
-    online_paid = False
+    db_paid = False
     if not excel_paid:
         result = await db.execute(
             select(Payment).where(
@@ -124,18 +124,17 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
                 Payment.athlete_number == account.athlete_number,
                 Payment.period == period,
                 Payment.status == "paid",
-                Payment.source == "easykash",
             )
         )
         payment = result.scalars().first()
         if payment:
-            online_paid = True
+            db_paid = True
             receipt_result = await db.execute(
                 select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
             )
             receipt_number = receipt_result.scalar_one_or_none()
 
-    is_paid = excel_paid or online_paid
+    is_paid = excel_paid or db_paid
 
     # Auto-suspend if payment window closed and athlete hasn't paid
     # But skip if admin approved a reinstatement this month (don't re-suspend)
