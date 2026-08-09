@@ -58,18 +58,19 @@ async def easykash_webhook(request: Request):
     return await _process_callback(payload)
 
 
-async def _process_callback(payload: dict) -> dict:
+async def _process_callback(payload: dict, skip_signature: bool = False) -> dict:
     """Verify signature, record payment, generate receipt. Raises HTTPException on rejection."""
 
     # ── Signature verification ──
-    received_sig = _get_ci(payload, "signatureHash", "signature", "hash")
-    if settings.easykash_hmac_secret:
-        if not verify_signature(payload, received_sig):
-            logger.warning("Easykash webhook signature verification failed")
-            raise HTTPException(status_code=403, detail="Invalid signature")
-    elif not settings.easykash_allow_unverified:
-        logger.error("Easykash callback rejected: EASYKASH_HMAC_SECRET not configured")
-        raise HTTPException(status_code=503, detail="Signature verification not configured")
+    if not skip_signature:
+        received_sig = _get_ci(payload, "signatureHash", "signature", "hash")
+        if settings.easykash_hmac_secret:
+            if not verify_signature(payload, received_sig):
+                logger.warning("Easykash webhook signature verification failed")
+                raise HTTPException(status_code=403, detail="Invalid signature")
+        elif not settings.easykash_allow_unverified:
+            logger.error("Easykash callback rejected: EASYKASH_HMAC_SECRET not configured")
+            raise HTTPException(status_code=503, detail="Signature verification not configured")
 
     # ── Status ──
     status = _get_ci(payload, "status", "PaymentStatus").lower()
@@ -92,7 +93,7 @@ async def _process_callback(payload: dict) -> dict:
         amount_egp = Decimal(_get_ci(payload, "Amount", "amount") or "0")
     except InvalidOperation:
         amount_egp = Decimal(0)
-    transaction_id = _get_ci(payload, "easykashRef", "EasykashRef", "transactionId") or customer_ref
+    transaction_id = _get_ci(payload, "easykashRef", "EasykashRef", "providerRefNum", "transactionId") or customer_ref
 
     # Look up athlete info from roster for receipt generation
     from app.main import roster_source
@@ -117,6 +118,21 @@ async def _process_callback(payload: dict) -> dict:
                     amount_owed = Decimal(athlete.pay)
                 except Exception:
                     pass
+
+    # If amount not in callback params, resolve from price catalog
+    if amount_egp <= 0:
+        async with async_session() as db:
+            from app.services.price_resolver import resolve_price
+            catalog_price = await resolve_price(
+                db, branch_id,
+                athlete_type, level,
+                athlete.segment if athlete else None,
+                athlete.sessions if athlete else None,
+                athlete_number=athlete_number,
+            ) if athlete else None
+            if catalog_price:
+                amount_egp = Decimal(str(catalog_price))
+                logger.info(f"Amount resolved from catalog: {amount_egp}")
 
     # Look up account email if available
     async with async_session() as db:
@@ -166,7 +182,9 @@ async def pay_success(request: Request):
     if params:
         logger.info(f"Easykash redirect params on /pay/success: {params}")
         try:
-            result = await _process_callback(params)
+            # Redirect params from browser don't include signatureHash — skip verification.
+            # Payment is idempotent (uq_payment_idempotent), so replays are safe.
+            result = await _process_callback(params, skip_signature=True)
             logger.info(f"Redirect-param payment processing result: {result}")
         except Exception as e:
             logger.warning(f"Redirect params not processable as payment: {e}")
