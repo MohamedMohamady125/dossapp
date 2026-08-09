@@ -205,39 +205,81 @@ async def pay_success(request: Request):
     """Post-payment landing page (Easykash redirects the customer here).
 
     Easykash may append the payment result as query params on the redirect —
-    process them like a callback (best effort; the page renders regardless).
+    check the status and show the appropriate message.
     """
     params = dict(request.query_params)
+    payment_ok = False
+
     if params:
         logger.info(f"Easykash redirect params on /pay/success: {params}")
-        try:
-            # Redirect params from browser don't include signatureHash — skip verification.
-            # Payment is idempotent (uq_payment_idempotent), so replays are safe.
-            result = await _process_callback(params, skip_signature=True)
-            logger.info(f"Redirect-param payment processing result: {result}")
-        except Exception as e:
-            logger.warning(f"Redirect params not processable as payment: {e}")
+
+        # Check payment status from redirect params
+        status = _get_ci(params, "status", "PaymentStatus").lower()
+        if status in SUCCESS_STATUSES:
+            try:
+                result = await _process_callback(params, skip_signature=True)
+                logger.info(f"Redirect-param payment processing result: {result}")
+                payment_ok = result.get("status") in ("ok", "duplicate")
+            except Exception as e:
+                logger.warning(f"Redirect params not processable as payment: {e}")
+        else:
+            logger.info(f"Easykash redirect with non-success status: {status}")
+
+    if payment_ok:
+        return _success_page()
+    else:
+        return _failure_page()
+
+
+def _success_page() -> str:
     return """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Payment Received — Aqua Athletic</title>
+<title>Payment Received — Aquathletic</title>
 <style>
   body { font-family: -apple-system, sans-serif; background: #f5f7fb; display: flex;
          align-items: center; justify-content: center; height: 100vh; margin: 0; }
   .card { background: #fff; border-radius: 16px; padding: 40px 32px; text-align: center;
           box-shadow: 0 4px 24px rgba(0,0,0,.08); max-width: 340px; }
-  .check { font-size: 56px; }
+  .icon { font-size: 56px; }
   h1 { font-size: 20px; color: #1a237e; margin: 12px 0 4px; }
   p { color: #666; font-size: 14px; }
 </style>
 </head>
 <body>
   <div class="card">
-    <div class="check">&#9989;</div>
+    <div class="icon">&#9989;</div>
     <h1>Payment Received</h1>
-    <p>Thank you! Your receipt will appear in the Aqua Athletic app shortly.<br>You can close this page and return to the app.</p>
+    <p>Thank you! Your receipt will appear in the Aquathletic app shortly.<br>You can close this page and return to the app.</p>
+  </div>
+</body>
+</html>"""
+
+
+def _failure_page() -> str:
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Payment Failed — Aquathletic</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #f5f7fb; display: flex;
+         align-items: center; justify-content: center; height: 100vh; margin: 0; }
+  .card { background: #fff; border-radius: 16px; padding: 40px 32px; text-align: center;
+          box-shadow: 0 4px 24px rgba(0,0,0,.08); max-width: 340px; }
+  .icon { font-size: 56px; }
+  h1 { font-size: 20px; color: #ae1800; margin: 12px 0 4px; }
+  p { color: #666; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">&#10060;</div>
+    <h1>Payment Failed</h1>
+    <p>Your payment was not completed. Please return to the app and try again.<br>If the issue persists, contact the academy.</p>
   </div>
 </body>
 </html>"""
