@@ -150,9 +150,9 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
                 ReinstatementRequest.account_id == account.id,
                 ReinstatementRequest.status == "approved",
                 ReinstatementRequest.reviewed_at >= month_start,
-            )
+            ).limit(1)
         )
-        if not reinstatement.scalar_one_or_none():
+        if not reinstatement.scalars().first():
             account.status = "suspended"
             db.add(account)
             await db.flush()
