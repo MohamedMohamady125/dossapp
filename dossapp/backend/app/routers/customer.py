@@ -1,5 +1,6 @@
 """Customer endpoints — profile, bill, pay, receipts."""
 
+import logging
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -7,6 +8,8 @@ from typing import Optional
 from app.utils.billing import current_billing_period
 
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,6 +96,7 @@ def _is_in_payment_window() -> bool:
 
 @router.get("/bill", response_model=BillResponse)
 async def get_bill(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
+    logger.info(f"GET /bill for account_id={account.id} athlete_number={account.athlete_number} branch_id={account.branch_id} status={account.status}")
     source = _get_roster_source()
     roster = await source.get_branch_roster(account.branch_id)
 
