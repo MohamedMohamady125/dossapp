@@ -401,3 +401,78 @@ async def health():
     return {"status": "ok", "service": "aqua-athletic"}
 
 
+from fastapi.responses import HTMLResponse
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_policy():
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aquathletic - Privacy Policy</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6; }
+h1 { color: #1565C0; }
+h2 { color: #1976D2; margin-top: 24px; }
+p, li { font-size: 15px; }
+.updated { color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Aquathletic Privacy Policy</h1>
+<p class="updated">Last updated: August 9, 2026</p>
+
+<h2>1. Information We Collect</h2>
+<p>We collect the following information when you use the Aquathletic app:</p>
+<ul>
+<li><strong>Account Information:</strong> Name, email address, phone number, and login credentials provided during registration.</li>
+<li><strong>Athlete Data:</strong> Swimmer name, age, date of birth, gender, class type, level, attendance records, and branch enrollment details.</li>
+<li><strong>Payment Information:</strong> Payment status, billing amounts, receipt records, and payment method (online, cash, or card). We do not store credit card numbers directly — online payments are processed by our third-party payment provider (EasyKash).</li>
+<li><strong>Device Information:</strong> Device tokens for push notifications (Firebase Cloud Messaging).</li>
+</ul>
+
+<h2>2. How We Use Your Information</h2>
+<ul>
+<li>To manage your swimming academy enrollment and attendance.</li>
+<li>To generate and deliver payment bills and receipts.</li>
+<li>To send push notifications about payment reminders, schedule changes, and academy announcements.</li>
+<li>To send verification emails for account security.</li>
+<li>To provide coaches and administrators with class management tools.</li>
+</ul>
+
+<h2>3. Information Sharing</h2>
+<p>We do not sell your personal information. We share data only with:</p>
+<ul>
+<li><strong>Payment Processors:</strong> EasyKash for processing online payments.</li>
+<li><strong>Email Services:</strong> Resend for sending transactional emails (verification codes, receipts).</li>
+<li><strong>Push Notification Services:</strong> Firebase Cloud Messaging for delivering notifications.</li>
+<li><strong>Academy Staff:</strong> Coaches and administrators can view athlete enrollment, attendance, and payment status relevant to their branch.</li>
+</ul>
+
+<h2>4. Data Security</h2>
+<p>We use industry-standard security measures including encrypted passwords (Argon2), secure token-based authentication (JWT), and HTTPS for all data transmission.</p>
+
+<h2>5. Data Retention</h2>
+<p>We retain your data for as long as your account is active. Attendance and payment records are retained for academy record-keeping purposes. You may request account deletion by contacting the academy administration.</p>
+
+<h2>6. Children's Privacy</h2>
+<p>Our app is used by parents/guardians to manage their children's swimming academy enrollment. Parent accounts manage athlete profiles on behalf of minors. We do not knowingly collect data directly from children under 13.</p>
+
+<h2>7. Your Rights</h2>
+<ul>
+<li>Access your personal data through the app.</li>
+<li>Request correction of inaccurate data by contacting administration.</li>
+<li>Request deletion of your account and associated data.</li>
+</ul>
+
+<h2>8. Changes to This Policy</h2>
+<p>We may update this privacy policy from time to time. Changes will be reflected on this page with an updated date.</p>
+
+<h2>9. Contact Us</h2>
+<p>If you have questions about this privacy policy, contact us at:<br>
+<strong>Email:</strong> noreply@aquathletic.app</p>
+</body>
+</html>"""
+
+
