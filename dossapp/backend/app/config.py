@@ -37,12 +37,13 @@ class Settings(BaseSettings):
     sms_api_key: str = ""
     sms_sender_id: str = "AQUA"
 
-    email_provider: str = "stub"
+    email_provider: str = "stub"  # "stub" | "smtp" | "resend"
     email_smtp_host: str = ""
     email_smtp_port: int = 587
     email_smtp_user: str = ""
     email_smtp_password: str = ""
     email_from_address: str = "noreply@aquaathletic.com"
+    resend_api_key: str = ""
 
     whatsapp_provider: str = "stub"
     whatsapp_api_key: str = ""

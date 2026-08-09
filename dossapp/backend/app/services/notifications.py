@@ -90,8 +90,48 @@ class SMTPEmailProvider(NotificationProvider):
         return False
 
 
+class ResendProvider(NotificationProvider):
+    """Email via Resend API. SMS and WhatsApp fall back to stub."""
+
+    async def send_sms(self, to: str, body: str) -> bool:
+        logger.warning(f"Resend provider cannot send SMS to {to}")
+        return False
+
+    async def send_email(self, to: str, subject: str, body: str, attachment: Optional[bytes] = None) -> bool:
+        import resend
+
+        try:
+            resend.api_key = settings.resend_api_key
+
+            params: dict = {
+                "from": settings.email_from_address,
+                "to": [to],
+                "subject": subject,
+                "html": body,
+            }
+
+            if attachment:
+                import base64
+                params["attachments"] = [{
+                    "filename": "receipt.pdf",
+                    "content": list(attachment),
+                }]
+
+            await asyncio.to_thread(resend.Emails.send, params)
+            return True
+        except Exception as e:
+            logger.error(f"Resend email failed to {to}: {e}")
+            return False
+
+    async def send_whatsapp(self, to: str, body: str, attachment: Optional[bytes] = None) -> bool:
+        logger.warning(f"Resend provider cannot send WhatsApp to {to}")
+        return False
+
+
 def get_notification_provider() -> NotificationProvider:
     """Factory — returns the configured provider."""
+    if settings.email_provider == "resend" and settings.resend_api_key:
+        return ResendProvider()
     if settings.email_provider == "smtp" and settings.email_smtp_host:
         return SMTPEmailProvider()
     return StubProvider()
