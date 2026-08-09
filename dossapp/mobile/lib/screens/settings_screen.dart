@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_provider.dart';
 import '../services/locale_provider.dart';
 import '../services/api_service.dart';
@@ -83,6 +84,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _settingsCard([
             _settingsTile(
+              icon: Icons.privacy_tip_outlined,
+              title: s.privacyPolicy,
+              onTap: () => launchUrl(
+                Uri.parse('https://dossapp-production.up.railway.app/privacy'),
+                mode: LaunchMode.externalApplication,
+              ),
+            ),
+            _settingsTile(
               icon: Icons.info_outline,
               title: s.appVersion,
               trailing: const Text(
@@ -94,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Logout ──
+          // ── Danger Zone ──
           _settingsCard([
             _settingsTile(
               icon: Icons.logout,
@@ -103,6 +112,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               titleColor: AppColors.error,
               onTap: () => _showLogoutConfirm(context, auth, s),
             ),
+            if (auth.isCustomer)
+              _settingsTile(
+                icon: Icons.delete_forever_outlined,
+                title: s.deleteAccount,
+                iconColor: AppColors.error,
+                titleColor: AppColors.error,
+                onTap: () => _showDeleteAccountDialog(context, auth, s),
+              ),
           ]),
 
           const SizedBox(height: 40),
@@ -213,6 +230,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
         emailCtrl: emailCtrl,
         s: s,
         parentContext: context,
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context, AuthProvider auth, S s) {
+    final passwordCtrl = TextEditingController();
+    bool loading = false;
+    String? error;
+    bool obscure = true;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40, height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: const BoxDecoration(
+                      color: AppColors.errorLight,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.delete_forever_rounded, size: 32, color: AppColors.error),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    s.deleteAccount,
+                    style: GoogleFonts.barlowCondensed(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.error,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    s.deleteAccountConfirm,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: s.enterPasswordToConfirm,
+                      prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                      suffixIcon: IconButton(
+                        icon: Icon(obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                        onPressed: () => setSheetState(() => obscure = !obscure),
+                      ),
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.errorLight,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, size: 18, color: AppColors.error),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(error!, style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: loading ? null : () async {
+                        if (passwordCtrl.text.isEmpty) {
+                          setSheetState(() => error = s.required);
+                          return;
+                        }
+                        setSheetState(() { loading = true; error = null; });
+                        try {
+                          await ApiService.deleteAccount(passwordCtrl.text);
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            Navigator.pop(context);
+                            auth.logout();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(s.deleteAccountSuccess)),
+                            );
+                          }
+                        } catch (e) {
+                          setSheetState(() { loading = false; error = e.toString(); });
+                        }
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: loading
+                          ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text(s.deleteAccount, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

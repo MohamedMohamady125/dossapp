@@ -73,6 +73,14 @@ class S {
   String get appVersion => _t('App Version', 'إصدار التطبيق');
   String get account => _t('Account', 'الحساب');
   String get general => _t('General', 'عام');
+  String get deleteAccount => _t('Delete Account', 'حذف الحساب');
+  String get deleteAccountConfirm => _t(
+    'This will permanently delete your account and all associated data. This action cannot be undone.',
+    'سيتم حذف حسابك وجميع البيانات المرتبطة بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.',
+  );
+  String get deleteAccountSuccess => _t('Account deleted successfully', 'تم حذف الحساب بنجاح');
+  String get enterPasswordToConfirm => _t('Enter your password to confirm', 'أدخل كلمة المرور للتأكيد');
+  String get privacyPolicy => _t('Privacy Policy', 'سياسة الخصوصية');
   String get about => _t('About', 'حول');
 
   // ── Customer Home ──

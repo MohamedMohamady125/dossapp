@@ -427,6 +427,33 @@ class ApiService {
     }
   }
 
+  // ── Account Deletion ──
+
+  static Future<void> deleteAccount(String password) async {
+    final resp = await _safeRequest(() async => http.delete(
+      Uri.parse('${AppConstants.baseUrl}/me/account'),
+      headers: await _headers(),
+      body: jsonEncode({'password': password}),
+    ));
+    if (resp.statusCode == 401) {
+      final refreshed = await _tryRefresh();
+      if (refreshed) {
+        final retryResp = await _safeRequest(() async => http.delete(
+          Uri.parse('${AppConstants.baseUrl}/me/account'),
+          headers: await _headers(),
+          body: jsonEncode({'password': password}),
+        ));
+        if (retryResp.statusCode != 200) {
+          throw ApiException(retryResp.statusCode, _extractError(retryResp, 'Failed to delete account'));
+        }
+        return;
+      }
+    }
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to delete account'));
+    }
+  }
+
   // ── Admin Endpoints ──
 
   static Future<List<Map<String, dynamic>>> getBranches() async {
