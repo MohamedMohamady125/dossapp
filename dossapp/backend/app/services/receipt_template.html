@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html dir="ltr" lang="en">
 <head>
 <meta charset="utf-8">
 <style>
@@ -8,7 +8,7 @@
     margin: 16mm 16mm 12mm 16mm;
   }}
   body {{
-    font-family: 'Noto Kufi Arabic', 'Noto Sans Arabic', 'Noto Sans', sans-serif;
+    font-family: 'Helvetica Neue', 'Arial', 'Noto Sans', sans-serif;
     color: #201e1d;
     font-size: 11pt;
     line-height: 1.55;
@@ -32,45 +32,45 @@
 <!-- ═══ HEADER ═══ -->
 <table style="width:100%;border-bottom:2px solid #201e1d;padding-bottom:6mm;margin-bottom:0">
   <tr>
-    <td style="vertical-align:middle;width:24mm;padding-left:5mm">
-      <img src="data:image/png;base64,{logo_b64}" alt="أكواثليتك" style="width:24mm;height:24mm">
+    <td style="vertical-align:middle;width:24mm;padding-right:5mm">
+      <img src="data:image/png;base64,{logo_b64}" alt="Aquathletic" style="width:24mm;height:24mm">
     </td>
-    <td style="vertical-align:middle;padding-left:5mm">
-      <div style="font-weight:700;font-size:21pt;line-height:0.95;letter-spacing:-0.01em;text-transform:uppercase;direction:ltr;text-align:left">AQUATHLETIC</div>
-      <div style="font-size:9.5pt;color:#7d7979;margin-top:2mm">أكاديمية أكواثليتك للسباحة</div>
+    <td style="vertical-align:middle;padding-right:5mm">
+      <div style="font-weight:700;font-size:21pt;line-height:1.1;letter-spacing:-0.01em;text-transform:uppercase">AQUATHLETIC</div>
+      <div style="font-size:9.5pt;color:#7d7979;margin-top:0.5mm">Aquathletic Swimming Academy</div>
     </td>
-    <td style="vertical-align:middle;text-align:left;white-space:nowrap">
-      <div style="font-size:8.5pt;color:#7d7979">رقم الإيصال</div>
-      <div style="font-weight:700;font-size:20pt;line-height:1.2;color:#ae1800;direction:ltr;text-align:left">{receipt_number}</div>
-      <div style="font-size:9pt;color:#605d5d;margin-top:2mm">تاريخ الإصدار: {issued_at}</div>
+    <td style="vertical-align:middle;text-align:right;white-space:nowrap">
+      <div style="font-size:8.5pt;color:#7d7979">Receipt No.</div>
+      <div style="font-weight:700;font-size:20pt;line-height:1.2;color:#ae1800">{receipt_number}</div>
+      <div style="font-size:9pt;color:#605d5d;margin-top:2mm">Issued: {issued_at}</div>
     </td>
   </tr>
 </table>
 
 <!-- ═══ TITLE ═══ -->
 <div style="padding:5mm 0 6mm;border-bottom:1px solid #d7d3d3">
-  <div style="font-weight:700;font-size:15pt;letter-spacing:0.06em">إيصال سداد رسوم</div>
+  <div style="font-weight:700;font-size:15pt;letter-spacing:0.06em">Payment Receipt</div>
 </div>
 
 <!-- ═══ SWIMMER INFO ═══ -->
 <table style="width:100%;padding:7mm 0;border-bottom:1px solid #d7d3d3">
   <tr>
     <td style="vertical-align:top;width:50%;padding:0 10mm 0 0">
-      <div class="label">اسم السباح</div>
+      <div class="label">Swimmer Name</div>
       <div style="font-weight:700;font-size:16pt;line-height:1.3;margin-top:1.5mm">{swimmer_name}</div>
     </td>
-    <td style="vertical-align:top;width:50%;border-right:1px solid #d7d3d3;padding-right:10mm">
-      <div class="label">الفرع</div>
+    <td style="vertical-align:top;width:50%;border-left:1px solid #d7d3d3;padding-left:10mm">
+      <div class="label">Branch</div>
       <div style="font-weight:700;font-size:16pt;line-height:1.3;margin-top:1.5mm">{branch_name}</div>
       <table style="width:100%;margin-top:5mm">
         <tr>
           <td style="vertical-align:top;width:50%">
-            <div class="label">الشهر</div>
+            <div class="label">Period</div>
             <div style="font-size:12pt;font-weight:600;margin-top:1.5mm">{period}</div>
           </td>
           <td style="vertical-align:top;width:50%">
-            <div class="label">رقم الهاتف</div>
-            <div style="font-size:12pt;font-weight:600;direction:ltr;text-align:right;white-space:nowrap;margin-top:1.5mm">{phone}</div>
+            <div class="label">Phone</div>
+            <div style="font-size:12pt;font-weight:600;white-space:nowrap;margin-top:1.5mm">{phone}</div>
           </td>
         </tr>
       </table>
@@ -82,9 +82,9 @@
 <table style="width:100%;margin-top:7mm;font-size:11pt">
   <thead>
     <tr>
-      <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d">البيان</th>
-      <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:34mm">عدد الحصص</th>
-      <th style="text-align:left;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:40mm">المبلغ</th>
+      <th style="text-align:left;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d">Description</th>
+      <th style="text-align:left;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:34mm">Sessions</th>
+      <th style="text-align:right;padding:0 0 3mm;font-size:8.5pt;color:#7d7979;font-weight:600;border-bottom:2px solid #201e1d;width:40mm">Amount</th>
     </tr>
   </thead>
   <tbody>
@@ -94,7 +94,7 @@
         <div style="font-size:9.5pt;color:#605d5d;margin-top:1mm">{line_detail}</div>
       </td>
       <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top">{sessions}</td>
-      <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top;text-align:left">{amount_line}</td>
+      <td style="padding:4.5mm 0;border-bottom:1px solid #d7d3d3;vertical-align:top;text-align:right">{amount_line}</td>
     </tr>
   </tbody>
 </table>
@@ -103,24 +103,19 @@
 <table style="width:100%;margin-top:7mm;padding-top:5mm;border-top:2px solid #201e1d">
   <tr>
     <td style="vertical-align:bottom;width:55%">
-      <table><tr><td style="background:#ec3013;color:#fff;padding:2.5mm 6mm;font-weight:700;font-size:14pt;letter-spacing:0.08em">مدفوع</td></tr></table>
+      <table><tr><td style="background:#ec3013;color:#fff;padding:2.5mm 6mm;font-weight:700;font-size:14pt;letter-spacing:0.08em">PAID</td></tr></table>
       <div style="font-size:9.5pt;color:#605d5d;margin-top:3mm;max-width:80mm">{channel_note}</div>
     </td>
-    <td style="vertical-align:bottom;text-align:left">
-      <div style="font-size:8.5pt;color:#7d7979">الإجمالي المدفوع</div>
-      <div style="font-weight:700;font-size:30pt;line-height:1;margin-top:1.5mm;direction:rtl">{amount_total}</div>
+    <td style="vertical-align:bottom;text-align:right">
+      <div style="font-size:8.5pt;color:#7d7979">Total Paid</div>
+      <div style="font-weight:700;font-size:30pt;line-height:1;margin-top:1.5mm">{amount_total}</div>
     </td>
   </tr>
 </table>
 
 <!-- ═══ FOOTER ═══ -->
 <div style="position:fixed;bottom:12mm;left:16mm;right:16mm;border-top:2px solid #201e1d;padding-top:4mm">
-  <table style="width:100%;font-size:9pt;color:#605d5d">
-    <tr>
-      <td style="text-align:right">شكرًا لكم — يُرجى الاحتفاظ بهذا الإيصال كإثبات للسداد.</td>
-      <td style="text-align:left;direction:ltr;white-space:nowrap">{contact_line}</td>
-    </tr>
-  </table>
+  <div style="font-size:9pt;color:#605d5d;text-align:center">Thank you — please keep this receipt as proof of payment.</div>
 </div>
 
 </body>

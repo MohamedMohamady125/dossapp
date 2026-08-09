@@ -27,7 +27,6 @@ class ExcelRosterSource(RosterSource):
         self._last_modified: dict[int, Optional[str]] = {}
         self._last_errors: dict[int, list[str]] = {}
         self._lock = asyncio.Lock()
-        self._last_check_time: dict[int, float] = {}
         self._initial_load_done = False
 
     async def _ensure_loaded(self):
@@ -84,11 +83,9 @@ class ExcelRosterSource(RosterSource):
 
     async def get_branch_roster(self, branch_id: int) -> Optional[BranchRoster]:
         await self._ensure_loaded()
-        # Auto-check Drive for changes if >30s since last check
-        now = datetime.now(timezone.utc).timestamp()
-        last_check = self._last_check_time.get(branch_id, 0)
-        if now - last_check > 30:
-            self._last_check_time[branch_id] = now
+        # Background task + admin refresh button handle updates.
+        # Only auto-check Drive if cache is completely empty for this branch.
+        if branch_id not in self._cache:
             await self.refresh_branch(branch_id)
         return self._cache.get(branch_id)
 

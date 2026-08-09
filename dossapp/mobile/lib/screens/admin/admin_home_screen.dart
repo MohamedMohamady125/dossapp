@@ -132,12 +132,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               _loadPendingCount();
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, size: 22),
-            tooltip: s.refresh,
-            onPressed: _refreshAll,
-          ),
-          if (auth.isAdmin && _branches != null && _branches!.isNotEmpty)
+          if (auth.isAdmin && _branches != null && _branches!.length > 1)
             PopupMenuButton<int>(
               icon: const Icon(Icons.swap_horiz_rounded, size: 22),
               tooltip: s.branches,
@@ -158,15 +153,55 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 ),
               )).toList(),
             ),
-          if (auth.isAdmin)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings_outlined, size: 22),
-              tooltip: s.branchAdmins,
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BranchAdminsScreen())),
-            ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, size: 22),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 22),
+            position: PopupMenuPosition.under,
+            onSelected: (value) {
+              switch (value) {
+                case 'refresh':
+                  _refreshAll();
+                  break;
+                case 'branch_admins':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const BranchAdminsScreen()));
+                  break;
+                case 'settings':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    const Icon(Icons.refresh_rounded, size: 20, color: AppColors.textSecondary),
+                    const SizedBox(width: 12),
+                    Text(s.refresh),
+                  ],
+                ),
+              ),
+              if (auth.isAdmin)
+                PopupMenuItem(
+                  value: 'branch_admins',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.admin_panel_settings_outlined, size: 20, color: AppColors.textSecondary),
+                      const SizedBox(width: 12),
+                      Text(s.branchAdmins),
+                    ],
+                  ),
+                ),
+              PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    const Icon(Icons.settings_outlined, size: 20, color: AppColors.textSecondary),
+                    const SizedBox(width: 12),
+                    Text(s.settings),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
         bottom: selectedBranch != null ? PreferredSize(

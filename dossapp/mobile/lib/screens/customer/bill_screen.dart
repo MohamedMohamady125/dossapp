@@ -273,25 +273,6 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
                   height: 42,
                   borderRadius: 8,
                 ),
-          if (isPaid) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                S.of(context).paid,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

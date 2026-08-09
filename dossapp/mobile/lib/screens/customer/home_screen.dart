@@ -128,7 +128,9 @@ class _HomeTabState extends State<_HomeTab> {
       // If suspended, show suspended UI right away while loading reinstatement
       if (_profile!.accountStatus == 'suspended') {
         if (mounted) setState(() => _loading = false);
-        _reinstatement = await ApiService.getReinstatementStatus();
+        try {
+          _reinstatement = await ApiService.getReinstatementStatus();
+        } catch (_) {}
         if (mounted) setState(() {});
         return;
       }
@@ -138,12 +140,15 @@ class _HomeTabState extends State<_HomeTab> {
 
       // Bill endpoint may have just suspended the account — re-check
       if (_bill?.isSuspended == true) {
-        _profile = await ApiService.getProfile();
-        if (_profile!.accountStatus == 'suspended') {
-          _reinstatement = await ApiService.getReinstatementStatus();
-        }
+        try {
+          _profile = await ApiService.getProfile();
+          if (_profile!.accountStatus == 'suspended') {
+            _reinstatement = await ApiService.getReinstatementStatus();
+          }
+        } catch (_) {}
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Home load error: $e\n$stack');
       _error = e.toString();
     }
     if (mounted) setState(() => _loading = false);
@@ -217,14 +222,14 @@ class _HomeTabState extends State<_HomeTab> {
       slivers: [
         // ── App Bar ──
         SliverAppBar(
-          expandedHeight: 200,
+          expandedHeight: 130,
           pinned: true,
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,34 +237,35 @@ class _HomeTabState extends State<_HomeTab> {
                       Row(
                         children: [
                           Container(
-                            width: 52, height: 52,
+                            width: 44, height: 44,
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                            child: Center(
+                              child: Text(
+                                p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
+                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 14),
+                          const SizedBox(width: 12),
                           Expanded(child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 p.name,
                                 style: GoogleFonts.barlowCondensed(
-                                  fontSize: 24,
+                                  fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.white,
                                   letterSpacing: -0.3,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 2),
-                              Text('${p.branch} \u2022 #${p.athleteNumber}', style: const TextStyle(color: Colors.white60, fontSize: 13)),
+                              Text('${p.branch} \u2022 #${p.athleteNumber}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
                             ],
                           )),
                         ],

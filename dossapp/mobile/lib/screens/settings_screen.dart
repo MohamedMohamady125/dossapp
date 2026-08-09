@@ -182,103 +182,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    bool loading = false;
-    bool obscureOld = true;
-    bool obscureNew = true;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(s.changePassword),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: oldCtrl,
-                  obscureText: obscureOld,
-                  decoration: InputDecoration(
-                    labelText: s.currentPassword,
-                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                    suffixIcon: IconButton(
-                      icon: Icon(obscureOld ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
-                      onPressed: () => setDialogState(() => obscureOld = !obscureOld),
-                    ),
-                  ),
-                  validator: (v) => v == null || v.isEmpty ? s.required : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: newCtrl,
-                  obscureText: obscureNew,
-                  decoration: InputDecoration(
-                    labelText: s.newPassword,
-                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                    suffixIcon: IconButton(
-                      icon: Icon(obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
-                      onPressed: () => setDialogState(() => obscureNew = !obscureNew),
-                    ),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return s.required;
-                    if (v.length < 6) return s.passwordTooShort;
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: confirmCtrl,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: s.confirmPassword,
-                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                  ),
-                  validator: (v) {
-                    if (v != newCtrl.text) return s.passwordsMustMatch;
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: loading ? null : () => Navigator.pop(ctx),
-              child: Text(s.cancel),
-            ),
-            FilledButton(
-              onPressed: loading ? null : () async {
-                if (!formKey.currentState!.validate()) return;
-                setDialogState(() => loading = true);
-                try {
-                  if (auth.isStaff || auth.isCoach) {
-                    await ApiService.staffUpdatePassword(oldCtrl.text, newCtrl.text);
-                  } else {
-                    await ApiService.updatePassword(oldCtrl.text, newCtrl.text);
-                  }
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.passwordChanged)),
-                    );
-                  }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    setDialogState(() => loading = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString())),
-                    );
-                  }
-                }
-              },
-              child: loading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(s.save),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ChangePasswordSheet(
+        formKey: formKey,
+        oldCtrl: oldCtrl,
+        newCtrl: newCtrl,
+        confirmCtrl: confirmCtrl,
+        auth: auth,
+        s: s,
+        parentContext: context,
       ),
     );
   }
@@ -287,61 +203,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final s = S.of(context);
     final emailCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    bool loading = false;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(s.changeEmail),
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(
-                labelText: s.newEmail,
-                prefixIcon: const Icon(Icons.email_outlined, size: 20),
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return s.required;
-                if (!v.contains('@') || !v.contains('.')) return s.invalidEmail;
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: loading ? null : () => Navigator.pop(ctx),
-              child: Text(s.cancel),
-            ),
-            FilledButton(
-              onPressed: loading ? null : () async {
-                if (!formKey.currentState!.validate()) return;
-                setDialogState(() => loading = true);
-                try {
-                  await ApiService.updateEmail(emailCtrl.text.trim());
-                  if (ctx.mounted) {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(s.emailUpdated)),
-                    );
-                  }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    setDialogState(() => loading = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(e.toString())),
-                    );
-                  }
-                }
-              },
-              child: loading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(s.save),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ChangeEmailSheet(
+        formKey: formKey,
+        emailCtrl: emailCtrl,
+        s: s,
+        parentContext: context,
       ),
     );
   }
@@ -367,6 +238,335 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(s.logout),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChangePasswordSheet extends StatefulWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController oldCtrl;
+  final TextEditingController newCtrl;
+  final TextEditingController confirmCtrl;
+  final AuthProvider auth;
+  final S s;
+  final BuildContext parentContext;
+
+  const _ChangePasswordSheet({
+    required this.formKey,
+    required this.oldCtrl,
+    required this.newCtrl,
+    required this.confirmCtrl,
+    required this.auth,
+    required this.s,
+    required this.parentContext,
+  });
+
+  @override
+  State<_ChangePasswordSheet> createState() => _ChangePasswordSheetState();
+}
+
+class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
+  bool _loading = false;
+  bool _obscureOld = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (!widget.formKey.currentState!.validate()) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      if (widget.auth.isStaff || widget.auth.isCoach) {
+        await ApiService.staffUpdatePassword(widget.oldCtrl.text, widget.newCtrl.text);
+      } else {
+        await ApiService.updatePassword(widget.oldCtrl.text, widget.newCtrl.text);
+      }
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+          SnackBar(content: Text(widget.s.passwordChanged)),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: Form(
+            key: widget.formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_reset_rounded, size: 32, color: AppColors.primary),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  s.changePassword,
+                  style: GoogleFonts.barlowCondensed(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Old password
+                TextFormField(
+                  controller: widget.oldCtrl,
+                  obscureText: _obscureOld,
+                  decoration: InputDecoration(
+                    labelText: s.currentPassword,
+                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureOld ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                      onPressed: () => setState(() => _obscureOld = !_obscureOld),
+                    ),
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? s.required : null,
+                ),
+                const SizedBox(height: 14),
+                // New password
+                TextFormField(
+                  controller: widget.newCtrl,
+                  obscureText: _obscureNew,
+                  decoration: InputDecoration(
+                    labelText: s.newPassword,
+                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                      onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return s.required;
+                    if (v.length < 6) return s.passwordTooShort;
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+                // Confirm password
+                TextFormField(
+                  controller: widget.confirmCtrl,
+                  obscureText: _obscureConfirm,
+                  decoration: InputDecoration(
+                    labelText: s.confirmPassword,
+                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
+                  ),
+                  validator: (v) {
+                    if (v != widget.newCtrl.text) return s.passwordsMustMatch;
+                    return null;
+                  },
+                ),
+                // Error
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, size: 18, color: AppColors.error),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                // Submit
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: _loading ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: _loading
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(s.save, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChangeEmailSheet extends StatefulWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController emailCtrl;
+  final S s;
+  final BuildContext parentContext;
+
+  const _ChangeEmailSheet({
+    required this.formKey,
+    required this.emailCtrl,
+    required this.s,
+    required this.parentContext,
+  });
+
+  @override
+  State<_ChangeEmailSheet> createState() => _ChangeEmailSheetState();
+}
+
+class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _submit() async {
+    if (!widget.formKey.currentState!.validate()) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ApiService.updateEmail(widget.emailCtrl.text.trim());
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
+          SnackBar(content: Text(widget.s.emailUpdated)),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.s;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+          child: Form(
+            key: widget.formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  width: 40, height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySurface,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.email_outlined, size: 32, color: AppColors.primary),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  s.changeEmail,
+                  style: GoogleFonts.barlowCondensed(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Email field
+                TextFormField(
+                  controller: widget.emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: s.newEmail,
+                    prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return s.required;
+                    if (!v.contains('@') || !v.contains('.')) return s.invalidEmail;
+                    return null;
+                  },
+                ),
+                // Error
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorLight,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, size: 18, color: AppColors.error),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                // Submit
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: _loading ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: _loading
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(s.save, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

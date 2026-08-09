@@ -1,3 +1,10 @@
+double? _parseAge(dynamic v) {
+  if (v == null) return null;
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v);
+  return null;
+}
+
 class ScheduleSlot {
   final String? coach;
   final String? timeBlock;
@@ -55,7 +62,7 @@ class AthleteProfile {
       branchId: json['branch_id'] ?? 0,
       athleteNumber: json['athlete_number'] ?? 0,
       name: json['name'] ?? '',
-      age: json['age']?.toDouble(),
+      age: _parseAge(json['age']),
       dateOfBirth: json['date_of_birth'],
       gender: json['gender'],
       level: json['level'],
@@ -117,7 +124,7 @@ class AthleteDetail extends AthleteProfile {
       branchId: json['branch_id'] ?? 0,
       athleteNumber: json['athlete_number'] ?? 0,
       name: json['name'] ?? '',
-      age: json['age']?.toDouble(),
+      age: _parseAge(json['age']),
       dateOfBirth: json['date_of_birth'],
       gender: json['gender'],
       level: json['level'],

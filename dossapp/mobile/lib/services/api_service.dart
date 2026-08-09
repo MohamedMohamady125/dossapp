@@ -13,7 +13,7 @@ class ApiService {
   static const _storage = FlutterSecureStorage();
   static String? _accessToken;
   static String? _refreshToken;
-  static const _timeout = Duration(seconds: 15);
+  static const _timeout = Duration(seconds: 30);
 
   // ── Auth ──
 
