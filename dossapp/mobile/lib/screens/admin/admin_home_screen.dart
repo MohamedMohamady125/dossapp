@@ -105,14 +105,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          s.appName,
-          style: GoogleFonts.barlowCondensed(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-            letterSpacing: -0.3,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/images/logo.png', height: 32, width: 32),
+            const SizedBox(width: 8),
+            Text(
+              s.appName,
+              style: GoogleFonts.barlowCondensed(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(

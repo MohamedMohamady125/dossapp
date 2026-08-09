@@ -159,7 +159,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _buildHeader(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Form(
@@ -190,10 +190,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Widget _buildHeader() {
     final titles = ['Set Up Your Email', 'Verify Your Email', 'Create Password'];
+    final screenH = MediaQuery.of(context).size.height;
+    final headerH = (screenH * 0.22).clamp(150.0, 200.0);
     return ClipPath(
       clipper: _WaveClipper(),
       child: Container(
-        height: 180,
+        height: headerH,
         width: double.infinity,
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: SafeArea(
@@ -207,11 +209,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     onPressed: () => setState(() { _step--; _error = null; }),
                   ),
                 if (_step > 0) const SizedBox(width: 4),
-                Text(
-                  titles[_step],
-                  style: GoogleFonts.barlowCondensed(
-                    fontSize: 22, fontWeight: FontWeight.w700,
-                    color: Colors.white, letterSpacing: -0.3,
+                Image.asset('assets/images/logo.png', height: 36, width: 36),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    titles[_step],
+                    style: GoogleFonts.barlowCondensed(
+                      fontSize: 22, fontWeight: FontWeight.w700,
+                      color: Colors.white, letterSpacing: -0.3,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -335,7 +342,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           textAlign: TextAlign.center,
           maxLength: 6,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: GoogleFonts.barlow(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 12),
+          style: GoogleFonts.barlow(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 8),
           decoration: const InputDecoration(
             counterText: '',
             hintText: '000000',

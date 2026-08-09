@@ -139,113 +139,122 @@ class _LoginScreenState extends State<LoginScreen>
         child: Column(
           children: [
             // Wave gradient header
-            ClipPath(
-              clipper: _WaveClipper(),
-              child: Container(
-                height: 260,
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-                child: SafeArea(
-                  child: Stack(
-                    children: [
-                      // Language toggle top right
-                      Positioned(
-                        top: 4,
-                        right: 16,
-                        child: GestureDetector(
-                          onTap: () => locale.toggleLanguage(),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                            ),
-                            child: Text(
-                              locale.isArabic ? 'EN' : 'ع',
-                              style: GoogleFonts.barlow(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
+            LayoutBuilder(builder: (context, constraints) {
+              final screenH = MediaQuery.of(context).size.height;
+              final headerH = (screenH * 0.3).clamp(200.0, 280.0);
+              final logoSize = (headerH * 0.28).clamp(56.0, 80.0);
+              return ClipPath(
+                clipper: _WaveClipper(),
+                child: Container(
+                  height: headerH,
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                  ),
+                  child: SafeArea(
+                    child: Stack(
+                      children: [
+                        // Language toggle top right
+                        Positioned(
+                          top: 4,
+                          right: 16,
+                          child: GestureDetector(
+                            onTap: () => locale.toggleLanguage(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                locale.isArabic ? 'EN' : 'ع',
+                                style: GoogleFonts.barlow(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // Animated logo
-                            ScaleTransition(
-                              scale: _logoScale,
-                              child: Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(22),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.3),
-                                    width: 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.2),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(Icons.pool,
-                                    size: 40, color: Colors.white),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            FadeTransition(
-                              opacity: _headerFade,
-                              child: SlideTransition(
-                                position: _headerSlide,
-                                child: Text(
-                                  s.appName,
-                                  style: GoogleFonts.barlowCondensed(
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w700,
+                        Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // Animated logo
+                              ScaleTransition(
+                                scale: _logoScale,
+                                child: Container(
+                                  width: logoSize,
+                                  height: logoSize,
+                                  decoration: BoxDecoration(
                                     color: Colors.white,
-                                    letterSpacing: -0.5,
+                                    borderRadius: BorderRadius.circular(logoSize * 0.27),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.2),
+                                        blurRadius: 24,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(logoSize * 0.27),
+                                    child: Padding(
+                                      padding: EdgeInsets.all(logoSize * 0.1),
+                                      child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            FadeTransition(
-                              opacity: _headerFade,
-                              child: SlideTransition(
-                                position: _headerSlide,
-                                child: Text(
-                                  s.swimmingAcademy,
-                                  style: GoogleFonts.barlow(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w400,
-                                    color: Colors.white.withValues(alpha: 0.8),
+                              SizedBox(height: headerH * 0.05),
+                              FadeTransition(
+                                opacity: _headerFade,
+                                child: SlideTransition(
+                                  position: _headerSlide,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      s.appName,
+                                      style: GoogleFonts.barlowCondensed(
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 2),
+                              FadeTransition(
+                                opacity: _headerFade,
+                                child: SlideTransition(
+                                  position: _headerSlide,
+                                  child: Text(
+                                    s.swimmingAcademy,
+                                    style: GoogleFonts.barlow(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                      color: Colors.white.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            }),
 
             // Form
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Form(

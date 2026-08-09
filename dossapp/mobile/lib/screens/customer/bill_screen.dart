@@ -256,17 +256,20 @@ class _BillScreenState extends State<BillScreen> with SingleTickerProviderStateM
           ),
           const SizedBox(height: 8),
           bill.amountOwed != null
-              ? Text(
-                  formatMoney(bill.amountOwed),
-                  style: GoogleFonts.barlowCondensed(
-                    fontSize: 42,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    formatMoney(bill.amountOwed),
+                    style: GoogleFonts.barlowCondensed(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 )
-              : ShimmerLoading(
-                  width: 180,
+              : const ShimmerLoading(
+                  width: 160,
                   height: 42,
                   borderRadius: 8,
                 ),

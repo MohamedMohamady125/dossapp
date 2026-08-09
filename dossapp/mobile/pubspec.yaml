@@ -1,7 +1,7 @@
 name: aqua_athletic
 description: "Aqua Athletic Academy - Parent & Admin App"
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+6
 
 environment:
   sdk: ^3.9.2
@@ -31,3 +31,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/logo.png

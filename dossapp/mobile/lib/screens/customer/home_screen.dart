@@ -232,15 +232,18 @@ class _HomeTabState extends State<_HomeTab> {
                       Row(
                         children: [
                           Container(
-                            width: 56, height: 56,
+                            width: 52, height: 52,
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            child: Center(child: Text(
-                              p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
-                              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: Colors.white),
-                            )),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(child: Column(
@@ -707,7 +710,7 @@ class _HomeTabState extends State<_HomeTab> {
             child: Icon(icon, size: 20, color: iconColor),
           ),
           const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary), textAlign: TextAlign.center),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
           Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted), textAlign: TextAlign.center),
         ],
@@ -870,16 +873,22 @@ class _HomeTabState extends State<_HomeTab> {
             ],
           )),
           if (s.coach != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.person, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 4),
-                  Text(s.coach!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
-                ],
+            Flexible(
+              flex: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.person, size: 14, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      child: Text(s.coach!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -982,8 +991,9 @@ class _HomeTabState extends State<_HomeTab> {
                   final label = parsed != null ? DateFormat('d MMM').format(parsed) : date;
                   final dayName = parsed != null ? DateFormat('E').format(parsed) : '';
 
+                  final chipW = ((MediaQuery.of(context).size.width - 80) / 5).clamp(52.0, 68.0);
                   return Container(
-                    width: 64,
+                    width: chipW,
                     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                     decoration: BoxDecoration(
                       color: isPresent

@@ -164,45 +164,54 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       body: Column(
         children: [
           // Gradient header with wave
-          ClipPath(
-            clipper: _WaveClipper(),
-            child: Container(
-              height: 180,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: AppColors.primaryGradient,
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back_ios_new,
-                            color: Colors.white, size: 20),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        s.changePassword,
-                        style: GoogleFonts.barlowCondensed(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
+          Builder(builder: (context) {
+            final screenH = MediaQuery.of(context).size.height;
+            final headerH = (screenH * 0.22).clamp(150.0, 200.0);
+            return ClipPath(
+              clipper: _WaveClipper(),
+              child: Container(
+                height: headerH,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back_ios_new,
+                              color: Colors.white, size: 20),
+                          onPressed: () => Navigator.of(context).maybePop(),
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Image.asset('assets/images/logo.png', height: 36, width: 36),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            s.changePassword,
+                            style: GoogleFonts.barlowCondensed(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.3,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
 
           // Form body
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Form(

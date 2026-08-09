@@ -170,7 +170,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           _buildHeader(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Form(
@@ -202,10 +202,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildHeader() {
     final titles = ['Reset Password', 'Your Email', 'Verify Email', 'New Password'];
+    final screenH = MediaQuery.of(context).size.height;
+    final headerH = (screenH * 0.22).clamp(150.0, 200.0);
     return ClipPath(
       clipper: _WaveClipper(),
       child: Container(
-        height: 180,
+        height: headerH,
         width: double.infinity,
         decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         child: SafeArea(
@@ -224,11 +226,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   },
                 ),
                 const SizedBox(width: 4),
-                Text(
-                  titles[_step],
-                  style: GoogleFonts.barlowCondensed(
-                    fontSize: 22, fontWeight: FontWeight.w700,
-                    color: Colors.white, letterSpacing: -0.3,
+                Image.asset('assets/images/logo.png', height: 36, width: 36),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    titles[_step],
+                    style: GoogleFonts.barlowCondensed(
+                      fontSize: 22, fontWeight: FontWeight.w700,
+                      color: Colors.white, letterSpacing: -0.3,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -360,6 +367,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           _email,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 32),
         TextFormField(
@@ -369,7 +378,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           textAlign: TextAlign.center,
           maxLength: 6,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: GoogleFonts.barlow(fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: 12),
+          style: GoogleFonts.barlow(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: 8),
           decoration: const InputDecoration(
             counterText: '',
             hintText: '000000',
