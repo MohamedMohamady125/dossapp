@@ -164,6 +164,33 @@ async def _process_callback(payload: dict, skip_signature: bool = False) -> dict
 
     if receipt:
         logger.info(f"Easykash payment recorded: {receipt.receipt_number}")
+
+        # Write Pay + Receipt back to the Google Drive Excel sheet (best-effort)
+        try:
+            from app.models.branch import Branch
+            async with async_session() as db:
+                br_result = await db.execute(
+                    select(Branch.drive_file_id).where(Branch.id == branch_id)
+                )
+                drive_file_id = br_result.scalar_one_or_none()
+
+            if drive_file_id:
+                import asyncio as _aio
+                from app.services.drive_writer import update_athlete_payment
+                pay_str = str(amount_egp).rstrip("0").rstrip(".")
+                await _aio.to_thread(
+                    update_athlete_payment,
+                    drive_file_id,
+                    athlete_number,
+                    pay_str,
+                    receipt.receipt_number,
+                )
+                logger.info(f"Excel updated for athlete #{athlete_number}: Pay={pay_str}, Receipt={receipt.receipt_number}")
+            else:
+                logger.warning(f"No drive_file_id for branch {branch_id} — skipping Excel write-back")
+        except Exception as e:
+            logger.warning(f"Failed to write online payment to Excel: {e}")
+
         return {"status": "ok", "receipt": receipt.receipt_number}
     return {"status": "duplicate"}
 
