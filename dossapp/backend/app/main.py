@@ -454,7 +454,7 @@ p, li { font-size: 15px; }
 <p>We use industry-standard security measures including encrypted passwords (Argon2), secure token-based authentication (JWT), and HTTPS for all data transmission.</p>
 
 <h2>5. Data Retention</h2>
-<p>We retain your data for as long as your account is active. Attendance and payment records are retained for academy record-keeping purposes. You may request account deletion by contacting the academy administration.</p>
+<p>We retain your data for as long as your account is active. Attendance and payment records are retained for academy record-keeping purposes. You can delete your account at any time from the app (Settings &gt; Delete Account), which will permanently remove your account and all associated data.</p>
 
 <h2>6. Children's Privacy</h2>
 <p>Our app is used by parents/guardians to manage their children's swimming academy enrollment. Parent accounts manage athlete profiles on behalf of minors. We do not knowingly collect data directly from children under 13.</p>

@@ -423,3 +423,55 @@ async def request_reinstatement(
     db.add(req)
     await db.commit()
     return {"message": "Reinstatement request submitted"}
+
+
+class DeleteAccountBody(PydanticBaseModel):
+    password: str
+
+
+@router.delete("/account")
+async def delete_account(
+    body: DeleteAccountBody,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete the customer's account (Apple App Store requirement).
+
+    Requires password confirmation. Deletes all associated data (devices, notifications,
+    verifications, reinstatement requests) and disables the account.
+    """
+    from app.utils.auth import verify_password
+
+    if not verify_password(body.password, account.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password")
+
+    account_id = account.id
+
+    # Delete related rows in dependency order
+    from app.models.push import DeviceToken, InboxNotification
+    from app.models.email_verification import EmailVerification
+    from app.models.reinstatement_request import ReinstatementRequest
+    from sqlalchemy import delete as sql_delete, update as sql_update
+
+    await db.execute(sql_delete(DeviceToken).where(DeviceToken.account_id == account_id))
+    await db.execute(sql_delete(InboxNotification).where(InboxNotification.account_id == account_id))
+    await db.execute(sql_delete(EmailVerification).where(EmailVerification.account_id == account_id))
+    await db.execute(sql_delete(ReinstatementRequest).where(ReinstatementRequest.account_id == account_id))
+
+    # Nullify notification_log references (column is nullable)
+    try:
+        from app.models.notification_log import NotificationLog
+        await db.execute(
+            sql_update(NotificationLog)
+            .where(NotificationLog.account_id == account_id)
+            .values(account_id=None)
+        )
+    except Exception:
+        pass  # Table may not exist yet
+
+    # Delete the account
+    await db.delete(account)
+    await db.commit()
+
+    logger.info(f"Account {account_id} deleted by user request")
+    return {"message": "Account deleted successfully"}
