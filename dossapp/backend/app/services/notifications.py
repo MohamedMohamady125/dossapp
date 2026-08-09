@@ -103,12 +103,14 @@ class ResendProvider(NotificationProvider):
         try:
             resend.api_key = settings.resend_api_key
 
+            from_addr = f"Aquathletic <{settings.email_from_address}>"
             params: dict = {
-                "from": settings.email_from_address,
+                "from": from_addr,
                 "to": [to],
                 "subject": subject,
                 "html": body,
             }
+            logger.info(f"Resend sending email from={from_addr} to={to} subject={subject}")
 
             if attachment:
                 import base64
@@ -130,10 +132,13 @@ class ResendProvider(NotificationProvider):
 
 def get_notification_provider() -> NotificationProvider:
     """Factory — returns the configured provider."""
+    logger.info(f"Selecting provider: email_provider={settings.email_provider!r}, resend_key_set={bool(settings.resend_api_key)}")
     if settings.email_provider == "resend" and settings.resend_api_key:
+        logger.info("Using ResendProvider")
         return ResendProvider()
     if settings.email_provider == "smtp" and settings.email_smtp_host:
         return SMTPEmailProvider()
+    logger.info("Falling back to StubProvider")
     return StubProvider()
 
 

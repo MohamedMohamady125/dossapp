@@ -144,11 +144,13 @@ def _generate_code() -> str:
 
 async def _send_verification_email(email: str, code: str):
     provider = get_notification_provider()
-    await provider.send_email(
+    logger.info(f"Sending verification email to {email} via {type(provider).__name__}")
+    result = await provider.send_email(
         email,
         "Aquathletic - Verification Code",
-        f"Your verification code is: {code}\n\nThis code expires in 10 minutes.",
+        f"<p>Your verification code is: <strong>{code}</strong></p><p>This code expires in 10 minutes.</p>",
     )
+    logger.info(f"Verification email result: {result}")
 
 
 # ── Onboarding: send verification code ──
