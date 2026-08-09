@@ -42,6 +42,10 @@ async def register_device(
             is_active=True,
             last_seen_at=now,
         ))
+    # Update account language preference
+    if payload.language in ("en", "ar"):
+        account.language = payload.language
+        db.add(account)
     await db.commit()
     return {"message": "Device registered"}
 

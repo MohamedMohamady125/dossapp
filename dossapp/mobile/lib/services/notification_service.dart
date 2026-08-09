@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
 
 /// Handles Firebase Cloud Messaging setup + device token registration.
@@ -13,6 +14,7 @@ class NotificationService {
   static bool _firebaseReady = false;
   static bool _initialized = false;
   static String? _currentToken;
+  static String _language = 'en';
 
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
@@ -71,7 +73,7 @@ class NotificationService {
 
       FirebaseMessaging.instance.onTokenRefresh.listen((token) {
         _currentToken = token;
-        ApiService.registerDevice(token, _platform()).catchError((_) {});
+        ApiService.registerDevice(token, _platform(), language: _language).catchError((_) {});
       });
     } catch (e) {
       debugPrint('Notification setup error: $e');
@@ -82,14 +84,21 @@ class NotificationService {
     return defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android';
   }
 
+  static Future<String> _getLanguage() async {
+    const storage = FlutterSecureStorage();
+    final saved = await storage.read(key: 'app_locale');
+    return saved ?? 'en';
+  }
+
   /// Register this device's FCM token with the backend (call after customer login).
   static Future<void> registerToken() async {
     if (!_firebaseReady) return;
     try {
+      _language = await _getLanguage();
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
         _currentToken = token;
-        await ApiService.registerDevice(token, _platform());
+        await ApiService.registerDevice(token, _platform(), language: _language);
       }
     } catch (e) {
       debugPrint('Token registration failed: $e');

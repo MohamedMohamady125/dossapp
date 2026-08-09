@@ -17,6 +17,7 @@ class Account(Base):
     email = Column(String(255), nullable=True)
     phone_at_creation = Column(String(50), nullable=True)
     status = Column(String(30), default="active", nullable=False)  # active | disabled | identity_mismatch | suspended
+    language = Column(String(5), default="en", nullable=False)  # en | ar
     created_by_admin_id = Column(Integer, ForeignKey("admin_users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)

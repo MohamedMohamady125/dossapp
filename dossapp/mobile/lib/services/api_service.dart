@@ -376,8 +376,8 @@ class ApiService {
 
   // ── Notifications ──
 
-  static Future<void> registerDevice(String token, String platform) async {
-    final resp = await _post('/me/devices', {'token': token, 'platform': platform});
+  static Future<void> registerDevice(String token, String platform, {String language = 'en'}) async {
+    final resp = await _post('/me/devices', {'token': token, 'platform': platform, 'language': language});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Device registration failed'));
     }

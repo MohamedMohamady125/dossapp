@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class DeviceTokenIn(BaseModel):
     token: str
     platform: str  # android | ios
+    language: str = "en"  # en | ar
 
 
 class NotificationOut(BaseModel):

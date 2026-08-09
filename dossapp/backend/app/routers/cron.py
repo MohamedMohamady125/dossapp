@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cron", tags=["cron"])
 
+# Payment reminder days: 25, 27, 29, 1 (every 2 days from the 25th until the 1st)
+PAYMENT_REMINDER_DAYS = {25, 27, 29, 1}
+SPOT_LOST_DAY = 2
+
 
 def _authorize(authorization: Optional[str]):
     token = (authorization or "").removeprefix("Bearer ").strip()
@@ -65,11 +69,12 @@ async def cron_payment_reminders(
     force: bool = False,
     authorization: Optional[str] = Header(None),
 ):
-    """Send unpaid reminders — only on the configured day of month (default 25th)."""
+    """Send unpaid reminders — on days 25, 27, 29, 1 (every 2 days)."""
     _authorize(authorization)
 
-    if not force and datetime.now().day != settings.payment_reminder_day:
-        return {"skipped": True, "reason": f"Not day {settings.payment_reminder_day}"}
+    today = datetime.now().day
+    if not force and today not in PAYMENT_REMINDER_DAYS:
+        return {"skipped": True, "reason": f"Day {today} not in reminder days {sorted(PAYMENT_REMINDER_DAYS)}"}
 
     from app.services.push_triggers import send_payment_reminders
 
@@ -80,4 +85,28 @@ async def cron_payment_reminders(
         sent = await send_payment_reminders(db, rosters)
 
     logger.info(f"Cron payment reminders: sent={sent}")
+    return {"branches": len(rosters), "sent": sent}
+
+
+@router.get("/spot-lost")
+async def cron_spot_lost(
+    force: bool = False,
+    authorization: Optional[str] = Header(None),
+):
+    """On the 2nd of month: suspend unpaid athletes and notify them."""
+    _authorize(authorization)
+
+    today = datetime.now().day
+    if not force and today != SPOT_LOST_DAY:
+        return {"skipped": True, "reason": f"Day {today} is not day {SPOT_LOST_DAY}"}
+
+    from app.services.push_triggers import send_spot_lost_notifications
+
+    source = _get_roster_source()
+    rosters = await source.get_all_rosters()
+
+    async with async_session() as db:
+        sent = await send_spot_lost_notifications(db, rosters)
+
+    logger.info(f"Cron spot-lost: sent={sent}")
     return {"branches": len(rosters), "sent": sent}

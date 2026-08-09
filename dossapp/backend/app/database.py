@@ -45,6 +45,11 @@ def _add_missing_columns(sync_conn):
                 "ALTER TABLE admin_users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    if "accounts" in insp.get_table_names():
+        cols = {c["name"] for c in insp.get_columns("accounts")}
+        if "language" not in cols:
+            sync_conn.execute(text("ALTER TABLE accounts ADD COLUMN language VARCHAR(5) NOT NULL DEFAULT 'en'"))
+
     if "branches" in insp.get_table_names():
         cols = {c["name"] for c in insp.get_columns("branches")}
         if "current_period" not in cols:
