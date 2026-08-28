@@ -274,12 +274,16 @@ async def customer_complete_onboarding(
 # ── Helper: find account (customer or staff) by email ──
 async def _find_account_by_email(db: AsyncSession, email: str):
     """Look up a customer Account or AdminUser by email. Returns (account, account_type)."""
-    result = await db.execute(select(Account).where(Account.email == email))
+    result = await db.execute(
+        select(Account).where(Account.email == email).order_by(Account.last_login_at.desc().nullslast()).limit(1)
+    )
     account = result.scalar_one_or_none()
     if account:
         return account, "customer"
 
-    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
+    result = await db.execute(
+        select(AdminUser).where(AdminUser.email == email).order_by(AdminUser.last_login_at.desc().nullslast()).limit(1)
+    )
     admin = result.scalar_one_or_none()
     if admin:
         return admin, "staff"
