@@ -63,11 +63,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await ApiService.sendVerificationCode(_emailController.text.trim());
       _verifiedEmail = _emailController.text.trim();
       _startResendTimer();
-      setState(() => _step = 1);
+      if (mounted) setState(() => _step = 1);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -79,9 +79,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _startResendTimer();
       _codeController.clear();
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -95,11 +95,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       await ApiService.verifyCode(_verifiedEmail, code);
       _verifiedCode = code;
-      setState(() => _step = 2);
+      if (mounted) setState(() => _step = 2);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -111,7 +111,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _verifiedEmail, _verifiedCode, _passwordController.text,
       );
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -203,12 +203,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                if (_step > 0)
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                    onPressed: () => setState(() { _step--; _error = null; }),
-                  ),
-                if (_step > 0) const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                  onPressed: () {
+                    if (_step > 0) {
+                      setState(() { _step--; _error = null; });
+                    } else {
+                      // Back on first step = log out and go back to login
+                      context.read<AuthProvider>().logout();
+                    }
+                  },
+                ),
+                const SizedBox(width: 4),
                 Image.asset('assets/images/logo.png', height: 36, width: 36),
                 const SizedBox(width: 10),
                 Flexible(

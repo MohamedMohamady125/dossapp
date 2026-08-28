@@ -253,7 +253,7 @@ async def customer_complete_onboarding(
                 EmailVerification.purpose == "onboarding",
                 EmailVerification.verified == True,
             )
-        )
+        ).order_by(EmailVerification.created_at.desc()).limit(1)
     )
     verification = result.scalar_one_or_none()
 

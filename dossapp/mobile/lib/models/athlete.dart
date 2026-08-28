@@ -91,6 +91,7 @@ class AthleteDetail extends AthleteProfile {
   final String? comment;
   final String? receiptNo;
   final bool hasAccount;
+  final bool accountCompleted;
   final bool isPaid;
 
   AthleteDetail({
@@ -115,6 +116,7 @@ class AthleteDetail extends AthleteProfile {
     this.comment,
     this.receiptNo,
     this.hasAccount = false,
+    this.accountCompleted = false,
     this.isPaid = false,
   });
 
@@ -140,6 +142,7 @@ class AthleteDetail extends AthleteProfile {
       comment: json['comment'],
       receiptNo: json['receipt_no'],
       hasAccount: json['has_account'] ?? false,
+      accountCompleted: json['account_completed'] ?? false,
       isPaid: json['is_paid'] ?? false,
       schedule: (json['schedule'] as List?)
               ?.map((s) => ScheduleSlot.fromJson(s))

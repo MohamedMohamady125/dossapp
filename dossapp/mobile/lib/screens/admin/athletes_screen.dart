@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/athlete.dart';
@@ -20,6 +21,7 @@ class _AthletesScreenState extends State<AthletesScreen> {
   bool _loading = true;
   String? _error;
   String _search = '';
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -27,17 +29,22 @@ class _AthletesScreenState extends State<AthletesScreen> {
     _load();
   }
 
-  Future<void> _load({bool forceRefresh = false}) async {
-    setState(() { _loading = true; _error = null; });
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    // Only show skeleton on initial load, not on refresh
+    final isInitial = _athletes == null;
+    if (isInitial) setState(() { _loading = true; _error = null; });
     try {
-      if (forceRefresh) {
-        await ApiService.refreshBranch(widget.branchId);
-      }
       _athletes = await ApiService.getBranchAthletes(widget.branchId);
     } catch (e) {
-      _error = e.toString();
+      if (isInitial) _error = e.toString();
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
   List<AthleteDetail> get _filtered {
@@ -49,6 +56,13 @@ class _AthletesScreenState extends State<AthletesScreen> {
       a.athleteNumber.toString().contains(q) ||
       (a.level?.toLowerCase().contains(q) ?? false)
     ).toList();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _search = value);
+    });
   }
 
   @override
@@ -70,7 +84,7 @@ class _AthletesScreenState extends State<AthletesScreen> {
               prefixIcon: Icon(Icons.search),
               isDense: true,
             ),
-            onChanged: (v) => setState(() => _search = v),
+            onChanged: _onSearchChanged,
           ),
         ),
         Padding(
@@ -92,7 +106,7 @@ class _AthletesScreenState extends State<AthletesScreen> {
         ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () => _load(forceRefresh: true),
+            onRefresh: _load,
             child: list.isEmpty
                 ? ListView(
                     children: [
@@ -604,16 +618,19 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     ),
         ),
 
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _ProvisionButton(
-            branchId: athlete.branchId,
-            athleteNumber: athlete.athleteNumber,
-            onDone: widget.onProvision,
-            alreadyProvisioned: athlete.hasAccount,
+        // Only show provision/reset buttons if user hasn't completed onboarding yet
+        if (!athlete.accountCompleted) ...[
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _ProvisionButton(
+              branchId: athlete.branchId,
+              athleteNumber: athlete.athleteNumber,
+              onDone: widget.onProvision,
+              alreadyProvisioned: athlete.hasAccount,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 32),
       ],
     );

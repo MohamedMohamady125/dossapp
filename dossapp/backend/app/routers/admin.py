@@ -461,11 +461,13 @@ async def list_athletes(
     if not roster:
         raise HTTPException(status_code=404, detail="Branch not found")
 
-    # Get existing accounts for this branch
+    # Get existing accounts for this branch (with onboarding status)
     result = await db.execute(
-        select(Account.athlete_number).where(Account.branch_id == branch_id)
+        select(Account.athlete_number, Account.must_change_password).where(Account.branch_id == branch_id)
     )
-    provisioned = {row[0] for row in result.all()}
+    account_rows = result.all()
+    provisioned = {row[0] for row in account_rows}
+    completed_onboarding = {row[0] for row in account_rows if not row[1]}
 
     # Resolve bills: check overrides first, then price catalog
     from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
@@ -527,6 +529,7 @@ async def list_athletes(
             comment=a.comment,
             receipt_no=a.receipt_no,
             has_account=a.athlete_number in provisioned,
+            account_completed=a.athlete_number in completed_onboarding,
             is_paid=excel_paid or a.athlete_number in db_paid_set,
             schedule=[
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
@@ -556,7 +559,9 @@ async def get_athlete_detail(
     result = await db.execute(
         select(Account).where(Account.branch_id == branch_id, Account.athlete_number == athlete_number)
     )
-    has_account = result.scalar_one_or_none() is not None
+    account = result.scalar_one_or_none()
+    has_account = account is not None
+    account_completed = has_account and not account.must_change_password
 
     from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill, resolve_price
     bill = await resolve_price(db, branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions, athlete_number=athlete_number)
@@ -599,6 +604,7 @@ async def get_athlete_detail(
         comment=athlete.comment,
         receipt_no=athlete.receipt_no,
         has_account=has_account,
+        account_completed=account_completed,
         is_paid=excel_paid,
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
