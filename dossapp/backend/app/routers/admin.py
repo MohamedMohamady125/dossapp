@@ -451,7 +451,7 @@ async def list_athletes(
     branch_id: int,
     search: Optional[str] = Query(None, description="Search by name, number, or level"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(200, ge=1, le=500),
+    limit: int = Query(10000, ge=1, le=10000),
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
