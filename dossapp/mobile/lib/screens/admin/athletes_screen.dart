@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../models/athlete.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
@@ -136,9 +137,9 @@ class _AthletesScreenState extends State<AthletesScreen> {
   Widget _buildAthleteRow(AthleteDetail a) {
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: a.hasAccount ? AppColors.primary : AppColors.surfaceVariant,
+        backgroundColor: a.accountCompleted ? AppColors.success : a.hasAccount ? AppColors.warning : AppColors.surfaceVariant,
         child: Text(
-          'M${a.athleteNumber}',
+          '${a.athleteNumber}',
           style: TextStyle(
             fontSize: 11, fontWeight: FontWeight.w600,
             color: a.hasAccount ? Colors.white : AppColors.textSecondary,
@@ -160,10 +161,15 @@ class _AthletesScreenState extends State<AthletesScreen> {
             const Icon(Icons.check_circle, color: AppColors.success, size: 20),
           if (a.bill == null && a.billMissing != null)
             const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
-          if (a.hasAccount)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Icon(Icons.person, color: AppColors.primary, size: 20),
+          if (a.accountCompleted)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.verified_user, color: AppColors.success, size: 20),
+            )
+          else if (a.hasAccount)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.person_outline, color: AppColors.warning, size: 20),
             ),
           const Icon(Icons.chevron_right, color: AppColors.textMuted),
         ],
@@ -626,6 +632,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
             child: _ProvisionButton(
               branchId: athlete.branchId,
               athleteNumber: athlete.athleteNumber,
+              phone: athlete.phone1,
               onDone: widget.onProvision,
               alreadyProvisioned: athlete.hasAccount,
             ),
@@ -688,6 +695,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
 class _ProvisionButton extends StatefulWidget {
   final int branchId;
   final int athleteNumber;
+  final String? phone;
   final VoidCallback onDone;
   final bool alreadyProvisioned;
 
@@ -695,6 +703,7 @@ class _ProvisionButton extends StatefulWidget {
     required this.branchId,
     required this.athleteNumber,
     required this.onDone,
+    this.phone,
     this.alreadyProvisioned = false,
   });
 
@@ -706,26 +715,23 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
   bool _loading = false;
   String? _code;
   String? _pass;
-  String? _sentTo;
 
   bool _wasProvisioned = false;
 
-  Future<void> _provision(String method) async {
+  Future<void> _provision() async {
     setState(() => _loading = true);
     try {
       final Map<String, dynamic> result;
       if (widget.alreadyProvisioned || _wasProvisioned) {
-        // Already has an account — reset password
-        result = await ApiService.reprovisionAccount(widget.branchId, widget.athleteNumber, method);
+        result = await ApiService.reprovisionAccount(widget.branchId, widget.athleteNumber, 'in_person');
       } else {
-        result = await ApiService.provisionAccount(widget.branchId, widget.athleteNumber, method);
+        result = await ApiService.provisionAccount(widget.branchId, widget.athleteNumber, 'in_person');
         _wasProvisioned = true;
       }
       if (mounted) {
         setState(() {
           _code = result['login_code'] ?? '';
           _pass = result['temp_password'] ?? '';
-          _sentTo = result['sent_to'];
         });
         widget.onDone();
       }
@@ -734,7 +740,23 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _sendViaWhatsApp() {
+    if (_code == null || _pass == null) return;
+    final phone = (widget.phone ?? '').replaceAll(RegExp(r'[^\d+]'), '');
+    final message = Uri.encodeComponent(
+      'Aquathletic Academy\n'
+      'Your login credentials:\n'
+      'Login Code: $_code\n'
+      'Password: $_pass\n\n'
+      'Please change your password on first login.',
+    );
+    final url = phone.isNotEmpty
+        ? 'https://wa.me/$phone?text=$message'
+        : 'https://wa.me/?text=$message';
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -756,7 +778,7 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Show credentials if available
+        // Show credentials if generated
         if (hasCredentials) ...[
           Container(
             padding: const EdgeInsets.all(14),
@@ -781,53 +803,62 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
           const SizedBox(height: 12),
           _CopyableField(label: 'Temp Password', value: _pass!),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.copy_all, size: 18),
-            label: const Text('Copy Both'),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: 'Login Code: $_code\nPassword: $_pass'));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Credentials copied to clipboard')),
-              );
-            },
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.copy_all, size: 18),
+                  label: const Text('Copy'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: 'Login Code: $_code\nPassword: $_pass'));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Credentials copied')),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('Send WhatsApp'),
+                  onPressed: _sendViaWhatsApp,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF25D366),
+                  ),
+                ),
+              ),
+            ],
           ),
-          if (_sentTo != null) ...[
-            const SizedBox(height: 8),
-            Text('Sent to: $_sentTo', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-          ],
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 8),
         ],
 
-        // Always show the action buttons
-        FilledButton.icon(
-          icon: Icon(widget.alreadyProvisioned && !hasCredentials ? Icons.refresh_rounded : Icons.person_add_rounded),
-          label: Text(widget.alreadyProvisioned && !hasCredentials
-              ? 'Reset Password & Show Credentials'
-              : hasCredentials
-                  ? 'Reset Password Again'
-                  : 'Provision Account (Show Credentials)'),
-          onPressed: () => _provision('in_person'),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        // Action buttons
+        if (!hasCredentials) ...[
+          FilledButton.icon(
+            icon: Icon(widget.alreadyProvisioned ? Icons.refresh_rounded : Icons.person_add_rounded),
+            label: Text(widget.alreadyProvisioned
+                ? 'Reset Password'
+                : 'Create Account'),
+            onPressed: _provision,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          icon: const Icon(Icons.send_rounded),
-          label: Text(widget.alreadyProvisioned && !hasCredentials
-              ? 'Reset Password & Send via SMS/WhatsApp'
-              : hasCredentials
-                  ? 'Reset & Send Again'
-                  : 'Provision & Send via SMS/WhatsApp'),
-          onPressed: () => _provision('both'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ] else ...[
+          OutlinedButton.icon(
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Reset Password Again'),
+            onPressed: _provision,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 44),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }

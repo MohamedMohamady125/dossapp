@@ -17,7 +17,7 @@ class S {
   String _t(String en, String ar) => _lang == 'ar' ? ar : en;
 
   // ── App ──
-  String get appName => _t('Aqua Athletic', 'أكوا أثلتك');
+  String get appName => 'Aquathletic';
   String get swimmingAcademy => _t('Swimming Academy', 'أكاديمية السباحة');
 
   // ── Auth ──
@@ -38,6 +38,7 @@ class S {
   String get contactBranch => _t('Contact Branch', 'تواصل مع الفرع');
   String get required => _t('Required', 'مطلوب');
   String get invalidCredentials => _t('Invalid credentials', 'بيانات غير صحيحة');
+  String get tooManyAttempts => _t('Too many attempts. Try again later.', 'محاولات كثيرة. حاول مرة أخرى لاحقاً.');
 
   // ── Change Password ──
   String get changePassword => _t('Change Password', 'تغيير كلمة المرور');

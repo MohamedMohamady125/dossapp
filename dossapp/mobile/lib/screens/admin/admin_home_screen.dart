@@ -80,8 +80,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = S.of(context);
-    final maxIndex = auth.isAdmin ? 5 : 3;
-    if (_currentIndex > maxIndex) _currentIndex = 0;
+    if (_currentIndex > 3) _currentIndex = 0;
 
     if (_loadingBranches) {
       return Scaffold(
@@ -161,6 +160,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 case 'refresh':
                   _refreshAll();
                   break;
+                case 'health':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(
+                    appBar: AppBar(title: Text(s.health)),
+                    body: const ExcelHealthScreen(),
+                  )));
+                  break;
+                case 'branches':
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => BranchManagementScreen(onBranchesChanged: _refreshAll)));
+                  break;
                 case 'branch_admins':
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const BranchAdminsScreen()));
                   break;
@@ -180,6 +188,27 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   ],
                 ),
               ),
+              PopupMenuItem(
+                value: 'health',
+                child: Row(
+                  children: [
+                    const Icon(Icons.monitor_heart_outlined, size: 20, color: AppColors.textSecondary),
+                    const SizedBox(width: 12),
+                    Text(s.health),
+                  ],
+                ),
+              ),
+              if (auth.isAdmin)
+                PopupMenuItem(
+                  value: 'branches',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.account_tree_outlined, size: 20, color: AppColors.textSecondary),
+                      const SizedBox(width: 12),
+                      Text(s.branches),
+                    ],
+                  ),
+                ),
               if (auth.isAdmin)
                 PopupMenuItem(
                   value: 'branch_admins',
@@ -234,9 +263,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
         ) : null,
       ),
-      body: (_selectedBranchId == null && _currentIndex < 4)
-          ? Center(child: Text(s.noData))
-          : _buildCurrentTab(auth),
+      body: _buildCurrentTab(auth),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.border, width: 1)),
@@ -245,14 +272,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) => setState(() => _currentIndex = i),
           destinations: [
-            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people), label: s.athletes),
+            NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: s.home),
             NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: s.payments),
             NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: s.analytics),
-            NavigationDestination(icon: const Icon(Icons.monitor_heart_outlined), selectedIcon: const Icon(Icons.monitor_heart), label: s.health),
-            if (auth.isAdmin) ...[
-              NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: s.pricing),
-              NavigationDestination(icon: const Icon(Icons.account_tree_outlined), selectedIcon: const Icon(Icons.account_tree), label: s.branches),
-            ],
+            NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: s.pricing),
           ],
         ),
       ),
@@ -260,13 +283,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Widget _buildCurrentTab(AuthProvider auth) {
+    if (_selectedBranchId == null && _currentIndex <= 2) {
+      return Center(child: Text(S.of(context).noData));
+    }
     switch (_currentIndex) {
       case 0: return AthletesScreen(branchId: _selectedBranchId!, key: ValueKey('ath-$_selectedBranchId-$_refreshKey'));
       case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
       case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
-      case 3: return ExcelHealthScreen(key: ValueKey('health-$_refreshKey'));
-      case 4: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
-      case 5: return BranchManagementScreen(key: ValueKey('branches-$_refreshKey'), onBranchesChanged: _refreshAll);
+      case 3: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
       default: return const SizedBox.shrink();
     }
   }

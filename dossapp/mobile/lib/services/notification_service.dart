@@ -20,7 +20,7 @@ class NotificationService {
 
   static const _androidChannel = AndroidNotificationChannel(
     'aqua_athletic_default',
-    'Aqua Athletic',
+    'Aquathletic',
     description: 'Schedule, payment and attendance notifications',
     importance: Importance.high,
   );

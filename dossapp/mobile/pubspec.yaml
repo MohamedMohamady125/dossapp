@@ -1,7 +1,7 @@
 name: aqua_athletic
-description: "Aqua Athletic Academy - Parent & Admin App"
+description: "Aquathletic Academy - Parent & Admin App"
 publish_to: 'none'
-version: 1.0.0+7
+version: 1.0.0+8
 
 environment:
   sdk: ^3.9.2

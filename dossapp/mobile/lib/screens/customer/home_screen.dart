@@ -122,29 +122,17 @@ class _HomeTabState extends State<_HomeTab> {
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      // Load profile first — it's fast and tells us suspension status immediately
-      _profile = await ApiService.getProfile();
+      // Fire both requests concurrently
+      final profileFuture = ApiService.getProfile();
+      final billFuture = ApiService.getBill().catchError((_) => Bill.empty());
+      final results = await Future.wait<dynamic>([profileFuture, billFuture]);
+      _profile = results[0] as AthleteProfile;
+      _bill = results[1] as Bill;
 
-      // If suspended, show suspended UI right away while loading reinstatement
-      if (_profile!.accountStatus == 'suspended') {
-        if (mounted) setState(() => _loading = false);
+      // If suspended, load reinstatement status
+      if (_profile!.accountStatus == 'suspended' || _bill?.isSuspended == true) {
         try {
           _reinstatement = await ApiService.getReinstatementStatus();
-        } catch (_) {}
-        if (mounted) setState(() {});
-        return;
-      }
-
-      // Only load bill if active (bill endpoint is slower due to Excel lookup)
-      _bill = await ApiService.getBill();
-
-      // Bill endpoint may have just suspended the account — re-check
-      if (_bill?.isSuspended == true) {
-        try {
-          _profile = await ApiService.getProfile();
-          if (_profile!.accountStatus == 'suspended') {
-            _reinstatement = await ApiService.getReinstatementStatus();
-          }
         } catch (_) {}
       }
     } catch (e, stack) {
@@ -224,6 +212,8 @@ class _HomeTabState extends State<_HomeTab> {
         SliverAppBar(
           expandedHeight: 130,
           pinned: true,
+          foregroundColor: AppColors.textPrimary,
+          iconTheme: const IconThemeData(color: AppColors.textPrimary),
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
@@ -278,11 +268,11 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+              icon: const Icon(Icons.refresh_rounded),
               onPressed: () { _load(); widget.onRefresh(); },
             ),
             IconButton(
-              icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+              icon: const Icon(Icons.settings_outlined),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
           ],
@@ -408,11 +398,11 @@ class _HomeTabState extends State<_HomeTab> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+              icon: const Icon(Icons.refresh_rounded),
               onPressed: () { _load(); widget.onRefresh(); },
             ),
             IconButton(
-              icon: const Icon(Icons.settings_outlined, color: Colors.white70),
+              icon: const Icon(Icons.settings_outlined),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
           ],

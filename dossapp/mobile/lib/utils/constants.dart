@@ -1,6 +1,6 @@
 class AppConstants {
-  static const String baseUrl = 'https://dossapp-tau.vercel.app/api';
+  static const String baseUrl = 'https://dossapp-production.up.railway.app';
 
-  static const String appName = 'Aqua Athletic';
+  static const String appName = 'Aquathletic';
   static const String currency = 'EGP';
 }

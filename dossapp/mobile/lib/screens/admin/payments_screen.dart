@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,6 +24,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   String? _error;
   String _statusFilter = 'paid';
   String _search = '';
+  Timer? _searchDebounce;
   late AnimationController _animController;
 
   String? _period;
@@ -36,6 +38,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _animController.dispose();
     super.dispose();
   }
@@ -141,7 +144,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                     filled: true,
                     fillColor: Colors.white,
                   ),
-                  onChanged: (v) => setState(() => _search = v),
+                  onChanged: (v) {
+                    _searchDebounce?.cancel();
+                    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+                      if (mounted) setState(() => _search = v);
+                    });
+                  },
                 ),
               ),
               const SizedBox(width: 8),

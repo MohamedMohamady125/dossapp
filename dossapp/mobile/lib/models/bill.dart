@@ -12,6 +12,8 @@ class Bill {
   final String? prevPeriod;
   final bool prevPaid;
 
+  factory Bill.empty() => Bill(period: '');
+
   Bill({
     required this.period,
     this.amountOwed,

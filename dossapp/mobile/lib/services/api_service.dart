@@ -114,11 +114,20 @@ class ApiService {
     return resp;
   }
 
+  static Completer<bool>? _refreshLock;
+
   static Future<bool> _tryRefresh() async {
-    _refreshToken ??= await _storage.read(key: 'refresh_token');
-    if (_refreshToken == null) return false;
+    // Prevent concurrent refresh calls — reuse in-flight request
+    if (_refreshLock != null) return _refreshLock!.future;
+    _refreshLock = Completer<bool>();
 
     try {
+      _refreshToken ??= await _storage.read(key: 'refresh_token');
+      if (_refreshToken == null) {
+        _refreshLock!.complete(false);
+        return false;
+      }
+
       final resp = await http.post(
         Uri.parse('${AppConstants.baseUrl}/auth/refresh'),
         headers: {'Content-Type': 'application/json'},
@@ -126,15 +135,34 @@ class ApiService {
       ).timeout(_timeout);
 
       if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        _accessToken = data['access_token'];
-        _refreshToken = data['refresh_token'];
-        await _storage.write(key: 'access_token', value: _accessToken!);
-        await _storage.write(key: 'refresh_token', value: _refreshToken!);
-        return true;
+        final data = _safeJsonDecode(resp.body);
+        if (data != null && data['access_token'] != null && data['refresh_token'] != null) {
+          _accessToken = data['access_token'];
+          _refreshToken = data['refresh_token'];
+          await _storage.write(key: 'access_token', value: _accessToken!);
+          await _storage.write(key: 'refresh_token', value: _refreshToken!);
+          _refreshLock!.complete(true);
+          return true;
+        }
       }
-    } catch (_) {}
-    return false;
+      _refreshLock!.complete(false);
+      return false;
+    } catch (_) {
+      _refreshLock!.complete(false);
+      return false;
+    } finally {
+      _refreshLock = null;
+    }
+  }
+
+  static Map<String, dynamic>? _safeJsonDecode(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<void> _saveTokens(Map<String, dynamic> data) async {
@@ -219,22 +247,22 @@ class ApiService {
 
   // ── Forgot Password ──
 
-  static Future<void> forgotPasswordSendCode(String loginCode) async {
+  static Future<void> forgotPasswordSendCode(String email) async {
     final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/send-code'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'login_code': loginCode}),
+      body: jsonEncode({'email': email}),
     ));
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Failed'));
     }
   }
 
-  static Future<bool> forgotPasswordVerify(String loginCode, String email, String code) async {
+  static Future<bool> forgotPasswordVerify(String email, String code) async {
     final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/verify'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'login_code': loginCode, 'email': email, 'code': code}),
+      body: jsonEncode({'email': email, 'code': code}),
     ));
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Verification failed'));
@@ -242,12 +270,12 @@ class ApiService {
     return true;
   }
 
-  static Future<void> forgotPasswordReset(String loginCode, String email, String code, String newPassword) async {
+  static Future<void> forgotPasswordReset(String email, String code, String newPassword) async {
     final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}/auth/forgot-password/reset'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
-        'login_code': loginCode, 'email': email,
+        'email': email,
         'code': code, 'new_password': newPassword,
       }),
     ));
@@ -462,8 +490,10 @@ class ApiService {
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
-  static Future<List<AthleteDetail>> getBranchAthletes(int branchId) async {
-    final resp = await _get('/branches/$branchId/athletes');
+  static Future<List<AthleteDetail>> getBranchAthletes(int branchId, {String? search}) async {
+    var path = '/branches/$branchId/athletes';
+    if (search != null && search.isNotEmpty) path += '?search=${Uri.encodeComponent(search)}';
+    final resp = await _get(path);
     if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load athletes');
     final list = jsonDecode(resp.body) as List;
     return list.map((a) => AthleteDetail.fromJson(a)).toList();

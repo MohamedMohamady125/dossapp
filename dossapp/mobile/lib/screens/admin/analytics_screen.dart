@@ -303,7 +303,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     return Column(children: widgets);
   }
 
-  void _merge(Map<String, int> t, Map<String, dynamic> s) { for (final e in s.entries) t[e.key] = (t[e.key] ?? 0) + (e.value as int); }
+  void _merge(Map<String, int> t, Map<String, dynamic> s) {
+    for (final e in s.entries) {
+      final v = e.value;
+      t[e.key] = (t[e.key] ?? 0) + (v is int ? v : v is num ? v.toInt() : 0);
+    }
+  }
   Map<String, dynamic> _toDyn(Map<String, int> m) => m.map((k, v) => MapEntry(k, v));
 
   // ── FUNNEL ──

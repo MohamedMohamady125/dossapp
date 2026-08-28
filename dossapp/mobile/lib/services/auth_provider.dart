@@ -48,12 +48,16 @@ class AuthProvider extends ChangeNotifier {
     _mustChangePassword = data['must_change_password'] ?? false;
 
     // Decode JWT to get branch info
-    final parts = (data['access_token'] as String).split('.');
-    if (parts.length == 3) {
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      _branchId = payload['branch_id'];
+    try {
+      final parts = (data['access_token'] as String).split('.');
+      if (parts.length == 3) {
+        final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+        );
+        _branchId = payload['branch_id'];
+      }
+    } catch (_) {
+      // Malformed token — continue without branch info
     }
 
     await _storage.write(key: 'role', value: _role);
@@ -70,13 +74,17 @@ class AuthProvider extends ChangeNotifier {
     _isLoggedIn = true;
     _mustChangePassword = data['must_change_password'] ?? false;
 
-    final parts = (data['access_token'] as String).split('.');
-    if (parts.length == 3) {
-      final payload = jsonDecode(
-        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
-      );
-      _role = payload['role'] ?? 'admin';
-      _branchId = payload['branch_id'];
+    try {
+      final parts = (data['access_token'] as String).split('.');
+      if (parts.length == 3) {
+        final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+        );
+        _role = payload['role'] ?? 'customer';
+        _branchId = payload['branch_id'];
+      }
+    } catch (_) {
+      _role = 'customer';
     }
 
     await _storage.write(key: 'role', value: _role);

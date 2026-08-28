@@ -7,6 +7,7 @@ import '../services/locale_provider.dart';
 import '../services/api_service.dart';
 import '../utils/theme.dart';
 import '../utils/translations.dart';
+import 'auth/forgot_password_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -497,6 +498,33 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                   ),
                   validator: (v) => v == null || v.isEmpty ? s.required : null,
                 ),
+                // Forgot password link
+                if (widget.auth.isCustomer)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          widget.parentContext,
+                          MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                        );
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        s.forgotPassword,
+                        style: GoogleFonts.barlow(
+                          fontSize: 13,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 14),
                 // New password
                 TextFormField(
@@ -670,7 +698,7 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                   ),
                   validator: (v) {
                     if (v == null || v.isEmpty) return s.required;
-                    if (!v.contains('@') || !v.contains('.')) return s.invalidEmail;
+                    if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(v)) return s.invalidEmail;
                     return null;
                   },
                 ),

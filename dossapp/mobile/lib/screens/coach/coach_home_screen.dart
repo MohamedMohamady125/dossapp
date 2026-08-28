@@ -33,15 +33,19 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
     });
     try {
       final data = await ApiService.getCoachSchedule();
-      setState(() {
-        _schedule = data;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _schedule = data;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 

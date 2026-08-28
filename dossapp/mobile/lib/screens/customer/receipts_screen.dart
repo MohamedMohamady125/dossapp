@@ -77,7 +77,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       return ErrorState(message: _error!, onRetry: _load);
     }
 
-    if (_receipts!.isEmpty) {
+    if (_receipts == null || _receipts!.isEmpty) {
       final s = S.of(context);
       return EmptyState(
         icon: Icons.receipt_long_rounded,

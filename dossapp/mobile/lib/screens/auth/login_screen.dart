@@ -29,15 +29,16 @@ class _LoginScreenState extends State<LoginScreen>
   late AnimationController _logoController;
   late Animation<double> _logoScale;
   late Animation<double> _headerFade;
-  late Animation<double> _toggleFade;
   late Animation<double> _field1Fade;
   late Animation<double> _field2Fade;
   late Animation<double> _buttonFade;
   late Animation<Offset> _headerSlide;
-  late Animation<Offset> _toggleSlide;
   late Animation<Offset> _field1Slide;
   late Animation<Offset> _field2Slide;
   late Animation<Offset> _buttonSlide;
+
+  int _logoTapCount = 0;
+  DateTime? _lastLogoTap;
 
   @override
   void initState() {
@@ -58,14 +59,12 @@ class _LoginScreenState extends State<LoginScreen>
 
     _headerFade = _buildFade(0.0, 0.3);
     _headerSlide = _buildSlide(0.0, 0.3);
-    _toggleFade = _buildFade(0.15, 0.45);
-    _toggleSlide = _buildSlide(0.15, 0.45);
-    _field1Fade = _buildFade(0.3, 0.6);
-    _field1Slide = _buildSlide(0.3, 0.6);
-    _field2Fade = _buildFade(0.45, 0.75);
-    _field2Slide = _buildSlide(0.45, 0.75);
-    _buttonFade = _buildFade(0.6, 0.9);
-    _buttonSlide = _buildSlide(0.6, 0.9);
+    _field1Fade = _buildFade(0.15, 0.45);
+    _field1Slide = _buildSlide(0.15, 0.45);
+    _field2Fade = _buildFade(0.3, 0.6);
+    _field2Slide = _buildSlide(0.3, 0.6);
+    _buttonFade = _buildFade(0.45, 0.75);
+    _buttonSlide = _buildSlide(0.45, 0.75);
 
     _logoController.forward();
     _entranceController.forward();
@@ -115,13 +114,29 @@ class _LoginScreenState extends State<LoginScreen>
             _codeController.text.trim(), _passwordController.text);
       }
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) {
+        final msg = e.toString();
+        final s = S.of(context);
+        // Translate known backend error messages
+        final lower = msg.toLowerCase();
+        final translated = lower.contains('invalid credentials')
+            ? s.invalidCredentials
+            : lower.contains('too many')
+                ? s.tooManyAttempts
+                : lower.contains('no internet')
+                    ? s.noInternetConnection
+                    : lower.contains('server')
+                        ? s.serverError
+                        : msg;
+        setState(() => _error = translated);
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   void _showForgotPassword() {
+    _logoTapCount = 0;
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
@@ -135,14 +150,16 @@ class _LoginScreenState extends State<LoginScreen>
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
       body: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         child: Column(
           children: [
             // Wave gradient header
             LayoutBuilder(builder: (context, constraints) {
               final screenH = MediaQuery.of(context).size.height;
-              final headerH = (screenH * 0.3).clamp(200.0, 280.0);
-              final logoSize = (headerH * 0.28).clamp(56.0, 80.0);
+              final headerH = (screenH * 0.38).clamp(260.0, 360.0);
+              final logoSize = (headerH * 0.30).clamp(80.0, 110.0);
               return ClipPath(
                 clipper: _WaveClipper(),
                 child: Container(
@@ -154,7 +171,97 @@ class _LoginScreenState extends State<LoginScreen>
                   child: SafeArea(
                     child: Stack(
                       children: [
-                        // Language toggle top right
+                        // Logo + text centered
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 40),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ScaleTransition(
+                                  scale: _logoScale,
+                                  child: Container(
+                                    width: logoSize,
+                                    height: logoSize,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(logoSize * 0.27),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.2),
+                                          blurRadius: 24,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(logoSize * 0.27),
+                                      child: Padding(
+                                        padding: EdgeInsets.all(logoSize * 0.1),
+                                        child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: headerH * 0.04),
+                                FadeTransition(
+                                  opacity: _headerFade,
+                                  child: SlideTransition(
+                                    position: _headerSlide,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        s.appName,
+                                        style: GoogleFonts.barlowCondensed(
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                          letterSpacing: -0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                FadeTransition(
+                                  opacity: _headerFade,
+                                  child: SlideTransition(
+                                    position: _headerSlide,
+                                    child: Text(
+                                      s.swimmingAcademy,
+                                      style: GoogleFonts.barlow(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w400,
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: headerH * 0.06),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Invisible tap layer covering entire header — 3 taps opens staff login
+                        Positioned.fill(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: () {
+                              final now = DateTime.now();
+                              if (_lastLogoTap != null &&
+                                  now.difference(_lastLogoTap!).inSeconds > 3) {
+                                _logoTapCount = 0;
+                              }
+                              _lastLogoTap = now;
+                              _logoTapCount++;
+                              if (_logoTapCount >= 3) {
+                                _logoTapCount = 0;
+                                setState(() => _isAdmin = true);
+                              }
+                            },
+                          ),
+                        ),
+                        // Language toggle on top so it's still tappable
                         Positioned(
                           top: 4,
                           right: 16,
@@ -178,73 +285,6 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                         ),
-                        Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Animated logo
-                              ScaleTransition(
-                                scale: _logoScale,
-                                child: Container(
-                                  width: logoSize,
-                                  height: logoSize,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(logoSize * 0.27),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.2),
-                                        blurRadius: 24,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(logoSize * 0.27),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(logoSize * 0.1),
-                                      child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              SizedBox(height: headerH * 0.05),
-                              FadeTransition(
-                                opacity: _headerFade,
-                                child: SlideTransition(
-                                  position: _headerSlide,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      s.appName,
-                                      style: GoogleFonts.barlowCondensed(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              FadeTransition(
-                                opacity: _headerFade,
-                                child: SlideTransition(
-                                  position: _headerSlide,
-                                  child: Text(
-                                    s.swimmingAcademy,
-                                    style: GoogleFonts.barlow(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w400,
-                                      color: Colors.white.withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -264,29 +304,30 @@ class _LoginScreenState extends State<LoginScreen>
                     children: [
                       const SizedBox(height: 8),
 
-                      // Toggle
-                      FadeTransition(
-                        opacity: _toggleFade,
-                        child: SlideTransition(
-                          position: _toggleSlide,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceVariant,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: Row(
-                              children: [
-                                _tabButton(s.parentAthlete, !_isAdmin,
-                                    () => setState(() => _isAdmin = false)),
-                                _tabButton(s.staff, _isAdmin,
-                                    () => setState(() => _isAdmin = true)),
-                              ],
-                            ),
+                      // Admin mode indicator
+                      if (_isAdmin)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => setState(() => _isAdmin = false),
+                                child: const Icon(Icons.arrow_back_ios, size: 18, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                s.staff,
+                                style: GoogleFonts.barlow(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 28),
+
+                      const SizedBox(height: 16),
 
                       // Code / Username field
                       FadeTransition(
@@ -295,6 +336,7 @@ class _LoginScreenState extends State<LoginScreen>
                           position: _field1Slide,
                           child: TextFormField(
                             controller: _codeController,
+                            autovalidateMode: AutovalidateMode.onUserInteraction,
                             decoration: InputDecoration(
                               labelText:
                                   _isAdmin ? s.username : s.loginCode,
@@ -317,6 +359,7 @@ class _LoginScreenState extends State<LoginScreen>
                           child: TextFormField(
                             controller: _passwordController,
                             obscureText: _obscure,
+                            autovalidateMode: AutovalidateMode.onUserInteraction,
                             decoration: InputDecoration(
                               labelText: s.password,
                               prefixIcon:
@@ -475,7 +518,7 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 40),
                     ],
                   ),
                 ),
@@ -487,39 +530,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _tabButton(String label, bool selected, VoidCallback onTap) {
-    return Expanded(
-      child: PressFeedback(
-        onTap: onTap,
-        scaleFactor: 0.97,
-        child: AnimatedContainer(
-          duration: AppAnimation.normalDuration,
-          curve: AppAnimation.enterCurve,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? Colors.white : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        blurRadius: 8),
-                  ]
-                : null,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.barlow(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? AppColors.primary : AppColors.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Custom clipper that creates a wave shape at the bottom of the header.
@@ -527,15 +537,15 @@ class _WaveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     final path = Path();
-    path.lineTo(0, size.height - 40);
+    path.lineTo(0, size.height - 28);
 
     final firstControl = Offset(size.width * 0.25, size.height);
-    final firstEnd = Offset(size.width * 0.5, size.height - 20);
+    final firstEnd = Offset(size.width * 0.5, size.height - 14);
     path.quadraticBezierTo(
         firstControl.dx, firstControl.dy, firstEnd.dx, firstEnd.dy);
 
-    final secondControl = Offset(size.width * 0.75, size.height - 40);
-    final secondEnd = Offset(size.width, size.height - 15);
+    final secondControl = Offset(size.width * 0.75, size.height - 28);
+    final secondEnd = Offset(size.width, size.height - 10);
     path.quadraticBezierTo(
         secondControl.dx, secondControl.dy, secondEnd.dx, secondEnd.dy);
 

@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 
-/// Forgot password flow: Login Code → Email + Send Code → Verify → New Password
+/// Forgot password flow: Email → Verify Code → New Password
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -14,12 +14,11 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  int _step = 0; // 0=login_code, 1=email+send, 2=verify, 3=password
+  int _step = 0; // 0=email, 1=verify, 2=password
   bool _loading = false;
   String? _error;
   bool _success = false;
 
-  final _loginCodeController = TextEditingController();
   final _emailController = TextEditingController();
   final _codeController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -28,7 +27,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
-  String _loginCode = '';
   String _email = '';
   String _verifiedCode = '';
   Timer? _resendTimer;
@@ -36,7 +34,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   void dispose() {
-    _loginCodeController.dispose();
     _emailController.dispose();
     _codeController.dispose();
     _passwordController.dispose();
@@ -58,24 +55,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
   }
 
-  Future<void> _submitLoginCode() async {
-    if (!_formKey.currentState!.validate()) return;
-    _loginCode = _loginCodeController.text.trim();
-    setState(() { _step = 1; _error = null; });
-  }
-
   Future<void> _sendCode() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
     try {
       _email = _emailController.text.trim();
-      await ApiService.forgotPasswordSendCode(_loginCode);
+      await ApiService.forgotPasswordSendCode(_email);
       _startResendTimer();
-      setState(() => _step = 2);
+      if (mounted) setState(() => _step = 1);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -83,13 +74,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     if (_resendSeconds > 0) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await ApiService.forgotPasswordSendCode(_loginCode);
+      await ApiService.forgotPasswordSendCode(_email);
       _startResendTimer();
       _codeController.clear();
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -101,13 +92,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await ApiService.forgotPasswordVerify(_loginCode, _email, code);
+      await ApiService.forgotPasswordVerify(_email, code);
       _verifiedCode = code;
-      setState(() => _step = 3);
+      if (mounted) setState(() => _step = 2);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -116,13 +107,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await ApiService.forgotPasswordReset(
-        _loginCode, _email, _verifiedCode, _passwordController.text,
+        _email, _verifiedCode, _passwordController.text,
       );
-      setState(() => _success = true);
+      if (mounted) setState(() => _success = true);
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -181,10 +172,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       const SizedBox(height: 24),
                       _buildStepIndicator(),
                       const SizedBox(height: 32),
-                      if (_step == 0) _buildLoginCodeStep(),
-                      if (_step == 1) _buildEmailStep(),
-                      if (_step == 2) _buildVerifyStep(),
-                      if (_step == 3) _buildPasswordStep(),
+                      if (_step == 0) _buildEmailStep(),
+                      if (_step == 1) _buildVerifyStep(),
+                      if (_step == 2) _buildPasswordStep(),
                       _buildErrorWidget(),
                       const SizedBox(height: 24),
                       _buildActionButton(),
@@ -201,7 +191,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildHeader() {
-    final titles = ['Reset Password', 'Your Email', 'Verify Email', 'New Password'];
+    final titles = ['Reset Password', 'Verify Email', 'New Password'];
     final screenH = MediaQuery.of(context).size.height;
     final headerH = (screenH * 0.22).clamp(150.0, 200.0);
     return ClipPath(
@@ -248,11 +238,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildStepIndicator() {
     return Row(
-      children: List.generate(4, (i) {
+      children: List.generate(3, (i) {
         final isActive = i <= _step;
         return Expanded(
           child: Container(
-            margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
+            margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
             height: 4,
             decoration: BoxDecoration(
               color: isActive ? AppColors.primary : AppColors.border,
@@ -261,42 +251,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
         );
       }),
-    );
-  }
-
-  Widget _buildLoginCodeStep() {
-    return Column(
-      children: [
-        Center(
-          child: Container(
-            width: 72, height: 72,
-            decoration: BoxDecoration(
-              color: AppColors.primarySurface,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.15), width: 2),
-            ),
-            child: const Icon(Icons.person_outline, size: 36, color: AppColors.primary),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Enter your login code to start the password reset process.',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
-        ),
-        const SizedBox(height: 32),
-        TextFormField(
-          controller: _loginCodeController,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            labelText: 'Login Code',
-            prefixIcon: Icon(Icons.badge_outlined, size: 20),
-          ),
-          validator: (v) => v == null || v.trim().isEmpty ? 'Login code is required' : null,
-          onFieldSubmitted: (_) => _submitLoginCode(),
-        ),
-      ],
     );
   }
 
@@ -333,7 +287,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           validator: (v) {
             if (v == null || v.trim().isEmpty) return 'Email is required';
-            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v.trim())) return 'Enter a valid email';
+            if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(v.trim())) return 'Enter a valid email';
             return null;
           },
           onFieldSubmitted: (_) => _sendCode(),
@@ -512,10 +466,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildActionButton() {
     // Skip button on verify step (auto-verify on 6 digits)
-    if (_step == 2) return const SizedBox.shrink();
+    if (_step == 1) return const SizedBox.shrink();
 
-    final labels = ['Continue', 'Send Verification Code', '', 'Reset Password'];
-    final actions = [_submitLoginCode, _sendCode, _verifyCode, _resetPassword];
+    final labels = ['Send Verification Code', '', 'Reset Password'];
+    final actions = [_sendCode, _verifyCode, _resetPassword];
 
     return GestureDetector(
       onTap: _loading ? null : actions[_step],

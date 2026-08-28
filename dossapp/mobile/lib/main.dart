@@ -19,6 +19,12 @@ import 'utils/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Lock to portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   // Set status bar style
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -41,20 +47,20 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
         ChangeNotifierProvider(create: (_) => LocaleProvider()..init()),
       ],
-      child: const AquaAthleticApp(),
+      child: const AquathleticApp(),
     ),
   );
 }
 
-class AquaAthleticApp extends StatelessWidget {
-  const AquaAthleticApp({super.key});
+class AquathleticApp extends StatelessWidget {
+  const AquathleticApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>().locale;
 
     return MaterialApp(
-      title: 'Aqua Athletic',
+      title: 'Aquathletic',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
       locale: locale,
