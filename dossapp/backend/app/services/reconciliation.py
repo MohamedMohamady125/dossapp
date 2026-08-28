@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
+from app.models.bill_override import BillOverride
 from app.services.roster_source import BranchRoster
 from app.services.payment_service import record_cash_payment
 from app.services.price_resolver import resolve_price
@@ -30,7 +31,7 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
     period = roster.period or _current_period()
     created_count = 0
 
-    # Pre-fetch all account emails for this branch in one query (avoid N+1)
+    # Pre-fetch all account emails + bill overrides for this branch (avoid N+1)
     acct_result = await db.execute(
         select(Account.athlete_number, Account.email).where(
             Account.branch_id == roster.branch_id,
@@ -38,30 +39,60 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
     )
     email_map = {row[0]: row[1] for row in acct_result.all()}
 
+    override_result = await db.execute(
+        select(BillOverride).where(BillOverride.branch_id == roster.branch_id)
+    )
+    override_map = {o.athlete_number: o.amount for o in override_result.scalars().all()}
+
     for athlete in roster.athletes:
-        if not athlete.pay:
+        # Consider paid if pay column has a positive amount OR receipt column has a value
+        has_pay = bool(athlete.pay)
+        has_receipt = bool(athlete.receipt_no and str(athlete.receipt_no).strip() not in ("", "0", "None"))
+
+        if not has_pay and not has_receipt:
             continue
 
-        try:
-            amount = Decimal(athlete.pay)
-        except (InvalidOperation, ValueError):
-            logger.warning(
-                f"Branch {roster.branch_id}, athlete {athlete.athlete_number}: "
-                f"unparseable pay value '{athlete.pay}'"
-            )
-            continue
+        amount = Decimal(0)
+        if has_pay:
+            try:
+                amount = Decimal(athlete.pay)
+            except (InvalidOperation, ValueError):
+                logger.warning(
+                    f"Branch {roster.branch_id}, athlete {athlete.athlete_number}: "
+                    f"unparseable pay value '{athlete.pay}'"
+                )
+                if not has_receipt:
+                    continue
 
-        if amount <= 0:
-            continue
+        # If receipt exists but no valid pay amount, resolve price:
+        # 1st priority: admin-set custom bill (BillOverride)
+        # 2nd priority: price catalog
+        if amount <= 0 and has_receipt:
+            override = override_map.get(athlete.athlete_number)
+            if override:
+                amount = Decimal(str(override))
+            else:
+                catalog_price = await resolve_price(
+                    db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+                    athlete_number=athlete.athlete_number,
+                )
+                amount = catalog_price if catalog_price is not None else Decimal(0)
+            if amount <= 0:
+                continue
 
         receipt_no = athlete.receipt_no or f"{roster.branch_id}-{athlete.athlete_number}"
         email = email_map.get(athlete.athlete_number)
 
-        # Use catalog price for amount_owed; athlete.pay is the actual cash collected
-        catalog_price = await resolve_price(
-            db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
-            athlete_number=athlete.athlete_number,
-        )
+        # amount_owed: check override first, then catalog
+        override = override_map.get(athlete.athlete_number)
+        if override:
+            amount_owed = Decimal(str(override))
+        else:
+            catalog_price = await resolve_price(
+                db, roster.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+                athlete_number=athlete.athlete_number,
+            )
+            amount_owed = catalog_price if catalog_price is not None else amount
 
         receipt = await record_cash_payment(
             db=db,
@@ -69,7 +100,7 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
             athlete_number=athlete.athlete_number,
             period=period,
             amount_paid=amount,
-            amount_owed=catalog_price if catalog_price is not None else amount,
+            amount_owed=amount_owed,
             excel_receipt_no=receipt_no,
             athlete_name=athlete.name,
             branch_name=roster.branch_name,

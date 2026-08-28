@@ -52,6 +52,8 @@ async def create_checkout(
         logger.warning("Easykash API key not configured")
         return None
 
+    # callbackUrl = server-to-server notification (reliable, doesn't depend on browser)
+    # redirectUrl = where customer browser goes after payment (can fail if tab closed)
     payload = {
         "amount": str(amount_egp),
         "currency": "EGP",
@@ -60,6 +62,7 @@ async def create_checkout(
         "name": athlete_name or "Athlete",
         "email": email or "customer@aquaathletic.com",
         "mobile": phone or "+201000000000",
+        "callbackUrl": f"{settings.public_base_url}/webhooks/easykash",
         "redirectUrl": f"{settings.public_base_url}/pay/success",
         "customerReference": f"AQUA-{branch_id}-{athlete_number}-{period}-{int(time.time())}",
     }

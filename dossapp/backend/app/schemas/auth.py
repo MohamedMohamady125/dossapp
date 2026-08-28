@@ -43,17 +43,15 @@ class SetPasswordWithEmailRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    login_code: str
+    email: str
 
 
 class ForgotPasswordVerifyRequest(BaseModel):
-    login_code: str
     email: str
     code: str
 
 
 class ForgotPasswordResetRequest(BaseModel):
-    login_code: str
     email: str
     code: str
     new_password: str

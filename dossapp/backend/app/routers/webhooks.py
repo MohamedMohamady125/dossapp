@@ -119,9 +119,10 @@ async def _process_callback(payload: dict, skip_signature: bool = False) -> dict
                 except Exception:
                     pass
 
-    # If amount not in callback params, resolve from price catalog
-    if amount_egp <= 0:
-        async with async_session() as db:
+    # Single DB session for all operations — atomic transaction
+    async with async_session() as db:
+        # If amount not in callback params, resolve from price catalog
+        if amount_egp <= 0 and athlete:
             from app.services.price_resolver import resolve_price
             catalog_price = await resolve_price(
                 db, branch_id,
@@ -129,13 +130,12 @@ async def _process_callback(payload: dict, skip_signature: bool = False) -> dict
                 athlete.segment if athlete else None,
                 athlete.sessions if athlete else None,
                 athlete_number=athlete_number,
-            ) if athlete else None
+            )
             if catalog_price:
                 amount_egp = Decimal(str(catalog_price))
                 logger.info(f"Amount resolved from catalog: {amount_egp}")
 
-    # Look up account email if available
-    async with async_session() as db:
+        # Look up account email if available
         acct_result = await db.execute(
             select(Account.email).where(
                 Account.branch_id == branch_id,
@@ -144,7 +144,6 @@ async def _process_callback(payload: dict, skip_signature: bool = False) -> dict
         )
         email = acct_result.scalar_one_or_none()
 
-    async with async_session() as db:
         receipt = await record_online_payment(
             db=db,
             branch_id=branch_id,
@@ -204,8 +203,10 @@ success_router = APIRouter(tags=["webhooks"])
 async def pay_success(request: Request):
     """Post-payment landing page (Easykash redirects the customer here).
 
-    Easykash may append the payment result as query params on the redirect —
-    check the status and show the appropriate message.
+    SECURITY: This page is browser-facing — URL params can be tampered by the user.
+    We NEVER process payments here (no skip_signature). Payment recording happens
+    exclusively via the server-to-server webhook callback (/webhooks/easykash).
+    This page only checks redirect params to show success vs failure UI.
     """
     params = dict(request.query_params)
     payment_ok = False
@@ -213,15 +214,30 @@ async def pay_success(request: Request):
     if params:
         logger.info(f"Easykash redirect params on /pay/success: {params}")
 
-        # Check payment status from redirect params
+        # Only check the status param for display purposes — do NOT record payment here
         status = _get_ci(params, "status", "PaymentStatus").lower()
         if status in SUCCESS_STATUSES:
-            try:
-                result = await _process_callback(params, skip_signature=True)
-                logger.info(f"Redirect-param payment processing result: {result}")
-                payment_ok = result.get("status") in ("ok", "duplicate")
-            except Exception as e:
-                logger.warning(f"Redirect params not processable as payment: {e}")
+            payment_ok = True
+
+            # Also check if payment was already recorded via webhook (for accurate display)
+            customer_ref = _get_ci(params, "customerReference", "CustomerReference")
+            match = re.match(r"AQUA-(\d+)-(\d+)-(\d{4}-\d{2})", customer_ref)
+            if match:
+                branch_id = int(match.group(1))
+                athlete_number = int(match.group(2))
+                period = match.group(3)
+                async with async_session() as db:
+                    from app.models.payment import Payment
+                    result = await db.execute(
+                        select(Payment.id).where(
+                            Payment.branch_id == branch_id,
+                            Payment.athlete_number == athlete_number,
+                            Payment.period == period,
+                            Payment.status == "paid",
+                        ).limit(1)
+                    )
+                    if result.scalar_one_or_none():
+                        logger.info(f"Payment already recorded via webhook for ({branch_id}, {athlete_number}, {period})")
         else:
             logger.info(f"Easykash redirect with non-success status: {status}")
 

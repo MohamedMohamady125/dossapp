@@ -1,11 +1,12 @@
-"""Aqua Athletic — FastAPI application entry point."""
+"""Aquathletic — FastAPI application entry point."""
 
 import asyncio
 import logging
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy import select
 
 from app.config import settings
@@ -329,7 +330,7 @@ async def _sync_drive_file_ids():
 async def lifespan(app: FastAPI):
     global roster_source
 
-    logger.info("Starting Aqua Athletic backend...")
+    logger.info("Starting Aquathletic backend...")
 
     # Auto-create tables for SQLite dev mode
     from app.database import init_db
@@ -367,23 +368,41 @@ async def lifespan(app: FastAPI):
         refresh_task.cancel()
     if notification_task:
         notification_task.cancel()
-    logger.info("Aqua Athletic backend shutting down")
+    logger.info("Aquathletic backend shutting down")
 
 
 app = FastAPI(
-    title="Aqua Athletic Academy",
+    title="Aquathletic Academy",
     version="1.0.0",
-    description="Backend API for Aqua Athletic Academy management app",
+    description="Backend API for Aquathletic Academy management app",
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO(spec): Restrict to Flutter app domain in production
+    allow_origins=[
+        "https://dossapp-tau.vercel.app",
+        "https://dossapp-production.up.railway.app",
+        "http://localhost:3000",
+        "http://localhost:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Security headers
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Register routers
 app.include_router(auth.router)
@@ -398,7 +417,7 @@ app.include_router(webhooks.success_router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "aqua-athletic"}
+    return {"status": "ok", "service": "aquathletic"}
 
 
 from fastapi.responses import HTMLResponse
@@ -471,7 +490,7 @@ p, li { font-size: 15px; }
 
 <h2>9. Contact Us</h2>
 <p>If you have questions about this privacy policy, contact us at:<br>
-<strong>Email:</strong> noreply@aquathletic.app</p>
+<strong>Email:</strong> support@aquathletic.app</p>
 </body>
 </html>"""
 

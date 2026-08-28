@@ -120,6 +120,11 @@ async def customer_change_password(
     account: Account = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ):
+    # This endpoint is only for forced first-time password setup (onboarding).
+    # Voluntary changes use PUT /me/password which verifies old password.
+    if not account.must_change_password:
+        raise HTTPException(status_code=403, detail="Use profile settings to change your password")
+
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
@@ -266,28 +271,46 @@ async def customer_complete_onboarding(
     return {"message": "Account setup complete"}
 
 
+# ── Helper: find account (customer or staff) by email ──
+async def _find_account_by_email(db: AsyncSession, email: str):
+    """Look up a customer Account or AdminUser by email. Returns (account, account_type)."""
+    result = await db.execute(select(Account).where(Account.email == email))
+    account = result.scalar_one_or_none()
+    if account:
+        return account, "customer"
+
+    result = await db.execute(select(AdminUser).where(AdminUser.email == email))
+    admin = result.scalar_one_or_none()
+    if admin:
+        return admin, "staff"
+
+    return None, None
+
+
 # ── Forgot password: send code ──
 @router.post("/forgot-password/send-code")
 async def forgot_password_send_code(
     req: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    generic_msg = "If an account exists with a verified email, a code has been sent"
+    generic_msg = "If an account exists with this email, a verification code has been sent"
 
-    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
-    account = result.scalar_one_or_none()
+    # Rate limit: max 5 code requests per email per 15 minutes
+    rate_key = f"forgot:{req.email.lower()}"
+    _check_rate_limit(rate_key)
 
-    if not account or not account.email:
+    account, account_type = await _find_account_by_email(db, req.email.strip().lower())
+    if not account:
         return {"message": generic_msg}
 
     code = _generate_code()
     expires = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-    # Delete any previous unverified forgot-password codes for this account
+    # Delete any previous unverified forgot-password codes for this email
     await db.execute(
         delete(EmailVerification).where(
             and_(
-                EmailVerification.account_id == account.id,
+                EmailVerification.email == req.email.strip().lower(),
                 EmailVerification.purpose == "forgot_password",
                 EmailVerification.verified == False,
             )
@@ -295,8 +318,8 @@ async def forgot_password_send_code(
     )
 
     verification = EmailVerification(
-        account_id=account.id,
-        email=account.email,
+        account_id=account.id if account_type == "customer" else None,
+        email=req.email.strip().lower(),
         code=code,
         purpose="forgot_password",
         expires_at=expires,
@@ -304,7 +327,7 @@ async def forgot_password_send_code(
     db.add(verification)
     await db.flush()
 
-    await _send_verification_email(account.email, code)
+    await _send_verification_email(req.email.strip(), code)
 
     return {"message": generic_msg}
 
@@ -315,17 +338,12 @@ async def forgot_password_verify(
     req: ForgotPasswordVerifyRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
-    account = result.scalar_one_or_none()
-
-    if not account:
-        raise HTTPException(status_code=400, detail="Invalid request")
+    email = req.email.strip().lower()
 
     ver_result = await db.execute(
         select(EmailVerification).where(
             and_(
-                EmailVerification.account_id == account.id,
-                EmailVerification.email == req.email,
+                EmailVerification.email == email,
                 EmailVerification.purpose == "forgot_password",
                 EmailVerification.verified == False,
             )
@@ -359,18 +377,13 @@ async def forgot_password_reset(
     req: ForgotPasswordResetRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
-    account = result.scalar_one_or_none()
-
-    if not account:
-        raise HTTPException(status_code=400, detail="Invalid request")
+    email = req.email.strip().lower()
 
     # Check for a verified forgot-password verification
     ver_result = await db.execute(
         select(EmailVerification).where(
             and_(
-                EmailVerification.account_id == account.id,
-                EmailVerification.email == req.email,
+                EmailVerification.email == email,
                 EmailVerification.purpose == "forgot_password",
                 EmailVerification.verified == True,
             )
@@ -384,9 +397,25 @@ async def forgot_password_reset(
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
+    # Find the account (customer or staff) by email and update password
+    account, account_type = await _find_account_by_email(db, email)
+    if not account:
+        raise HTTPException(status_code=400, detail="Account not found")
+
     account.password_hash = hash_password(req.new_password)
-    account.must_change_password = False
+    if hasattr(account, 'must_change_password'):
+        account.must_change_password = False
     db.add(account)
+
+    # Clean up used verification
+    await db.execute(
+        delete(EmailVerification).where(
+            and_(
+                EmailVerification.email == email,
+                EmailVerification.purpose == "forgot_password",
+            )
+        )
+    )
 
     return {"message": "Password reset successfully"}
 

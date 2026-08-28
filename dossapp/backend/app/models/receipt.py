@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, LargeBinary, JSON
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, LargeBinary, JSON, Index
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -26,3 +26,8 @@ class Receipt(Base):
 
     send_status = Column(JSON, default=dict, nullable=False)
     # e.g. {"sms": "sent", "email": "pending", "whatsapp": "failed"}
+
+    __table_args__ = (
+        Index("ix_receipt_payment_id", "payment_id"),
+        Index("ix_receipt_athlete_number", "athlete_number"),
+    )

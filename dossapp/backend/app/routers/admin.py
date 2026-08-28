@@ -449,6 +449,9 @@ async def list_coach_accounts(
 @router.get("/branches/{branch_id}/athletes", response_model=list[AthleteDetail])
 async def list_athletes(
     branch_id: int,
+    search: Optional[str] = Query(None, description="Search by name, number, or level"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=500),
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -484,11 +487,25 @@ async def list_athletes(
     )
     db_paid_set = {row[0] for row in db_paid_result.all()}
 
+    # Server-side search filter
+    roster_athletes = roster.athletes
+    if search:
+        q = search.lower()
+        roster_athletes = [
+            a for a in roster_athletes
+            if q in a.name.lower()
+            or q in str(a.athlete_number)
+            or (a.step and q in a.step.lower())
+        ]
+
+    # Paginate
+    roster_athletes = roster_athletes[skip : skip + limit]
+
     athletes_out = []
-    for a in roster.athletes:
+    for a in roster_athletes:
         bill = override_map.get(a.athlete_number) or resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
         bill_missing = None if bill else diagnose_missing_bill(catalog, a.type, a.step, a.segment, a.sessions)
-        excel_paid = bool(a.pay and a.receipt_no)
+        excel_paid = bool(a.pay or a.receipt_no)
         athletes_out.append(AthleteDetail(
             branch=roster.branch_name,
             branch_id=branch_id,
@@ -547,7 +564,7 @@ async def get_athlete_detail(
     bill_missing = None if bill else diagnose_missing_bill(catalog, athlete.type, athlete.step, athlete.segment, athlete.sessions)
 
     # Check DB payments too (covers mark-paid before Excel cache refreshes)
-    excel_paid = bool(athlete.pay and athlete.receipt_no)
+    excel_paid = bool(athlete.pay or athlete.receipt_no)
     if not excel_paid:
         period = roster.period or current_billing_period()
         db_paid = await db.execute(
@@ -638,7 +655,7 @@ async def provision_account(
         phone = normalize_phone(athlete.phone1)
         if phone:
             msg = (
-                f"Aqua Athletic Academy\n"
+                f"Aquathletic Academy\n"
                 f"Your login credentials:\n"
                 f"Code: {login_code}\n"
                 f"Password: {temp_password}\n"
@@ -705,7 +722,7 @@ async def reprovision_account(
         phone = normalize_phone(athlete.phone1) if athlete else None
         if phone:
             msg = (
-                f"Aqua Athletic Academy\n"
+                f"Aquathletic Academy\n"
                 f"Your updated login credentials:\n"
                 f"Code: {account.login_code}\n"
                 f"Password: {temp_password}\n"

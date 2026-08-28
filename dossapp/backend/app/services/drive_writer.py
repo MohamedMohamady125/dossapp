@@ -1,15 +1,48 @@
 """Write payment data back to Google Drive Excel/Sheets files.
 
 Updates the Pay and Receipt columns in the roster sheet when an athlete is marked as paid.
+Uses per-file threading locks to prevent concurrent writes from corrupting data.
 """
 
 import logging
 import re
+import threading
+import time
 from typing import Optional
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Per-file locks to serialize writes to the same spreadsheet/Excel file.
+# This prevents the download-modify-upload race condition.
+_file_locks: dict[str, threading.Lock] = {}
+_file_locks_guard = threading.Lock()
+
+
+def _get_file_lock(file_id: str) -> threading.Lock:
+    """Get or create a threading lock for a specific Drive file."""
+    with _file_locks_guard:
+        if file_id not in _file_locks:
+            _file_locks[file_id] = threading.Lock()
+        return _file_locks[file_id]
+
+
+def _retry(func, *args, max_retries: int = 3, **kwargs):
+    """Retry a function up to max_retries times with exponential backoff."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s
+                logger.warning(f"Drive write attempt {attempt + 1} failed: {e}, retrying in {wait}s")
+                time.sleep(wait)
+            else:
+                logger.error(f"Drive write failed after {max_retries} attempts: {e}")
+    raise last_error
 
 try:
     from google.oauth2 import service_account
@@ -73,11 +106,22 @@ def update_athlete_payment(
     Finds the roster sheet (tab with 'Reg' in name), locates the athlete by ID,
     and updates the Pay and Receipt columns.
 
+    Uses a per-file lock so concurrent payments to the same branch are serialized,
+    preventing the download-modify-upload race condition.
+
     Returns True if successful. Raises on error so caller can capture the message.
     """
     if not _HAS_GOOGLE:
         raise RuntimeError("Google libraries not installed — cannot write to Drive")
 
+    lock = _get_file_lock(drive_file_id)
+    # Acquire lock — concurrent writes to the same file wait here
+    with lock:
+        return _retry(_do_update, drive_file_id, athlete_number, pay_value, receipt_number)
+
+
+def _do_update(drive_file_id: str, athlete_number: int, pay_value: str, receipt_number: str) -> bool:
+    """Internal: perform the actual Drive write (called under lock with retry)."""
     creds = _get_credentials()
 
     # Check file type
@@ -104,10 +148,20 @@ def _find_roster_sheet_name(sheets_service, spreadsheet_id: str) -> Optional[str
 
 
 def read_existing_receipts(drive_file_id: str) -> list[str]:
-    """Read all existing receipt numbers from the roster sheet."""
+    """Read all existing receipt numbers from the roster sheet.
+
+    Uses the same per-file lock to prevent reading during a concurrent write.
+    """
     if not _HAS_GOOGLE:
         return []
 
+    lock = _get_file_lock(drive_file_id)
+    with lock:
+        return _read_existing_receipts_unlocked(drive_file_id)
+
+
+def _read_existing_receipts_unlocked(drive_file_id: str) -> list[str]:
+    """Internal: read receipts without acquiring lock (caller holds it)."""
     creds = _get_credentials()
     sheets = build("sheets", "v4", credentials=creds, cache_discovery=False)
     sheet_name = _find_roster_sheet_name(sheets, drive_file_id)

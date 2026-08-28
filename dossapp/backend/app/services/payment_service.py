@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.payment import Payment
@@ -17,34 +18,49 @@ from app.utils.phone import normalize_phone
 logger = logging.getLogger(__name__)
 
 
+import asyncio as _aio
+
+_receipt_lock: Optional[_aio.Lock] = None
+
+
+def _get_receipt_lock() -> _aio.Lock:
+    global _receipt_lock
+    if _receipt_lock is None:
+        _receipt_lock = _aio.Lock()
+    return _receipt_lock
+
+
 async def get_next_receipt_number(db: AsyncSession, excel_receipts: Optional[list[str]] = None) -> str:
     """Get the next receipt number as a plain integer continuing the Excel sequence.
 
+    Uses an async lock to prevent concurrent calls from generating the same number.
     Combines max from DB receipts and the Excel sheet's existing receipts,
     then returns max + 1. Ensures the number doesn't collide with any existing receipt.
     """
     import re
-    # Collect all existing receipt number strings
-    result = await db.execute(select(Receipt.receipt_number))
-    db_numbers = set(rn for rn in result.scalars().all() if rn)
-    excel_set = set(str(rn).strip() for rn in (excel_receipts or []) if rn)
-    all_existing = db_numbers | excel_set
 
-    # Find max numeric value across all receipts
-    max_num = 0
-    for rn in all_existing:
-        for part in str(rn).split("/"):  # handle "787/973" style
-            m = re.search(r"(\d+)", part)
-            if m:
-                num = int(m.group(1))
-                if num > max_num:
-                    max_num = num
+    async with _get_receipt_lock():
+        # Collect all existing receipt number strings
+        result = await db.execute(select(Receipt.receipt_number))
+        db_numbers = set(rn for rn in result.scalars().all() if rn)
+        excel_set = set(str(rn).strip() for rn in (excel_receipts or []) if rn)
+        all_existing = db_numbers | excel_set
 
-    # Pick next number, skip if it somehow already exists
-    candidate = max_num + 1
-    while str(candidate) in all_existing:
-        candidate += 1
-    return str(candidate)
+        # Find max numeric value across all receipts
+        max_num = 0
+        for rn in all_existing:
+            for part in str(rn).split("/"):  # handle "787/973" style
+                m = re.search(r"(\d+)", part)
+                if m:
+                    num = int(m.group(1))
+                    if num > max_num:
+                        max_num = num
+
+        # Pick next number, skip if it somehow already exists
+        candidate = max_num + 1
+        while str(candidate) in all_existing:
+            candidate += 1
+        return str(candidate)
 
 
 async def record_online_payment(
@@ -63,9 +79,9 @@ async def record_online_payment(
     phone: Optional[str] = None,
     email: Optional[str] = None,
 ) -> Optional[Receipt]:
-    """Record an online gateway payment and generate receipt. Idempotent."""
+    """Record an online gateway payment and generate receipt. Idempotent + race-safe."""
 
-    # Check idempotency
+    # Check idempotency (fast path)
     existing = await db.execute(
         select(Payment).where(
             Payment.branch_id == branch_id,
@@ -78,7 +94,7 @@ async def record_online_payment(
         logger.info(f"{source} payment already recorded for ({branch_id}, {athlete_number}, {period})")
         return None
 
-    # Create payment (gateway reference stored in the paymob_transaction_id column)
+    # Create payment — unique constraint catches concurrent duplicates
     payment = Payment(
         branch_id=branch_id,
         athlete_number=athlete_number,
@@ -92,7 +108,12 @@ async def record_online_payment(
         paid_at=datetime.now(timezone.utc),
     )
     db.add(payment)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info(f"{source} duplicate caught by constraint for ({branch_id}, {athlete_number}, {period})")
+        return None
 
     # Generate receipt
     receipt_number = await get_next_receipt_number(db)
@@ -152,7 +173,7 @@ async def record_cash_payment(
     phone: Optional[str] = None,
     email: Optional[str] = None,
 ) -> Optional[Receipt]:
-    """Record a cash payment detected from Excel and generate receipt. Idempotent."""
+    """Record a cash payment detected from Excel and generate receipt. Idempotent + race-safe."""
 
     existing = await db.execute(
         select(Payment).where(
@@ -178,7 +199,12 @@ async def record_cash_payment(
         paid_at=datetime.now(timezone.utc),
     )
     db.add(payment)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info(f"Cash payment duplicate caught for ({branch_id}, {athlete_number}, {period})")
+        return None
 
     receipt_number = str(excel_receipt_no)
 
@@ -234,7 +260,7 @@ async def record_manual_payment(
     payment_method: str = "cash",
     excel_receipts: Optional[list[str]] = None,
 ) -> Optional[Receipt]:
-    """Record a manual (admin-marked) payment and generate receipt. Idempotent."""
+    """Record a manual (admin-marked) payment and generate receipt. Idempotent + race-safe."""
 
     existing = await db.execute(
         select(Payment).where(
@@ -259,7 +285,12 @@ async def record_manual_payment(
         paid_at=datetime.now(timezone.utc),
     )
     db.add(payment)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info(f"Manual payment duplicate caught for ({branch_id}, {athlete_number}, {period})")
+        return None
 
     receipt_number = await get_next_receipt_number(db, excel_receipts=excel_receipts)
 
@@ -322,6 +353,6 @@ async def _send_receipt_notifications(
     if email:
         await enqueue_notification(
             "email", email, body,
-            subject=f"Aqua Athletic Receipt {receipt.receipt_number} — {receipt.period}",
+            subject=f"Aquathletic Receipt {receipt.receipt_number} — {receipt.period}",
             attachment=pdf_data, receipt_id=receipt.id,
         )

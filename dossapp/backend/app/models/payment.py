@@ -23,6 +23,6 @@ class Payment(Base):
     __table_args__ = (
         UniqueConstraint("branch_id", "athlete_number", "period", "source", name="uq_payment_idempotent"),
         Index("ix_payment_branch_athlete", "branch_id", "athlete_number"),
-        Index("ix_payment_period", "period"),
-        Index("ix_payment_status", "status"),
+        Index("ix_payment_branch_period_status", "branch_id", "period", "status"),
+        Index("ix_payment_branch_athlete_period", "branch_id", "athlete_number", "period", "status"),
     )

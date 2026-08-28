@@ -7,7 +7,7 @@ from typing import Optional
 
 from app.utils.billing import current_billing_period
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 logger = logging.getLogger(__name__)
 from fastapi.responses import Response
@@ -110,33 +110,37 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
     if not athlete:
         return BillResponse(period=period, no_enrollment=True, branch_name=roster.branch_name)
 
-    # Source of truth: Excel Pay column (cash/card payments recorded by admin in Excel)
-    excel_paid = bool(athlete.pay)
+    # Source of truth: Excel Pay + Receipt columns (cash/card payments recorded by admin)
+    excel_paid = False
     try:
         excel_amount = float(athlete.pay) if athlete.pay else 0
         excel_paid = excel_amount > 0
     except (ValueError, TypeError):
-        excel_paid = False
+        pass
+    # Also treat as paid if receipt number exists in Excel (admin may fill receipt before pay)
+    if not excel_paid and athlete.receipt_no:
+        receipt_str = str(athlete.receipt_no).strip()
+        if receipt_str and receipt_str.lower() not in ("", "none", "0"):
+            excel_paid = True
 
     # Also check DB for any payments (online via EasyKash, or admin-marked cash/card)
     receipt_number = None
     db_paid = False
-    if not excel_paid:
-        result = await db.execute(
-            select(Payment).where(
-                Payment.branch_id == account.branch_id,
-                Payment.athlete_number == account.athlete_number,
-                Payment.period == period,
-                Payment.status == "paid",
-            )
+    result = await db.execute(
+        select(Payment).where(
+            Payment.branch_id == account.branch_id,
+            Payment.athlete_number == account.athlete_number,
+            Payment.period == period,
+            Payment.status == "paid",
         )
-        payment = result.scalars().first()
-        if payment:
-            db_paid = True
-            receipt_result = await db.execute(
-                select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
-            )
-            receipt_number = receipt_result.scalar_one_or_none()
+    )
+    payment = result.scalars().first()
+    if payment:
+        db_paid = True
+        receipt_result = await db.execute(
+            select(Receipt.receipt_number).where(Receipt.payment_id == payment.id)
+        )
+        receipt_number = receipt_result.scalar_one_or_none()
 
     is_paid = excel_paid or db_paid
 
@@ -155,7 +159,7 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         if not reinstatement.scalars().first():
             account.status = "suspended"
             db.add(account)
-            await db.flush()
+            await db.commit()
 
     # Previous month payment status
     now = datetime.now()
@@ -353,7 +357,17 @@ async def update_password(
     account: Account = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ):
+    import time
     from app.utils.auth import verify_password, hash_password
+
+    # Rate limit: max 5 password attempts per 5 minutes per account
+    now = time.time()
+    attempts = _delete_attempts.get(account.id, [])
+    attempts = [t for t in attempts if now - t < 300]
+    if len(attempts) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+    attempts.append(now)
+    _delete_attempts[account.id] = attempts
 
     if not verify_password(body.old_password, account.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -429,6 +443,9 @@ class DeleteAccountBody(PydanticBaseModel):
     password: str
 
 
+_delete_attempts: dict[int, list[float]] = {}
+
+
 @router.delete("/account")
 async def delete_account(
     body: DeleteAccountBody,
@@ -440,7 +457,17 @@ async def delete_account(
     Requires password confirmation. Deletes all associated data (devices, notifications,
     verifications, reinstatement requests) and disables the account.
     """
+    import time
     from app.utils.auth import verify_password
+
+    # Rate limit: max 5 password attempts per 5 minutes per account
+    now = time.time()
+    attempts = _delete_attempts.get(account.id, [])
+    attempts = [t for t in attempts if now - t < 300]
+    if len(attempts) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+    attempts.append(now)
+    _delete_attempts[account.id] = attempts
 
     if not verify_password(body.password, account.password_hash):
         raise HTTPException(status_code=403, detail="Incorrect password")

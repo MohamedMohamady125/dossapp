@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Numeric, String, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, Numeric, String, DateTime, UniqueConstraint, Index
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -15,4 +15,5 @@ class BillOverride(Base):
 
     __table_args__ = (
         UniqueConstraint("branch_id", "athlete_number", name="uq_bill_override_branch_athlete"),
+        Index("ix_bill_override_branch", "branch_id"),
     )

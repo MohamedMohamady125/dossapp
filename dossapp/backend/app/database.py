@@ -17,8 +17,10 @@ engine_kwargs: dict = {"echo": False}
 if _is_sqlite:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    engine_kwargs["pool_size"] = 5
-    engine_kwargs["max_overflow"] = 5
+    engine_kwargs["pool_size"] = 20
+    engine_kwargs["max_overflow"] = 30
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
     # Only Neon/cloud PostgreSQL needs ssl=True; Railway internal Postgres does not
     if _is_neon:
         engine_kwargs["connect_args"] = {"ssl": True}

@@ -28,5 +28,5 @@ class TestSendRequest(BaseModel):
     branch_id: int
     athlete_number: int
     title: str = "Test notification"
-    body: str = "This is a test notification from Aqua Athletic."
+    body: str = "This is a test notification from Aquathletic."
     dry_run: bool = True
