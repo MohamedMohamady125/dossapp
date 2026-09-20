@@ -405,18 +405,26 @@ async def refresh_branch_data(
 
 
 @router.get("/branches")
-async def list_branches(admin: AdminUser = Depends(get_current_admin)):
+async def list_branches(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # List branches from the DB (source of truth), enriched with roster counts
+    # when available. Previously this only listed branches present in the Excel
+    # roster cache, hiding branches without a loaded roster.
     source = _get_roster_source()
     rosters = await source.get_all_rosters()
 
+    result = await db.execute(select(Branch).order_by(Branch.id))
     branches = []
-    for bid, roster in rosters.items():
-        if admin.role == "assistant" and admin.assigned_branch_id != bid:
+    for branch in result.scalars().all():
+        if admin.role == "assistant" and admin.assigned_branch_id != branch.id:
             continue
+        roster = rosters.get(branch.id)
         branches.append({
-            "id": bid,
-            "name": roster.branch_name,
-            "athlete_count": len(roster.athletes),
+            "id": branch.id,
+            "name": roster.branch_name if roster else branch.display_name,
+            "athlete_count": len(roster.athletes) if roster else 0,
         })
     return branches
 
