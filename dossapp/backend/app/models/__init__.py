@@ -10,9 +10,10 @@ from app.models.price_catalog import PriceCatalog
 from app.models.reinstatement_request import ReinstatementRequest
 from app.models.bill_override import BillOverride
 from app.models.email_verification import EmailVerification
+from app.models.athlete_report import AthleteReport
 
 __all__ = [
     "Branch", "AdminUser", "Account", "Payment", "Receipt", "NotificationLog", "RosterSnapshot",
     "DeviceToken", "InboxNotification", "ScheduleSnapshot", "NotificationDedupe",
-    "PriceCatalog", "ReinstatementRequest", "BillOverride", "EmailVerification",
+    "PriceCatalog", "ReinstatementRequest", "BillOverride", "EmailVerification", "AthleteReport",
 ]

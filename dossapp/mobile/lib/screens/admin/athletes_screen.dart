@@ -8,6 +8,7 @@ import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
+import '../reports/report_editor_screen.dart';
 
 class AthletesScreen extends StatefulWidget {
   final int branchId;
@@ -467,6 +468,32 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
         _sectionHeader('Contact'),
         _infoRow(Icons.phone_rounded, 'Phone 1', athlete.phone1),
         _infoRow(Icons.phone_android_rounded, 'Phone 2', athlete.phone2),
+
+        // ── Monthly Report ──
+        const SizedBox(height: 8),
+        _sectionHeader('Monthly Report'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.assignment_rounded, size: 18, color: AppColors.secondary),
+            label: const Text('View / Write Monthly Report', style: TextStyle(color: AppColors.secondary)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+              side: BorderSide(color: AppColors.secondary.withValues(alpha: 0.4)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ReportEditorScreen(
+                  branchId: athlete.branchId,
+                  athleteNumber: athlete.athleteNumber,
+                  athleteName: athlete.name,
+                ),
+              ),
+            ),
+          ),
+        ),
 
         // ── Schedule ──
         if (athlete.schedule.isNotEmpty) ...[

@@ -7,6 +7,7 @@ import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
 import '../settings_screen.dart';
+import '../reports/staff_reports_screen.dart';
 
 class CoachHomeScreen extends StatefulWidget {
   const CoachHomeScreen({super.key});
@@ -27,8 +28,10 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
   }
 
   Future<void> _load() async {
+    // Skeleton only on first load — refreshes are silent to keep scroll.
+    final isInitial = _schedule == null;
     setState(() {
-      _loading = true;
+      if (isInitial) _loading = true;
       _error = null;
     });
     try {
@@ -42,7 +45,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          if (isInitial) _error = e.toString();
           _loading = false;
         });
       }
@@ -78,6 +81,14 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.assignment_outlined, size: 22),
+            tooltip: S.of(context).monthlyReports,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StaffReportsScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
             tooltip: S.of(context).refresh,

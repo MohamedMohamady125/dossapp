@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
 import '../../models/reinstatement.dart';
+import '../../models/report.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
@@ -16,6 +17,8 @@ import '../settings_screen.dart';
 import 'bill_screen.dart';
 import 'receipts_screen.dart';
 import 'notifications_screen.dart';
+import 'reports_screen.dart';
+import '../../widgets/report_widgets.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -28,6 +31,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _currentIndex = 0;
   int _refreshKey = 0;
   int _unreadCount = 0;
+  // Tabs opened at least once — lazily built, then kept alive in an
+  // IndexedStack so scroll position & state persist between switches.
+  final Set<int> _visitedTabs = {0};
 
   @override
   void initState() {
@@ -53,7 +59,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   void _goToPayTab() {
-    setState(() => _currentIndex = 1);
+    setState(() {
+      _currentIndex = 1;
+      _visitedTabs.add(1);
+    });
   }
 
   @override
@@ -66,7 +75,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
         child: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) {
-            setState(() => _currentIndex = i);
+            setState(() {
+              _currentIndex = i;
+              _visitedTabs.add(i);
+            });
             // Only refresh unread count when leaving notifications tab
             if (i != 3) _loadUnread();
           },
@@ -86,13 +98,21 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Widget _buildCurrentTab() {
-    switch (_currentIndex) {
-      case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++), onGoToPay: _goToPayTab);
-      case 1: return BillScreen(key: ValueKey('bill-$_refreshKey'));
-      case 2: return ReceiptsScreen(key: ValueKey('rec-$_refreshKey'));
-      case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread);
-      default: return const SizedBox.shrink();
-    }
+    // Lazy IndexedStack: build each tab on first visit, keep it alive after
+    // so scroll position & loaded data survive tab switches.
+    return IndexedStack(
+      index: _currentIndex,
+      children: List.generate(4, (i) {
+        if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
+        switch (i) {
+          case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++), onGoToPay: _goToPayTab);
+          case 1: return BillScreen(key: ValueKey('bill-$_refreshKey'));
+          case 2: return ReceiptsScreen(key: ValueKey('rec-$_refreshKey'));
+          case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread);
+          default: return const SizedBox.shrink();
+        }
+      }),
+    );
   }
 }
 
@@ -108,6 +128,7 @@ class _HomeTab extends StatefulWidget {
 class _HomeTabState extends State<_HomeTab> {
   AthleteProfile? _profile;
   Bill? _bill;
+  List<MonthlyReport> _reports = [];
   ReinstatementStatus? _reinstatement;
   bool _loading = true;
   String? _error;
@@ -120,14 +141,18 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    // Skeleton only on first load — pull-to-refresh updates silently.
+    final isInitial = _profile == null;
+    setState(() { if (isInitial) _loading = true; _error = null; });
     try {
       // Fire both requests concurrently
       final profileFuture = ApiService.getProfile();
       final billFuture = ApiService.getBill().catchError((_) => Bill.empty());
-      final results = await Future.wait<dynamic>([profileFuture, billFuture]);
+      final reportsFuture = ApiService.getMyReports().catchError((_) => <MonthlyReport>[]);
+      final results = await Future.wait<dynamic>([profileFuture, billFuture, reportsFuture]);
       _profile = results[0] as AthleteProfile;
       _bill = results[1] as Bill;
+      _reports = results[2] as List<MonthlyReport>;
 
       // If suspended, load reinstatement status
       if (_profile!.accountStatus == 'suspended' || _bill?.isSuspended == true) {
@@ -137,7 +162,7 @@ class _HomeTabState extends State<_HomeTab> {
       }
     } catch (e, stack) {
       debugPrint('Home load error: $e\n$stack');
-      _error = e.toString();
+      if (isInitial) _error = e.toString();
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -300,6 +325,13 @@ class _HomeTabState extends State<_HomeTab> {
               const SizedBox(height: 8),
               AnimatedListItem(index: 3, child: _sectionLabel('Attendance')),
               AnimatedListItem(index: 4, child: _attendanceCard(p.attendance)),
+            ],
+
+            // ── Monthly Report ──
+            if (_reports.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              AnimatedListItem(index: 5, child: _sectionLabel(S.of(context).monthlyReport)),
+              AnimatedListItem(index: 6, child: _reportPreviewCard(_reports.first)),
             ],
 
             // ── Payment Status ──
@@ -1053,6 +1085,82 @@ class _HomeTabState extends State<_HomeTab> {
 
   Widget _attendanceDivider() {
     return Container(width: 1, height: 32, color: AppColors.border);
+  }
+
+  Widget _reportPreviewCard(MonthlyReport report) {
+    final overall = report.overall;
+    final color = scoreColor(overall);
+    return PressFeedback(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => CustomerReportsScreen(initialReports: _reports)),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            // Overall score ring
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: CircularProgressIndicator(
+                      value: overall / 5,
+                      strokeWidth: 4,
+                      backgroundColor: color.withValues(alpha: 0.12),
+                      valueColor: AlwaysStoppedAnimation(color),
+                      strokeCap: StrokeCap.round,
+                    ),
+                  ),
+                  Text(
+                    overall.toStringAsFixed(1),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: color),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    formatPeriod(report.period),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  RatingDrops(value: overall.round(), size: 15),
+                ],
+              ),
+            ),
+            if (_reports.length > 1)
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${_reports.length}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+                ),
+              ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _sectionLabel(String text) {

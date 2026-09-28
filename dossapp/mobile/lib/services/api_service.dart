@@ -8,6 +8,7 @@ import '../models/athlete.dart';
 import '../models/bill.dart';
 import '../models/receipt.dart';
 import '../models/reinstatement.dart';
+import '../models/report.dart';
 
 class ApiService {
   static const _storage = FlutterSecureStorage();
@@ -452,6 +453,67 @@ class ApiService {
     final resp = await _post('/me/reinstatement', {if (message != null) 'message': message});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Failed to submit request'));
+    }
+  }
+
+  // ── Monthly Reports ──
+
+  static Future<List<MonthlyReport>> getMyReports() async {
+    final resp = await _get('/me/reports');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load reports');
+    return (jsonDecode(resp.body) as List).map((r) => MonthlyReport.fromJson(r)).toList();
+  }
+
+  static Future<Map<String, dynamic>> getReportSwimmers({int? branchId}) async {
+    var path = '/staff/reports/swimmers';
+    if (branchId != null) path += '?branch_id=$branchId';
+    final resp = await _get(path);
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to load swimmers'));
+    }
+    return jsonDecode(resp.body);
+  }
+
+  static Future<List<MonthlyReport>> getAthleteReports(int branchId, int athleteNumber) async {
+    final resp = await _get('/staff/reports?branch_id=$branchId&athlete_number=$athleteNumber');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to load reports'));
+    }
+    return (jsonDecode(resp.body) as List).map((r) => MonthlyReport.fromJson(r)).toList();
+  }
+
+  static Future<MonthlyReport> upsertReport({
+    required int branchId,
+    required int athleteNumber,
+    required String period,
+    required int technique,
+    required int endurance,
+    required int commitment,
+    required int discipline,
+    String? coachNotes,
+    String? goals,
+  }) async {
+    final resp = await _put('/staff/reports', {
+      'branch_id': branchId,
+      'athlete_number': athleteNumber,
+      'period': period,
+      'technique': technique,
+      'endurance': endurance,
+      'commitment': commitment,
+      'discipline': discipline,
+      if (coachNotes != null && coachNotes.isNotEmpty) 'coach_notes': coachNotes,
+      if (goals != null && goals.isNotEmpty) 'goals': goals,
+    });
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to save report'));
+    }
+    return MonthlyReport.fromJson(jsonDecode(resp.body));
+  }
+
+  static Future<void> deleteReport(int reportId) async {
+    final resp = await _delete('/staff/reports/$reportId');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to delete report'));
     }
   }
 

@@ -31,6 +31,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   bool _loadingBranches = true;
   int _refreshKey = 0;
   int _pendingReinstatements = 0;
+  // Tabs that have been opened at least once — lazily built, then kept
+  // alive inside an IndexedStack so scroll position & state persist.
+  final Set<int> _visitedTabs = {0};
 
   @override
   void initState() {
@@ -270,7 +273,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() => _currentIndex = i),
+          onDestinationSelected: (i) => setState(() {
+            _currentIndex = i;
+            _visitedTabs.add(i);
+          }),
           destinations: [
             NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: s.home),
             NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: s.payments),
@@ -286,12 +292,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     if (_selectedBranchId == null && _currentIndex <= 2) {
       return Center(child: Text(S.of(context).noData));
     }
-    switch (_currentIndex) {
-      case 0: return AthletesScreen(branchId: _selectedBranchId!, key: ValueKey('ath-$_selectedBranchId-$_refreshKey'));
-      case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
-      case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
-      case 3: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
-      default: return const SizedBox.shrink();
-    }
+    // Lazy IndexedStack: each tab is built the first time it's opened and
+    // then kept alive, so lists resume exactly where the user left off.
+    return IndexedStack(
+      index: _currentIndex,
+      children: List.generate(4, (i) {
+        if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
+        switch (i) {
+          case 0: return AthletesScreen(branchId: _selectedBranchId!, key: ValueKey('ath-$_selectedBranchId-$_refreshKey'));
+          case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
+          case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
+          case 3: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
+          default: return const SizedBox.shrink();
+        }
+      }),
+    );
   }
 }

@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session, engine
 from app.models.branch import Branch
-from app.routers import auth, customer, admin, coach, cron, notifications, webhooks
+from app.routers import auth, customer, admin, coach, cron, notifications, webhooks, reports
 from app.services.excel_roster_source import ExcelRosterSource
 from app.services.reconciliation import reconcile_branch
 from app.services.identity_guard import check_identity_mismatches
@@ -409,6 +409,7 @@ app.include_router(auth.router)
 app.include_router(customer.router)
 app.include_router(admin.router)
 app.include_router(coach.router)
+app.include_router(reports.router)
 app.include_router(cron.router)
 app.include_router(notifications.router)
 app.include_router(webhooks.router)

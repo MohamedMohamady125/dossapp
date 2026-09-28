@@ -205,6 +205,31 @@ class S {
   String get todaySchedule => _t("Today's Schedule", 'جدول اليوم');
   String get noClassesToday => _t('No classes today', 'لا توجد حصص اليوم');
 
+  // ── Monthly Reports ──
+  String get monthlyReports => _t('Monthly Reports', 'التقارير الشهرية');
+  String get monthlyReport => _t('Monthly Report', 'التقرير الشهري');
+  String get reports => _t('Reports', 'التقارير');
+  String get writeReport => _t('Write Report', 'كتابة تقرير');
+  String get editReport => _t('Edit Report', 'تعديل التقرير');
+  String get saveReport => _t('Save Report', 'حفظ التقرير');
+  String get reportSaved => _t('Report saved', 'تم حفظ التقرير');
+  String get technique => _t('Technique', 'التكنيك');
+  String get endurance => _t('Endurance', 'التحمل');
+  String get commitment => _t('Commitment', 'الالتزام');
+  String get discipline => _t('Discipline', 'الانضباط');
+  String get coachNotes => _t('Coach Notes', 'ملاحظات الكابتن');
+  String get nextMonthGoals => _t('Next Month Goals', 'أهداف الشهر القادم');
+  String get overallRating => _t('Overall', 'التقييم العام');
+  String get noReportsYet => _t('No reports yet', 'لا توجد تقارير بعد');
+  String get noReportsSubtitle => _t(
+    'Your coach will publish your monthly performance report here.',
+    'سيقوم الكابتن بنشر تقريرك الشهري هنا.',
+  );
+  String get reportBy => _t('By', 'بواسطة');
+  String get swimmers => _t('Swimmers', 'السباحين');
+  String get reported => _t('Reported', 'تم التقييم');
+  String get notReported => _t('Pending', 'قيد الانتظار');
+
   // ── Common ──
   String get ok => _t('OK', 'حسناً');
   String get close => _t('Close', 'إغلاق');
