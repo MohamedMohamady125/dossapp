@@ -57,6 +57,14 @@ def _add_missing_columns(sync_conn):
         if "current_period" not in cols:
             sync_conn.execute(text("ALTER TABLE branches ADD COLUMN current_period VARCHAR(10)"))
 
+    if "athlete_reports" in insp.get_table_names():
+        cols = {c["name"] for c in insp.get_columns("athlete_reports")}
+        if "pdf_filename" not in cols:
+            sync_conn.execute(text("ALTER TABLE athlete_reports ADD COLUMN pdf_filename VARCHAR(255)"))
+        if "pdf_data" not in cols:
+            blob = "BYTEA" if sync_conn.dialect.name == "postgresql" else "BLOB"
+            sync_conn.execute(text(f"ALTER TABLE athlete_reports ADD COLUMN pdf_data {blob}"))
+
 
 async def init_db():
     """Create all tables if they don't exist."""

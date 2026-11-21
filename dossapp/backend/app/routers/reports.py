@@ -1,10 +1,17 @@
-"""Monthly athlete reports — staff (admin/assistant/coach) write them, athletes read them."""
+"""Monthly athlete reports — staff (admin/assistant/coach) send them, athletes read them.
+
+A report is either an uploaded PDF or a written note (a PDF may carry a note too).
+The athlete is notified every time one is sent or updated.
+"""
 
 import logging
+import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import select
+from sqlalchemy.orm import undefer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -134,11 +141,108 @@ async def list_reports_for_athlete(
     except HTTPException:
         pass
 
-    out = []
-    for r in reports:
-        item = ReportOut.model_validate(r)
-        item.athlete_name = name
-        out.append(item)
+    return [_report_out(r, name) for r in reports]
+
+
+MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _report_out(report: AthleteReport, name: str | None = None) -> ReportOut:
+    out = ReportOut.model_validate(report)
+    out.has_pdf = bool(report.pdf_filename)
+    out.athlete_name = name
+    return out
+
+
+async def _save_report(
+    db: AsyncSession,
+    staff: AdminUser,
+    branch_id: int,
+    athlete_number: int,
+    period: str,
+    note: str | None,
+    pdf: tuple[str, bytes] | None,
+) -> ReportOut:
+    """Create or replace the report for one athlete and month, then notify them."""
+    enforce_branch_scope(staff, branch_id)
+
+    roster = await _get_roster(branch_id)
+    names = _athlete_names(roster)
+    if athlete_number not in names:
+        raise HTTPException(status_code=404, detail="Athlete not found in branch roster")
+
+    # Coaches may only report on their own swimmers
+    if staff.role == "coach":
+        coach_key = normalize_coach_name(staff.coach_name or "")
+        athlete = next(a for a in roster.athletes if a.athlete_number == athlete_number)
+        if not any(slot.coach and normalize_coach_name(slot.coach) == coach_key for slot in athlete.schedule):
+            raise HTTPException(status_code=403, detail="This athlete is not in your sessions")
+
+    note = (note or "").strip() or None
+    if pdf is None and note is None:
+        raise HTTPException(status_code=400, detail="Write a note or upload a PDF")
+
+    result = await db.execute(
+        select(AthleteReport).where(
+            AthleteReport.branch_id == branch_id,
+            AthleteReport.athlete_number == athlete_number,
+            AthleteReport.period == period,
+        )
+    )
+    report = result.scalar_one_or_none()
+
+    if report is None:
+        report = AthleteReport(
+            branch_id=branch_id,
+            athlete_number=athlete_number,
+            period=period,
+            technique=0, endurance=0, commitment=0, discipline=0,
+        )
+        db.add(report)
+
+    report.coach_notes = note
+    report.goals = None
+    if pdf is not None:
+        report.pdf_filename, report.pdf_data = pdf
+    else:
+        # A note-only save replaces whatever was sent before for this month
+        report.pdf_filename = None
+        report.pdf_data = None
+    report.created_by_id = staff.id
+    report.created_by_name = _staff_display_name(staff)
+    report.created_by_role = staff.role
+
+    await db.commit()
+    await db.refresh(report)
+    out = _report_out(report, names.get(athlete_number))
+
+    # Always notify: the inbox entry carries the note itself, or says a PDF is waiting.
+    try:
+        acc_result = await db.execute(
+            select(Account).where(
+                Account.branch_id == branch_id,
+                Account.athlete_number == athlete_number,
+                Account.status == "active",
+            )
+        )
+        account = acc_result.scalars().first()
+        if account:
+            sender = out.created_by_name
+            if account.language == "ar":
+                title = f"تقرير شهر {period}"
+                body = note or f"الكابتن {sender} أرسل تقريرك الشهري. افتحه من التطبيق."
+            else:
+                title = f"Your {period} report"
+                body = note or f"Coach {sender} sent your monthly report. Open the app to view it."
+            if len(body) > 240:
+                body = body[:237].rstrip() + "..."
+            await send_push_to_account(
+                db, account.id, "monthly_report", title, body,
+                data={"type": "monthly_report", "period": period, "report_id": str(out.id)},
+            )
+    except Exception as e:
+        logger.error(f"Report push notification error: {e}")
+
     return out
 
 
@@ -148,80 +252,65 @@ async def upsert_report(
     staff: AdminUser = Depends(get_current_staff),
     db: AsyncSession = Depends(get_db),
 ):
-    enforce_branch_scope(staff, payload.branch_id)
+    """Send a note as the month's report."""
+    # Older app builds send notes and goals separately; keep both.
+    note = "\n\n".join(t.strip() for t in (payload.coach_notes, payload.goals) if t and t.strip())
+    return await _save_report(db, staff, payload.branch_id, payload.athlete_number, payload.period, note, None)
 
-    roster = await _get_roster(payload.branch_id)
-    names = _athlete_names(roster)
-    if payload.athlete_number not in names:
-        raise HTTPException(status_code=404, detail="Athlete not found in branch roster")
 
-    # Coaches may only report on their own swimmers
-    if staff.role == "coach":
-        coach_key = normalize_coach_name(staff.coach_name or "")
-        athlete = next(a for a in roster.athletes if a.athlete_number == payload.athlete_number)
-        if not any(slot.coach and normalize_coach_name(slot.coach) == coach_key for slot in athlete.schedule):
-            raise HTTPException(status_code=403, detail="This athlete is not in your sessions")
+@router.post("/staff/reports/pdf", response_model=ReportOut)
+async def upload_report_pdf(
+    branch_id: int = Form(...),
+    athlete_number: int = Form(...),
+    period: str = Form(...),
+    note: str | None = Form(None),
+    file: UploadFile = File(...),
+    staff: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a PDF (with an optional note) as the month's report."""
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period):
+        raise HTTPException(status_code=400, detail="period must be YYYY-MM")
+    if note and len(note) > 4000:
+        raise HTTPException(status_code=400, detail="Note is too long")
 
+    data = await file.read(MAX_PDF_BYTES + 1)
+    if len(data) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="PDF is larger than 10 MB")
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="That file is not a PDF")
+
+    filename = re.sub(r"[^\w.\- ]", "_", (file.filename or "report.pdf").rsplit("/", 1)[-1])[:200] or "report.pdf"
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+
+    return await _save_report(db, staff, branch_id, athlete_number, period, note, (filename, data))
+
+
+def _pdf_response(report: AthleteReport | None) -> Response:
+    if report is None or not report.pdf_data:
+        raise HTTPException(status_code=404, detail="This report has no PDF")
+    return Response(
+        content=bytes(report.pdf_data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{report.pdf_filename or "report.pdf"}"'},
+    )
+
+
+@router.get("/staff/reports/{report_id}/pdf")
+async def staff_report_pdf(
+    report_id: int,
+    staff: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
-        select(AthleteReport).where(
-            AthleteReport.branch_id == payload.branch_id,
-            AthleteReport.athlete_number == payload.athlete_number,
-            AthleteReport.period == payload.period,
-        )
+        select(AthleteReport).options(undefer(AthleteReport.pdf_data)).where(AthleteReport.id == report_id)
     )
     report = result.scalar_one_or_none()
-    is_new = report is None
-
     if report is None:
-        report = AthleteReport(
-            branch_id=payload.branch_id,
-            athlete_number=payload.athlete_number,
-            period=payload.period,
-        )
-        db.add(report)
-
-    report.technique = payload.technique
-    report.endurance = payload.endurance
-    report.commitment = payload.commitment
-    report.discipline = payload.discipline
-    report.coach_notes = payload.coach_notes
-    report.goals = payload.goals
-    report.created_by_id = staff.id
-    report.created_by_name = _staff_display_name(staff)
-    report.created_by_role = staff.role
-
-    await db.commit()
-    await db.refresh(report)
-
-    # Notify the athlete (only on first publish for this period)
-    if is_new:
-        try:
-            acc_result = await db.execute(
-                select(Account).where(
-                    Account.branch_id == payload.branch_id,
-                    Account.athlete_number == payload.athlete_number,
-                    Account.status == "active",
-                )
-            )
-            account = acc_result.scalars().first()
-            if account:
-                if account.language == "ar":
-                    title = "تقريرك الشهري جاهز"
-                    body = f"الكابتن {report.created_by_name} نشر تقرير شهر {payload.period}. افتحه من التطبيق!"
-                else:
-                    title = "Your monthly report is ready"
-                    body = f"Coach {report.created_by_name} published your {payload.period} report. Check it out!"
-                await send_push_to_account(
-                    db, account.id, "monthly_report", title, body,
-                    data={"type": "monthly_report", "period": payload.period},
-                    dedupe_key=f"report:{payload.branch_id}:{payload.athlete_number}:{payload.period}",
-                )
-        except Exception as e:
-            logger.error(f"Report push notification error: {e}")
-
-    out = ReportOut.model_validate(report)
-    out.athlete_name = names.get(payload.athlete_number)
-    return out
+        raise HTTPException(status_code=404, detail="Report not found")
+    enforce_branch_scope(staff, report.branch_id)
+    return _pdf_response(report)
 
 
 @router.delete("/staff/reports/{report_id}")
@@ -256,4 +345,20 @@ async def my_reports(
         )
         .order_by(AthleteReport.period.desc())
     )
-    return [ReportOut.model_validate(r) for r in result.scalars().all()]
+    return [_report_out(r) for r in result.scalars().all()]
+
+
+@router.get("/me/reports/{report_id}/pdf")
+async def my_report_pdf(
+    report_id: int,
+    customer: Account = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(AthleteReport).options(undefer(AthleteReport.pdf_data)).where(
+            AthleteReport.id == report_id,
+            AthleteReport.branch_id == customer.branch_id,
+            AthleteReport.athlete_number == customer.athlete_number,
+        )
+    )
+    return _pdf_response(result.scalar_one_or_none())

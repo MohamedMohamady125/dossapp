@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, LargeBinary, UniqueConstraint, Index
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 from app.database import Base
 
 
 class AthleteReport(Base):
-    """Monthly performance report written by a coach/admin for an athlete."""
+    """Monthly report for an athlete: an uploaded PDF, a written note, or both."""
 
     __tablename__ = "athlete_reports"
 
@@ -13,13 +14,19 @@ class AthleteReport(Base):
     athlete_number = Column(Integer, nullable=False)
     period = Column(String(10), nullable=False)  # e.g. '2026-09'
 
-    # Ratings 1..5
-    technique = Column(Integer, nullable=False)
-    endurance = Column(Integer, nullable=False)
-    commitment = Column(Integer, nullable=False)
-    discipline = Column(Integer, nullable=False)
+    # Legacy 1..5 ratings. No longer collected: new reports store 0 so the
+    # columns stay NOT NULL and older app builds can still parse the payload.
+    technique = Column(Integer, nullable=False, default=0)
+    endurance = Column(Integer, nullable=False, default=0)
+    commitment = Column(Integer, nullable=False, default=0)
+    discipline = Column(Integer, nullable=False, default=0)
 
-    coach_notes = Column(Text, nullable=True)
+    coach_notes = Column(Text, nullable=True)  # the note
+
+    # Uploaded PDF, kept in the database because the app server's disk is
+    # wiped on every deploy. Deferred so list queries never load the bytes.
+    pdf_filename = Column(String(255), nullable=True)
+    pdf_data = deferred(Column(LargeBinary, nullable=True))
     goals = Column(Text, nullable=True)  # focus for next month
 
     created_by_id = Column(Integer, ForeignKey("admin_users.id"), nullable=False)

@@ -10,11 +10,13 @@ class ReportUpsert(BaseModel):
     branch_id: int
     athlete_number: int
     period: str = Field(..., description="YYYY-MM")
-    technique: int = Field(..., ge=1, le=5)
-    endurance: int = Field(..., ge=1, le=5)
-    commitment: int = Field(..., ge=1, le=5)
-    discipline: int = Field(..., ge=1, le=5)
+    # A report is a note (here) or a PDF (POST /staff/reports/pdf).
     coach_notes: Optional[str] = Field(None, max_length=4000)
+    # Sent by older app builds only; accepted and ignored.
+    technique: Optional[int] = None
+    endurance: Optional[int] = None
+    commitment: Optional[int] = None
+    discipline: Optional[int] = None
     goals: Optional[str] = Field(None, max_length=4000)
 
     @field_validator("period")
@@ -41,6 +43,8 @@ class ReportOut(BaseModel):
     discipline: int
     coach_notes: Optional[str]
     goals: Optional[str]
+    has_pdf: bool = False
+    pdf_filename: Optional[str] = None
     created_by_name: str
     created_by_role: str
     created_at: datetime
