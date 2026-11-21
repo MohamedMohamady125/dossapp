@@ -97,6 +97,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     Map<String, dynamic>? entry,
     int? prefillBranchId,
     String? prefillProgram,
+    String? prefillSessions,
   }) {
     final isEdit = entry != null;
     int? formBranchId =
@@ -107,7 +108,8 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     final priceController =
         TextEditingController(text: isEdit ? (entry['price'] ?? '') : '');
     final sessionsController =
-        TextEditingController(text: isEdit ? (entry['sessions'] ?? '') : '');
+        TextEditingController(
+            text: isEdit ? (entry['sessions'] ?? '') : (prefillSessions ?? ''));
     String? formSegment = isEdit ? entry['segment'] : null;
     final formKey = GlobalKey<FormState>();
     bool saving = false;
@@ -694,10 +696,14 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
         final athleteCount = m['athlete_count'] as int;
         final samples = (m['sample_athletes'] as List).cast<String>();
 
-        // Extract clean program name (strip the "(Type / Step)" suffix for the form)
-        final cleanProgram = programLabel.contains(' (')
-            ? programLabel.substring(0, programLabel.indexOf(' ('))
-            : programLabel;
+        // The server names the exact program + sessions a price is needed for,
+        // so the form opens pre-filled and staff only type the price
+        // (Tesler's Law: the system absorbs the matching rules).
+        final cleanProgram = (m['program_name'] as String?) ??
+            (programLabel.contains(' (')
+                ? programLabel.substring(0, programLabel.indexOf(' ('))
+                : programLabel);
+        final missingSessions = m['sessions'] as String?;
 
         items.add(Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
@@ -705,6 +711,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
             onTap: () => _showEntryForm(
               prefillBranchId: bid,
               prefillProgram: cleanProgram,
+              prefillSessions: missingSessions,
             ),
             child: Container(
               padding: const EdgeInsets.all(14),

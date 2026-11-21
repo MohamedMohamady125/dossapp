@@ -69,6 +69,10 @@ def _normalize_program_name(athlete_type: Optional[str], athlete_step: Optional[
     elif "junior" in t or "junior" in s:
         candidates.append("Junior Team")
 
+    # Fins team (SK tab lists it as "Za3anf")
+    elif "fins" in t or "za3anf" in t:
+        candidates.append("Fins Team")
+
     # Pre-team → uses "All Levels" (same pricing as Junior Teams in SK tab)
     elif "pre" in t or "pre" in s:
         candidates.append("All Levels")
@@ -110,6 +114,19 @@ def _normalize_segment(segment: Optional[str]) -> Optional[str]:
     return None
 
 
+def missing_price_key(
+    athlete_type: Optional[str], athlete_step: Optional[str], athlete_sessions: Optional[str]
+) -> tuple[str, str]:
+    """(program_name, sessions) a catalog entry needs for this athlete to get a bill."""
+    candidates = _normalize_program_name(athlete_type, athlete_step)
+    program = candidates[0] if candidates else (athlete_type or "Unknown")
+    # "All Levels" is the catch-all row: a price filed under it would apply to
+    # every other program too, so ask for one under the athlete's own type.
+    if program == "All Levels" and athlete_type and athlete_type.strip():
+        program = athlete_type.strip()
+    return program, _normalize_sessions(athlete_sessions) or "8 Sessions"
+
+
 def _normalize_sessions(sessions: Optional[str]) -> Optional[str]:
     """Normalize sessions to 'N Sessions' format to match catalog entries."""
     if not sessions:
@@ -122,6 +139,15 @@ def _normalize_sessions(sessions: Optional[str]) -> Optional[str]:
     if m:
         return f"{m.group(1)} Sessions"
     return s
+
+
+def normalize_catalog_sessions(sessions: Optional[str]) -> Optional[str]:
+    """Clean a sessions value typed by staff: '12', '12x', '12 sessions' -> '12 Sessions'."""
+    if not sessions or not sessions.strip():
+        return None
+    s = sessions.strip()
+    m = re.fullmatch(r"(\d+)\s*(x|sessions?)?", s, re.IGNORECASE)
+    return f"{m.group(1)} Sessions" if m else s
 
 
 # ── Catalog lookup ────────────────────────────────────────────────────────
@@ -295,6 +321,10 @@ _SK_ROW_MAP: list[tuple[list[str], str, Optional[str]]] = [
     (["semi", "3"], "Semi-Private 3", None),
     (["semi", "2"], "Semi-Private 2", None),
     (["semi"], "Semi-Private 2", None),
+    (["za3anf", "6"], "Fins Team 6D", None),
+    (["fins", "6"], "Fins Team 6D", None),
+    (["za3anf"], "Fins Team", None),
+    (["fins"], "Fins Team", None),
     (["elite"], "Elite Team", None),
     (["junior"], "Junior Team", None),
     (["pre-team"], "All Levels", None),
@@ -340,71 +370,86 @@ def _normalize_sk_sessions(header: str) -> Optional[str]:
     return None
 
 
-async def sync_price_matrix_to_catalog(
-    db: AsyncSession, branch_id: int, price_matrix: dict
-) -> int:
-    """Upsert SK tab price_matrix entries into the price_catalog table.
-
-    Returns the number of entries upserted.
-    """
-    if not price_matrix:
-        return 0
-
-    # Wipe all existing auto-synced entries for this branch and rebuild fresh.
-    # This prevents stale data from old program-name mappings lingering.
-    old_entries = await db.execute(
-        select(PriceCatalog).where(PriceCatalog.branch_id == branch_id)
-    )
-    for entry in old_entries.scalars().all():
-        await db.delete(entry)
-    await db.flush()
-
-    count = 0
-    for row_label, prices in price_matrix.items():
+def sk_price_entries(price_matrix: dict) -> dict[tuple, Decimal]:
+    """Turn the parsed SK tab into {(program_name, segment, sessions): price}."""
+    entries: dict[tuple, Decimal] = {}
+    for row_label, prices in (price_matrix or {}).items():
         program_name, segment = _map_sk_row_to_program(row_label)
-
         for header, price_str in prices.items():
             sessions = _normalize_sk_sessions(header)
             if not sessions:
-                continue  # Skip non-session columns (times, coach names, etc.)
-            # Extract numeric price
+                continue  # not a session column (times, coach names, etc.)
             m = re.match(r"(\d+(?:\.\d+)?)", str(price_str))
             if not m:
                 continue
             price = Decimal(m.group(1))
             if price < 50:
-                continue  # Skip unrealistic prices (likely time floats like 4.15)
+                continue  # unrealistic (likely a time float like 4.15)
+            entries[(program_name, segment, sessions)] = price
+    return entries
 
-            # Upsert: check if entry exists
-            result = await db.execute(
-                select(PriceCatalog).where(
-                    PriceCatalog.branch_id == branch_id,
-                    PriceCatalog.program_name == program_name,
-                    PriceCatalog.segment == segment,
-                    PriceCatalog.sessions == sessions,
-                )
-            )
-            existing = result.scalar_one_or_none()
 
-            if existing:
-                if existing.price != price:
-                    existing.price = price
-                    existing.is_active = True
-                    count += 1
-                    logger.info(f"  Updated price: {program_name}/{segment}/{sessions} → {price}")
-            else:
-                entry = PriceCatalog(
-                    branch_id=branch_id,
-                    program_name=program_name,
-                    segment=segment,
-                    sessions=sessions,
-                    price=price,
-                    is_active=True,
-                )
-                db.add(entry)
-                count += 1
-                logger.info(f"  New price: {program_name}/{segment}/{sessions} → {price}")
+async def sync_price_matrix_to_catalog(
+    db: AsyncSession, branch_id: int, price_matrix: dict
+) -> int:
+    """Make the price catalog agree with the SK tab, which is the source of truth.
+
+    - Every price in the SK tab is upserted.
+    - A catalog entry for the same program + sessions under a segment the SK
+      tab does not define is removed, because the more specific entry would
+      otherwise shadow the SK price.
+    - Entries the SK tab says nothing about (prices staff assigned from the
+      Missing page, e.g. "Junior Team / 12 Sessions") are left untouched.
+
+    Returns the number of catalog rows added, changed or removed.
+    """
+    wanted = sk_price_entries(price_matrix)
+    if not wanted:
+        return 0
+
+    # Several workers refresh the same sheet at once; serialise so they don't
+    # insert the same row twice (NULL segments defeat the unique constraint).
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        from sqlalchemy import text
+        await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": 7340000 + branch_id})
+
+    result = await db.execute(select(PriceCatalog).where(PriceCatalog.branch_id == branch_id))
+    existing = result.scalars().all()
+
+    def norm(v: Optional[str]) -> Optional[str]:
+        return v.strip().lower() if v and v.strip() else None
+
+    wanted_keys = {(norm(p), norm(seg), norm(sess)) for (p, seg, sess) in wanted}
+    sk_slots = {(norm(p), norm(sess)) for (p, _, sess) in wanted}
+
+    changed = 0
+    by_key: dict[tuple, PriceCatalog] = {}
+    for e in existing:
+        key = (norm(e.program_name), norm(e.segment), norm(e.sessions))
+        if key in by_key or ((key[0], key[2]) in sk_slots and key not in wanted_keys):
+            # duplicate row, or one that would shadow the SK price
+            await db.delete(e)
+            changed += 1
+            logger.info(f"  Removed price superseded by SK tab: {e.program_name}/{e.segment}/{e.sessions}")
+        else:
+            by_key[key] = e
+
+    for (program_name, segment, sessions), price in wanted.items():
+        e = by_key.get((norm(program_name), norm(segment), norm(sessions)))
+        if e is None:
+            db.add(PriceCatalog(
+                branch_id=branch_id, program_name=program_name, segment=segment,
+                sessions=sessions, price=price, is_active=True,
+            ))
+            changed += 1
+            logger.info(f"  New price from SK tab: {program_name}/{segment}/{sessions} = {price}")
+        elif e.price != price or not e.is_active:
+            logger.info(f"  Price updated from SK tab: {program_name}/{segment}/{sessions} {e.price} -> {price}")
+            e.price = price
+            e.is_active = True
+            changed += 1
 
     await db.commit()
-    logger.info(f"Price catalog sync: {count} entries upserted for branch {branch_id}")
-    return count
+    if changed:
+        logger.info(f"Price catalog sync: {changed} changes for branch {branch_id}")
+    return changed

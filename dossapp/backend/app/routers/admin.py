@@ -260,6 +260,7 @@ async def create_price_catalog_entry(
 ):
     _require_admin_role(admin)
     from app.models.price_catalog import PriceCatalog
+    from app.services.price_resolver import normalize_catalog_sessions
     from decimal import Decimal, InvalidOperation
 
     try:
@@ -271,7 +272,7 @@ async def create_price_catalog_entry(
         branch_id=payload.branch_id,
         program_name=payload.program_name.strip(),
         segment=payload.segment.strip() if payload.segment else None,
-        sessions=payload.sessions.strip() if payload.sessions else None,
+        sessions=normalize_catalog_sessions(payload.sessions),
         price=price,
     )
     db.add(entry)
@@ -309,7 +310,8 @@ async def update_price_catalog_entry(
     if payload.segment is not None:
         entry.segment = payload.segment.strip() or None
     if payload.sessions is not None:
-        entry.sessions = payload.sessions.strip() or None
+        from app.services.price_resolver import normalize_catalog_sessions
+        entry.sessions = normalize_catalog_sessions(payload.sessions)
     if payload.price is not None:
         try:
             entry.price = Decimal(payload.price)
@@ -354,37 +356,37 @@ async def list_missing_prices(
 ):
     """Find athlete programs that have no matching price catalog entry."""
     _require_admin_role(admin)
-    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, _normalize_program_name
+    from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, missing_price_key
 
     source = _get_roster_source()
     rosters = await source.get_all_rosters()
 
-    missing = []  # [{branch_id, branch_name, program_name, athlete_count, sample_athletes}]
+    missing = []
 
     for bid, roster in rosters.items():
         catalog = await load_branch_catalog(db, bid)
 
-        # Group athletes by their resolved program name
-        unpriced: dict[str, list[str]] = {}  # program_name -> [athlete names]
+        # One item per (program, sessions): a single price entry with exactly
+        # those two values gives every athlete in the group a bill.
+        unpriced: dict[tuple[str, str], list] = {}
         for a in roster.athletes:
             bill = resolve_price_from_catalog(catalog, a.type, a.step, a.segment, a.sessions)
             if bill is not None:
                 continue
-            # Find what program name would match
-            candidates = _normalize_program_name(a.type, a.step)
-            label = candidates[0] if candidates else (a.type or "Unknown")
-            # Include type + step info for context
-            detail = f"{a.type or '—'} / {a.step or '—'}"
-            key = f"{label} ({detail})" if detail != "— / —" else label
-            unpriced.setdefault(key, []).append(a.name)
+            unpriced.setdefault(missing_price_key(a.type, a.step, a.sessions), []).append(a)
 
-        for program_key, names in unpriced.items():
+        for (program, sessions), group in unpriced.items():
+            types = sorted({a.type for a in group if a.type})
+            detail = sessions + (f" · {', '.join(types)}" if types and types != [program] else "")
             missing.append({
                 "branch_id": bid,
                 "branch_name": roster.branch_name,
-                "program_label": program_key,
-                "athlete_count": len(names),
-                "sample_athletes": names[:5],
+                # Label keeps the "Program (detail)" shape older app builds split on
+                "program_label": f"{program} ({detail})",
+                "program_name": program,
+                "sessions": sessions,
+                "athlete_count": len(group),
+                "sample_athletes": [a.name for a in group[:5]],
             })
 
     # Sort by branch then by athlete count descending

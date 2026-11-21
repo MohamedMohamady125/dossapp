@@ -26,6 +26,7 @@ class ExcelRosterSource(RosterSource):
         self._cache: dict[int, BranchRoster] = {}
         self._last_modified: dict[int, Optional[str]] = {}
         self._last_errors: dict[int, list[str]] = {}
+        self._synced_prices: dict[int, str] = {}
         self._lock = asyncio.Lock()
         self._initial_load_done = False
 
@@ -38,6 +39,26 @@ class ExcelRosterSource(RosterSource):
         if not self._initial_load_done and self._configs:
             self._initial_load_done = True
             await self.refresh_all()
+
+    async def _sync_prices(self, branch_id: int, price_matrix: dict):
+        """Bring the price catalog in line with the sheet's SK tab (the price list).
+
+        Prices staff assign from the Missing page for things the SK tab doesn't
+        cover are kept. Skipped when the SK tab hasn't changed since last sync.
+        """
+        if not price_matrix:
+            return
+        fingerprint = repr(sorted((k, sorted(v.items())) for k, v in price_matrix.items()))
+        if self._synced_prices.get(branch_id) == fingerprint:
+            return
+        try:
+            from app.database import async_session
+            from app.services.price_resolver import sync_price_matrix_to_catalog
+            async with async_session() as db:
+                await sync_price_matrix_to_catalog(db, branch_id, price_matrix)
+            self._synced_prices[branch_id] = fingerprint
+        except Exception as e:
+            logger.error(f"Branch {branch_id}: price list sync failed: {e}")
 
     async def _run_reconciliation(self):
         """Sync Excel payment data to the database."""
@@ -169,7 +190,7 @@ class ExcelRosterSource(RosterSource):
                     except Exception as e:
                         logger.error(f"Branch {branch_id}: failed to save period: {e}")
 
-                # Price catalog is now managed manually via admin API (not auto-synced from SK tab)
+                await self._sync_prices(branch_id, price_matrix)
 
                 return True
 
@@ -220,7 +241,7 @@ class ExcelRosterSource(RosterSource):
 
             logger.info(f"Branch {branch_id} (local): loaded {len(athletes)} athletes")
 
-            # Price catalog is now managed manually via admin API (not auto-synced from SK tab)
+            await self._sync_prices(branch_id, price_matrix)
 
             return True
         except Exception as e:
