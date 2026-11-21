@@ -10,7 +10,7 @@ from typing import Optional
 
 from app.utils.billing import current_billing_period
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,6 +89,7 @@ async def list_branches_manage(
 @router.post("/admin/branches", response_model=BranchOut, status_code=201)
 async def create_branch(
     payload: BranchCreate,
+    background_tasks: BackgroundTasks,
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -113,7 +114,8 @@ async def create_branch(
         "drive_file_id": branch.drive_file_id,
     })
     if branch.drive_file_id:
-        await source.refresh_branch(branch.id)
+        # After the response — see update_branch
+        background_tasks.add_task(source.refresh_branch, branch.id)
 
     return branch
 
@@ -122,6 +124,7 @@ async def create_branch(
 async def update_branch(
     branch_id: int,
     payload: BranchUpdate,
+    background_tasks: BackgroundTasks,
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -159,9 +162,12 @@ async def update_branch(
         "drive_file_id": branch.drive_file_id,
     })
 
-    # Refresh if drive_file_id changed
+    # Reload the roster if drive_file_id changed. Runs after the response is
+    # sent: downloading and parsing a large workbook takes longer than the
+    # app's 30s request timeout, which showed admins a false "server took too
+    # long" error even though the new sheet was saved.
     if branch.drive_file_id and branch.drive_file_id != old_drive_file_id:
-        await source.refresh_branch(branch.id)
+        background_tasks.add_task(source.refresh_branch, branch.id)
 
     return branch
 
