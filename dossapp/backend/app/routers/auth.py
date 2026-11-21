@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -15,7 +15,7 @@ from app.models.admin_user import AdminUser
 from app.models.email_verification import EmailVerification
 from app.schemas.auth import (
     CustomerLoginRequest, AdminLoginRequest, ChangePasswordRequest,
-    TokenResponse, RefreshRequest,
+    TokenResponse, RefreshRequest, ProfileOut,
     SendVerificationRequest, VerifyCodeRequest, SetPasswordWithEmailRequest,
     ForgotPasswordRequest, ForgotPasswordVerifyRequest, ForgotPasswordResetRequest,
 )
@@ -23,7 +23,10 @@ from app.utils.auth import (
     verify_password, hash_password, create_access_token,
     create_refresh_token, decode_token,
 )
-from app.routers.deps import get_current_customer, get_current_customer_allow_suspended, get_current_staff
+from app.routers.deps import (
+    get_current_customer, get_current_customer_allow_suspended, get_current_staff,
+    get_linked_accounts, USABLE_STATUSES,
+)
 from app.services.notifications import get_notification_provider
 
 logger = logging.getLogger(__name__)
@@ -79,15 +82,66 @@ async def _run_identity_guard(account: Account, db: AsyncSession):
             )
 
 
+async def build_profiles(db: AsyncSession, current: Account) -> list[ProfileOut]:
+    """The swimmers the parent of `current` can open, with `current` flagged."""
+    from app.models.branch import Branch
+
+    linked = await get_linked_accounts(db, current)
+    result = await db.execute(select(Branch.id, Branch.display_name))
+    branch_names = {row[0]: row[1] for row in result.all()}
+    return [
+        ProfileOut(
+            account_id=a.id,
+            athlete_number=a.athlete_number,
+            name=a.name_at_creation,
+            branch_id=a.branch_id,
+            branch_name=branch_names.get(a.branch_id, ""),
+            login_code=a.login_code,
+            is_current=a.id == current.id,
+        )
+        for a in linked
+    ]
+
+
+def customer_token_data(account: Account) -> dict:
+    return {
+        "sub": str(account.id),
+        "role": "customer",
+        "branch_id": account.branch_id,
+        "athlete_number": account.athlete_number,
+    }
+
+
 @router.post("/customer/login", response_model=TokenResponse)
 async def customer_login(req: CustomerLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Sign in with the login code or the verified email, plus the password."""
     _check_rate_limit(f"customer:{request.client.host if request.client else 'unknown'}")
 
-    result = await db.execute(select(Account).where(Account.login_code == req.login_code))
-    account = result.scalar_one_or_none()
+    identifier = req.login_code.strip()
+    invalid = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    if not account or not verify_password(req.password, account.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    if "@" in identifier:
+        # Email: a parent may have several swimmers on it. The password of any
+        # of them proves who they are; they then pick which swimmer to open.
+        result = await db.execute(
+            select(Account)
+            .where(func.lower(Account.email) == identifier.lower())
+            .order_by(Account.last_login_at.desc().nullslast(), Account.id)
+        )
+        candidates = [a for a in result.scalars().all() if a.status in USABLE_STATUSES]
+        account = next((a for a in candidates if verify_password(req.password, a.password_hash)), None)
+        if not account:
+            raise invalid
+        # Open the swimmer used most recently, when the password allows it
+        if candidates and candidates[0].id != account.id and verify_password(req.password, candidates[0].password_hash):
+            account = candidates[0]
+    else:
+        result = await db.execute(
+            select(Account).where(func.upper(Account.login_code) == identifier.upper())
+        )
+        account = result.scalars().first()
+        if not account or not verify_password(req.password, account.password_hash):
+            raise invalid
 
     if account.status == "disabled":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
@@ -100,17 +154,12 @@ async def customer_login(req: CustomerLoginRequest, request: Request, db: AsyncS
 
     account.last_login_at = datetime.now(timezone.utc)
 
-    token_data = {
-        "sub": str(account.id),
-        "role": "customer",
-        "branch_id": account.branch_id,
-        "athlete_number": account.athlete_number,
-    }
-
+    token_data = customer_token_data(account)
     return TokenResponse(
         access_token=create_access_token(token_data),
         refresh_token=create_refresh_token(token_data),
         must_change_password=account.must_change_password,
+        profiles=await build_profiles(db, account),
     )
 
 
@@ -275,7 +324,7 @@ async def customer_complete_onboarding(
 async def _find_account_by_email(db: AsyncSession, email: str):
     """Look up a customer Account or AdminUser by email. Returns (account, account_type)."""
     result = await db.execute(
-        select(Account).where(Account.email == email).order_by(Account.last_login_at.desc().nullslast()).limit(1)
+        select(Account).where(func.lower(Account.email) == email).order_by(Account.last_login_at.desc().nullslast()).limit(1)
     )
     account = result.scalar_one_or_none()
     if account:
@@ -406,10 +455,15 @@ async def forgot_password_reset(
     if not account:
         raise HTTPException(status_code=400, detail="Account not found")
 
-    account.password_hash = hash_password(req.new_password)
-    if hasattr(account, 'must_change_password'):
-        account.must_change_password = False
-    db.add(account)
+    # A parent with several swimmers has one account per swimmer on the same
+    # email. Reset them together, so the new password opens all of them
+    # instead of whichever one happened to be used last.
+    targets = await get_linked_accounts(db, account) if account_type == "customer" else [account]
+    for target in targets:
+        target.password_hash = hash_password(req.new_password)
+        if hasattr(target, 'must_change_password'):
+            target.must_change_password = False
+        db.add(target)
 
     # Clean up used verification
     await db.execute(

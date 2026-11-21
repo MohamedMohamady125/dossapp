@@ -2,7 +2,7 @@
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -120,3 +120,29 @@ def enforce_branch_scope(admin: AdminUser, branch_id: int):
         return  # Admin has access to all branches
     if admin.assigned_branch_id != branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this branch")
+
+
+# ── Family accounts ──────────────────────────────────────────────────────────
+
+USABLE_STATUSES = ("active", "suspended")
+
+
+async def get_linked_accounts(db: AsyncSession, account: Account) -> list[Account]:
+    """The swimmers one parent can open: every account that verified the same email.
+
+    Each account proved ownership of its email during first login, so accounts
+    sharing an email belong to the same parent. An account with no email yet
+    is linked to nothing but itself.
+    """
+    email = (account.email or "").strip().lower()
+    if not email:
+        return [account]
+    result = await db.execute(
+        select(Account)
+        .where(func.lower(Account.email) == email, Account.status.in_(USABLE_STATUSES))
+        .order_by(Account.name_at_creation, Account.id)
+    )
+    linked = list(result.scalars().all())
+    if all(a.id != account.id for a in linked):
+        linked.insert(0, account)
+    return linked

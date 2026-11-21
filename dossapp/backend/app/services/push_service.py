@@ -164,8 +164,20 @@ async def send_push_to_account(
     db.add(InboxNotification(account_id=account_id, type=ntype, title=title, body=body, data=data))
     await db.commit()
 
+    # A parent with several swimmers has one phone but one account per
+    # swimmer, and the phone is registered to whichever swimmer is open.
+    # Send to the phones of every account on the same verified email.
+    from sqlalchemy import func
+    from app.models.account import Account
+
+    account_ids = [account_id]
+    email = (await db.execute(select(Account.email).where(Account.id == account_id))).scalar_one_or_none()
+    if email and email.strip():
+        result = await db.execute(select(Account.id).where(func.lower(Account.email) == email.strip().lower()))
+        account_ids = list({account_id, *[row[0] for row in result.all()]})
+
     result = await db.execute(
-        select(DeviceToken).where(DeviceToken.account_id == account_id, DeviceToken.is_active == True)  # noqa: E712
+        select(DeviceToken).where(DeviceToken.account_id.in_(account_ids), DeviceToken.is_active == True)  # noqa: E712
     )
     tokens = result.scalars().all()
     if not tokens and not push_configured():

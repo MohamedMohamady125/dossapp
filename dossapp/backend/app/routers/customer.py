@@ -19,7 +19,7 @@ from app.models.account import Account
 from app.models.payment import Payment
 from app.models.receipt import Receipt
 from pydantic import BaseModel as PydanticBaseModel
-from app.routers.deps import get_current_customer, get_current_customer_allow_suspended
+from app.routers.deps import get_current_customer, get_current_customer_allow_suspended, get_linked_accounts
 from app.schemas.athlete import AthleteProfile, BillResponse, ScheduleSlot
 from app.schemas.payment import PaymentIntentResponse, ReceiptOut
 from app.services.notifications import enqueue_notification
@@ -375,9 +375,57 @@ async def update_password(
     if len(body.new_password) < 6:
         raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
 
-    account.password_hash = hash_password(body.new_password)
-    db.add(account)
+    # One password for the family: every swimmer on the same verified email
+    # changes together, so signing in by email keeps working for all of them.
+    for linked in await get_linked_accounts(db, account):
+        linked.password_hash = hash_password(body.new_password)
+        db.add(linked)
     return {"message": "Password changed successfully"}
+
+
+# ── Family: several swimmers under one parent ──
+
+class SwitchProfileBody(PydanticBaseModel):
+    account_id: int
+
+
+@router.get("/profiles")
+async def list_profiles(
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every swimmer this parent can open, with the current one flagged."""
+    from app.routers.auth import build_profiles
+    return await build_profiles(db, account)
+
+
+@router.post("/switch-profile")
+async def switch_profile(
+    body: SwitchProfileBody,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    """Open another swimmer of the same parent without signing in again."""
+    from datetime import timezone
+    from app.routers.auth import build_profiles, customer_token_data
+    from app.schemas.auth import TokenResponse
+    from app.utils.auth import create_access_token, create_refresh_token
+
+    linked = await get_linked_accounts(db, account)
+    target = next((a for a in linked if a.id == body.account_id), None)
+    if target is None:
+        # Not on this parent's email (or disabled): never reveal which
+        raise HTTPException(status_code=404, detail="Swimmer not found on this account")
+
+    target.last_login_at = datetime.now(timezone.utc)
+    db.add(target)
+    token_data = customer_token_data(target)
+    return TokenResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+        must_change_password=target.must_change_password,
+        profiles=await build_profiles(db, target),
+    )
 
 
 # ── Reinstatement ──
