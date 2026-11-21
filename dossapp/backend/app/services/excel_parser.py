@@ -10,7 +10,8 @@ Universal parser — handles all branch format variations:
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from collections import Counter
+from datetime import datetime, time as dt_time, timedelta
 from typing import Optional
 
 from openpyxl import load_workbook
@@ -219,6 +220,31 @@ def _detect_gender_column(ws: Worksheet, header_row: int, col_map: dict) -> Opti
     return None
 
 
+SEGMENT_VALUES = {"gems sch.", "gems", "member", "non member", "outsider"}
+
+
+def _detect_segment_column(ws: Worksheet, header_row: int, col_map: dict) -> Optional[int]:
+    """Find the membership column when it has no usable header.
+
+    The Nov 2026 Madinaty layout keeps 'Gems Sch.' / 'Outsider' in a column
+    left of ID whose header cell is blank — detect it by its values.
+    """
+    if "segment" in col_map:
+        return col_map["segment"]
+    last_row = min(header_row + 300, ws.max_row or 0)
+    for col in range(1, col_map["id"]):
+        if col in col_map.values():
+            continue
+        vals = set()
+        for row in range(header_row + 1, last_row + 1):
+            v = _clean(ws.cell(row=row, column=col).value).lower()
+            if v:
+                vals.add(v)
+        if vals and vals.issubset(SEGMENT_VALUES):
+            return col
+    return None
+
+
 def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple[list[Athlete], list[str]]:
     errors: list[str] = []
     athletes: list[Athlete] = []
@@ -232,6 +258,13 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
     gender_col = _detect_gender_column(ws, header_row, col_map)
     if gender_col and "gender" not in col_map:
         col_map["gender"] = gender_col
+
+    # Membership column without a header (falls back to "knowing method" only
+    # when the sheet has no membership column at all)
+    segment_col = _detect_segment_column(ws, header_row, col_map)
+    if segment_col and "segment" not in col_map:
+        col_map["segment"] = segment_col
+    has_segment_col = "segment" in col_map
 
     # Resolve sessions ambiguity: some branches use "sessions" for season name
     # If sessions column values look like month names, it's actually season
@@ -282,7 +315,7 @@ def parse_roster_sheet(ws: Worksheet, branch_name: str, branch_id: int) -> tuple
         gender = _normalize_gender(cell("gender"))
 
         # Segment: normalize Member/Non Member → Outsider convention
-        segment_raw = cell("segment") or cell("knowing_method")
+        segment_raw = cell("segment") if has_segment_col else cell("knowing_method")
         if segment_raw:
             seg_lower = segment_raw.strip().lower()
             if seg_lower in ("member", "gems sch.", "gems"):
@@ -330,6 +363,11 @@ class AttendanceExtra:
 
 # Attendance mark classification (lowercased). Any other non-empty mark
 # defaults to Present — conservative, avoids false "missed sessions" alerts.
+# A sheet with this many date columns is a day-by-day calendar grid (e.g. Teams,
+# one column per day of the month) rather than one column per session. Athletes
+# there don't train every day, so a blank cell says nothing about absence.
+DAILY_GRID_MIN_DATE_COLS = 20
+
 ABSENT_MARKS = {"a", "ab", "abs", "absent", "x", "✗", "✘", "غ", "غياب", "0"}
 PRESENT_MARKS = {"p", "present", "✓", "✔", "1", "h", "attended"}
 
@@ -395,19 +433,70 @@ def _header_cell_to_date(val, default_year: int, default_month: Optional[int] = 
     return None
 
 
-def _detect_date_columns(ws: Worksheet, max_col: int, known_cols: set[int], default_month: Optional[int] = None) -> dict[int, str]:
-    """Find per-session date columns in the header area. Returns {col: ISO date}."""
+def _detect_date_columns(
+    ws: Worksheet,
+    max_col: int,
+    known_cols: set[int],
+    default_month: Optional[int] = None,
+    id_col: Optional[int] = None,
+    name_col: Optional[int] = None,
+) -> dict[int, str]:
+    """Find per-session date columns. Returns {col: ISO date}.
+
+    Attendance sheets repeat the header above every class block. Each column's
+    date is the value most of those headers agree on, so one stale or mistyped
+    block header (e.g. last month's days left on the first block) cannot shift
+    the dates for the whole sheet. Falls back to scanning the top rows when no
+    labelled header row carries dates.
+    """
     default_year = datetime.now().year
+    last_col = min(59, max_col)
+    votes: dict[int, Counter] = {}
+    for row in ws.iter_rows(min_row=1, max_col=last_col, values_only=True):
+        is_header = (
+            (id_col and id_col <= len(row) and _clean(row[id_col - 1]).lower() == "id")
+            or (name_col and name_col <= len(row) and _clean(row[name_col - 1]).lower() == "name")
+        )
+        if not is_header:
+            continue
+        for col, val in enumerate(row, 1):
+            if col in known_cols or val is None:
+                continue
+            iso = _header_cell_to_date(val, default_year, default_month)
+            if iso:
+                votes.setdefault(col, Counter())[iso] += 1
+    if votes:
+        return {col: counts.most_common(1)[0][0] for col, counts in votes.items()}
+
     date_cols: dict[int, str] = {}
     max_row = ws.max_row or 0
     for scan_row in range(1, min(6, max_row + 1)):
-        for col in range(1, min(60, max_col + 1)):
+        for col in range(1, last_col + 1):
             if col in known_cols or col in date_cols:
                 continue
             iso = _header_cell_to_date(ws.cell(row=scan_row, column=col).value, default_year, default_month)
             if iso:
                 date_cols[col] = iso
     return date_cols
+
+
+_CLOCK_RE = r"\d{1,2}[.:]\d{2}(?:\s*[ap]\.?m\.?)?"
+_COACH_LABEL_RE = re.compile(rf"^coach\s*/\s*(.+?)\s+({_CLOCK_RE})$", re.IGNORECASE)
+_TRAILING_CLOCK_RE = re.compile(rf"^\D.*\s({_CLOCK_RE})$", re.IGNORECASE)
+
+
+def _format_clock(raw) -> Optional[str]:
+    """'3:15' from a time-typed cell (class-block start time), else None."""
+    if isinstance(raw, datetime):
+        raw = raw.time()
+    elif isinstance(raw, timedelta):
+        total = int(raw.total_seconds())
+        if not 0 <= total < 86400:
+            return None
+        raw = dt_time(total // 3600, (total % 3600) // 60)
+    if isinstance(raw, dt_time):
+        return f"{raw.hour}:{raw.minute:02d}"
+    return None
 
 
 def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional[int] = None) -> tuple[dict[int, list[ScheduleEntry]], dict[int, AttendanceExtra], dict[int, dict[str, str]], list[str]]:
@@ -477,7 +566,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
 
     # Detect per-session date columns (attendance marks live under them)
     known_cols = {c for c in (coach_col, id_col, name_col, pay_col, type_col, step_col, comment_col, pr_col) if c}
-    date_cols = _detect_date_columns(ws, max_col, known_cols, default_month=default_month)
+    date_cols = _detect_date_columns(ws, max_col, known_cols, default_month=default_month, id_col=id_col, name_col=name_col)
 
     # Log date detection details — dump header cells beyond known columns for debugging
     if not date_cols:
@@ -495,16 +584,48 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
 
     current_time_block: Optional[str] = None
     current_coach: Optional[str] = None
+    # A "section" is the run of classes under one time/team label row. A session
+    # counts as recorded for a section once anyone in it has an explicit mark.
+    section = 0
+    recorded: set[tuple[int, str]] = set()
+    # Past dates left blank, per athlete — absences only if that session was recorded
+    blanks: dict[int, set[tuple[int, str]]] = {}
+    infer_absences = len(date_cols) < DAILY_GRID_MIN_DATE_COLS
+    today_iso = datetime.now().strftime("%Y-%m-%d")
 
     for row_idx in range(1, max_row + 1):
         # Read key columns
-        coach_val = _clean(ws.cell(row=row_idx, column=coach_col).value) if coach_col else ""
+        coach_raw = ws.cell(row=row_idx, column=coach_col).value if coach_col else None
+        coach_val = _clean(coach_raw)
         id_val = _clean(ws.cell(row=row_idx, column=id_col).value) if id_col else ""
         name_val = _clean(ws.cell(row=row_idx, column=name_col).value) if name_col else ""
 
         # Skip empty rows
         if not coach_val and not id_val and not name_val:
             continue
+
+        # Class-block labels sit in the coach column on rows with no athlete ID
+        if not id_val:
+            # A time-typed cell is the block's start time (e.g. 03:15)
+            clock = _format_clock(coach_raw)
+            if clock:
+                current_time_block = clock
+                section += 1
+                continue
+            # "Coach/ Mostafa  4:15" names the coach and time for the rows below
+            label = _COACH_LABEL_RE.match(coach_val)
+            if label:
+                current_coach = label.group(1).strip()
+                current_time_block = label.group(2).strip()
+                section += 1
+                continue
+            # "Elite Team 8:00" — a new block with a time but no named coach
+            label = _TRAILING_CLOCK_RE.match(coach_val)
+            if label and not re.search(r"\d\s*(to|–|-)\s*\d", coach_val, re.IGNORECASE):
+                current_coach = None
+                current_time_block = label.group(1).strip()
+                section += 1
+                continue
 
         # Skip repeated header rows (Coach/ID/Name/Pay in the cells)
         if coach_val.lower() in ("coach", "coach ") and id_val.lower() in ("id", ""):
@@ -516,6 +637,7 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
             time_match = re.search(r"\d{1,2}[.:]\d{2}\s*(to|–|-|To)\s*\d{1,2}[.:]\d{2}", check_val, re.IGNORECASE)
             if time_match:
                 current_time_block = time_match.group(0).strip()
+                section += 1
                 break
         else:
             # Not a time block — try to parse as athlete row
@@ -536,17 +658,16 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
             )
             schedule_map.setdefault(athlete_num, []).append(entry)
 
-            # Attendance marks under date columns
-            # Blank cell = absent (session happened but athlete didn't attend)
-            # Only mark absent for dates that have already passed
-            today_iso = datetime.now().strftime("%Y-%m-%d")
+            # Attendance marks under date columns. A blank cell on a past date
+            # counts as absent, but only once we know that session was recorded
+            # (resolved after the loop).
             for col, iso_date in date_cols.items():
                 mark = _classify_attendance_mark(ws.cell(row=row_idx, column=col).value)
                 if mark:
                     attendance_map.setdefault(athlete_num, {})[iso_date] = mark
-                elif iso_date <= today_iso:
-                    # No mark and date has passed → absent
-                    attendance_map.setdefault(athlete_num, {})[iso_date] = "A"
+                    recorded.add((section, iso_date))
+                elif infer_absences and iso_date <= today_iso:
+                    blanks.setdefault(athlete_num, set()).add((section, iso_date))
 
             # Extract type/step from attendance row
             type_raw = None
@@ -588,6 +709,13 @@ def parse_attendance_sheet(ws: Worksheet, day_pair: str, default_month: Optional
                 if step_raw and not existing.step:
                     existing.step = step_raw
                 extras_map[athlete_num] = existing
+
+    # Blank = absent only for sessions that were actually recorded. A date nobody
+    # in the section was marked on was never taken (holiday, cancelled class,
+    # attendance not kept) and must not produce "missed session" alerts.
+    for athlete_num, cells in blanks.items():
+        for _, iso_date in cells & recorded:
+            attendance_map.setdefault(athlete_num, {}).setdefault(iso_date, "A")
 
     total_marks = sum(len(v) for v in attendance_map.values())
     logger.info(f"  Attendance '{day_pair}' result: {len(schedule_map)} athletes scheduled, {len(attendance_map)} with marks, {total_marks} total marks")
