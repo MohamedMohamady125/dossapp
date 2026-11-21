@@ -358,9 +358,12 @@ async def lifespan(app: FastAPI):
     # Skip background tasks in serverless (Vercel) — no long-running processes
     refresh_task = None
     notification_task = None
+    daily_jobs_task = None
     if not is_serverless:
         refresh_task = asyncio.create_task(_refresh_and_reconcile())
         notification_task = asyncio.create_task(process_notification_queue(async_session))
+        from app.services.scheduler import run_daily_jobs
+        daily_jobs_task = asyncio.create_task(run_daily_jobs(roster_source.get_all_rosters))
 
     yield
 
@@ -368,6 +371,8 @@ async def lifespan(app: FastAPI):
         refresh_task.cancel()
     if notification_task:
         notification_task.cancel()
+    if daily_jobs_task:
+        daily_jobs_task.cancel()
     logger.info("Aquathletic backend shutting down")
 
 
@@ -412,6 +417,7 @@ app.include_router(coach.router)
 app.include_router(reports.router)
 app.include_router(cron.router)
 app.include_router(notifications.router)
+app.include_router(notifications.staff_router)
 app.include_router(webhooks.router)
 app.include_router(webhooks.success_router)
 

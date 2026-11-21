@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # Day of month for unpaid reminder
     payment_reminder_day: int = 25
 
+    # Built-in daily scheduler (payment reminders, spot-lost). Hour is Egypt time.
+    daily_jobs_enabled: bool = True
+    daily_jobs_hour: int = 10
+
     # Excel refresh
     excel_refresh_interval_seconds: int = 60
 

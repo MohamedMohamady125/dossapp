@@ -436,6 +436,18 @@ async def request_reinstatement(
     )
     db.add(req)
     await db.commit()
+
+    # Tell the branch staff right away; before this they only saw a badge
+    # the next time they opened the app.
+    from app.services.push_service import send_push_to_staff
+    who = f"{account.name_at_creation} (#{account.athlete_number})"
+    await send_push_to_staff(
+        db, account.branch_id,
+        en=("Reinstatement request", f"{who} is asking for their spot back. Open the app to review."),
+        ar=("طلب إعادة تسجيل", f"{who} يطلب استرجاع مكانه. افتح التطبيق للمراجعة."),
+        data={"screen": "reinstatement", "branch_id": account.branch_id},
+        dedupe_key=f"staffreinst:{req.id}",
+    )
     return {"message": "Reinstatement request submitted"}
 
 

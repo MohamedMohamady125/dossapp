@@ -1,6 +1,7 @@
-"""Cron endpoints — invoked by Vercel Cron (Authorization: Bearer $CRON_SECRET).
+"""Manual triggers for the scheduled jobs.
 
-An admin JWT is also accepted so triggers can be run manually from the app/API.
+The jobs run on their own through app/services/scheduler.py. These endpoints
+stay so an admin (admin JWT, or Bearer $CRON_SECRET) can run one by hand.
 """
 
 import hmac
@@ -18,9 +19,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cron", tags=["cron"])
 
-# Payment reminder days: 25, 27, 29, 1 (every 2 days from the 25th until the 1st)
-PAYMENT_REMINDER_DAYS = {25, 27, 29, 1}
-SPOT_LOST_DAY = 2
+from app.services.scheduler import PAYMENT_REMINDER_DAYS, SPOT_LOST_DAY  # noqa: E402
+from app.services.push_triggers import local_now  # noqa: E402
 
 
 def _authorize(authorization: Optional[str]):
@@ -72,7 +72,7 @@ async def cron_payment_reminders(
     """Send unpaid reminders — on days 25, 27, 29, 1 (every 2 days)."""
     _authorize(authorization)
 
-    today = datetime.now().day
+    today = local_now().day
     if not force and today not in PAYMENT_REMINDER_DAYS:
         return {"skipped": True, "reason": f"Day {today} not in reminder days {sorted(PAYMENT_REMINDER_DAYS)}"}
 
@@ -96,7 +96,7 @@ async def cron_spot_lost(
     """On the 2nd of month: suspend unpaid athletes and notify them."""
     _authorize(authorization)
 
-    today = datetime.now().day
+    today = local_now().day
     if not force and today != SPOT_LOST_DAY:
         return {"skipped": True, "reason": f"Day {today} is not day {SPOT_LOST_DAY}"}
 

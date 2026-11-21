@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.notification_log import NotificationLog
-from app.models.push import DeviceToken, InboxNotification, NotificationDedupe
+from app.models.admin_user import AdminUser
+from app.models.push import DeviceToken, StaffDeviceToken, InboxNotification, NotificationDedupe
 
 logger = logging.getLogger(__name__)
 
@@ -184,3 +185,60 @@ async def send_push_to_account(
         ))
     await db.commit()
     return True
+
+
+async def send_push_to_staff(
+    db: AsyncSession,
+    branch_id: int,
+    en: tuple[str, str],
+    ar: tuple[str, str],
+    data: Optional[dict] = None,
+    dedupe_key: Optional[str] = None,
+) -> int:
+    """Push to the staff who run a branch: every admin, plus that branch's assistants.
+
+    Coaches are left out; payments and enrollment are not their job. `en` and
+    `ar` are (title, body); each phone gets the language it registered with.
+    Returns the number of phones reached. Never raises.
+    """
+    try:
+        if dedupe_key:
+            db.add(NotificationDedupe(dedupe_key=dedupe_key))
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                return 0
+
+        result = await db.execute(
+            select(StaffDeviceToken)
+            .join(AdminUser, AdminUser.id == StaffDeviceToken.admin_user_id)
+            .where(
+                StaffDeviceToken.is_active == True,  # noqa: E712
+                AdminUser.is_active == True,  # noqa: E712
+                (AdminUser.role == "admin")
+                | ((AdminUser.role == "assistant") & (AdminUser.assigned_branch_id == branch_id)),
+            )
+        )
+        devices = result.scalars().all()
+        if not devices:
+            logger.info(f"[STAFF PUSH] branch={branch_id} title={en[0]!r} (no staff phones registered)")
+            return 0
+
+        reached = 0
+        for device in devices:
+            title, body = ar if device.language == "ar" else en
+            ok, error = await send_fcm(device.token, title, body, data)
+            if ok:
+                reached += 1
+            elif error == "UNREGISTERED":
+                device.is_active = False
+        await db.commit()
+        return reached
+    except Exception as e:
+        logger.error(f"Staff push error (branch {branch_id}): {e}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return 0

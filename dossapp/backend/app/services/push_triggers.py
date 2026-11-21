@@ -11,7 +11,7 @@ so it's safe to run them repeatedly (serverless lazy loads, crons, dev loop).
 
 import hashlib
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,35 @@ from app.services.push_service import send_push_to_account
 from app.services.roster_source import Athlete, BranchRoster
 
 logger = logging.getLogger(__name__)
+
+
+def local_now() -> datetime:
+    """Now in Egypt. The server clock is UTC, and "the 25th" has to mean the
+    25th for the parents, not for the server."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Africa/Cairo"))
+    except Exception:
+        return datetime.now(timezone(timedelta(hours=2)))
+
+
+def _is_enrolled(athlete: Athlete) -> bool:
+    """In a class this month. The roster also lists past swimmers with no
+    class; they owe nothing and must not be reminded or suspended."""
+    return bool(athlete.type or athlete.days or athlete.schedule)
+
+
+def _billing_period(roster: BranchRoster, now: datetime) -> str:
+    """The month the sheet is billing, which is what the parent sees in the app."""
+    return roster.period or now.strftime("%Y-%m")
+
+
+def _month_names(period: str) -> tuple[str, str]:
+    try:
+        month = int(period.split("-")[1])
+        return date(2000, month, 1).strftime("%B"), MONTHS_AR.get(month, period)
+    except (IndexError, ValueError):
+        return period, period
 
 
 # ── Bilingual message helpers ──
@@ -222,17 +251,15 @@ async def check_missed_sessions(roster: BranchRoster, db: AsyncSession) -> int:
 
 async def send_payment_reminders(db: AsyncSession, rosters: dict[int, BranchRoster]) -> int:
     """Send payment reminders to unpaid athletes. Deduped per day so safe to re-run."""
-    now = datetime.now()
-    period = now.strftime("%Y-%m")
-    month_num = now.month
+    now = local_now()
     day = now.day
-    month_en = now.strftime("%B")
-    month_ar = MONTHS_AR.get(month_num, month_en)
     # Dedupe key includes the day so the same user can get reminders on different days
     day_key = now.strftime("%Y-%m-%d")
 
     sent = 0
     for branch_id, roster in rosters.items():
+        period = _billing_period(roster, now)
+        month_en, month_ar = _month_names(period)
         accounts = await _all_accounts(db, branch_id)
 
         result = await db.execute(
@@ -245,7 +272,7 @@ async def send_payment_reminders(db: AsyncSession, rosters: dict[int, BranchRost
         paid_numbers = {row[0] for row in result.all()}
 
         for athlete in roster.athletes:
-            if athlete.athlete_number in paid_numbers:
+            if athlete.athlete_number in paid_numbers or not _is_enrolled(athlete):
                 continue
             # Also skip if Excel Pay column shows paid
             if athlete.pay:
@@ -293,15 +320,34 @@ async def send_payment_reminders(db: AsyncSession, rosters: dict[int, BranchRost
 
 async def send_spot_lost_notifications(db: AsyncSession, rosters: dict[int, BranchRoster]) -> int:
     """On the 2nd: suspend unpaid athletes and notify them they lost their spot."""
-    now = datetime.now()
-    period = now.strftime("%Y-%m")
-    month_num = now.month
-    month_en = now.strftime("%B")
-    month_ar = MONTHS_AR.get(month_num, month_en)
+    from app.models.reinstatement_request import ReinstatementRequest
+
+    now = local_now()
+    calendar_period = now.strftime("%Y-%m")
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     sent = 0
     for branch_id, roster in rosters.items():
+        period = _billing_period(roster, now)
+        if period != calendar_period:
+            # The sheet has not been moved to this month yet, so nobody can
+            # have paid for it. Suspending now would suspend the whole branch.
+            logger.warning(
+                f"Spot-lost skipped for branch {branch_id}: sheet is on {period}, today is {calendar_period}"
+            )
+            continue
+        month_en, month_ar = _month_names(period)
         accounts = await _all_accounts(db, branch_id)
+
+        # Staff already gave these swimmers their spot back this month
+        result = await db.execute(
+            select(ReinstatementRequest.account_id).where(
+                ReinstatementRequest.branch_id == branch_id,
+                ReinstatementRequest.status == "approved",
+                ReinstatementRequest.reviewed_at >= month_start,
+            )
+        )
+        reinstated = {row[0] for row in result.all()}
 
         result = await db.execute(
             select(Payment.athlete_number).where(
@@ -313,7 +359,7 @@ async def send_spot_lost_notifications(db: AsyncSession, rosters: dict[int, Bran
         paid_numbers = {row[0] for row in result.all()}
 
         for athlete in roster.athletes:
-            if athlete.athlete_number in paid_numbers:
+            if athlete.athlete_number in paid_numbers or not _is_enrolled(athlete):
                 continue
             if athlete.pay:
                 try:
@@ -322,8 +368,8 @@ async def send_spot_lost_notifications(db: AsyncSession, rosters: dict[int, Bran
                 except (ValueError, TypeError):
                     pass
             account = accounts.get(athlete.athlete_number)
-            if not account or account.status == "suspended":
-                continue  # Already suspended or no account
+            if not account or account.status != "active" or account.id in reinstated:
+                continue  # No account, already suspended/closed, or reinstated by staff
 
             # Suspend the account
             account.status = "suspended"

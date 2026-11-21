@@ -1,4 +1,4 @@
-"""Customer device registration + in-app notification inbox."""
+"""Device registration (customers and staff) + the customer in-app inbox."""
 
 from datetime import datetime, timezone
 
@@ -8,11 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.account import Account
-from app.models.push import DeviceToken, InboxNotification
-from app.routers.deps import get_current_customer
+from app.models.admin_user import AdminUser
+from app.models.push import DeviceToken, StaffDeviceToken, InboxNotification
+from app.routers.deps import get_current_customer, get_current_staff
 from app.schemas.notification import DeviceTokenIn, NotificationOut, UnreadCountOut
 
 router = APIRouter(prefix="/me", tags=["notifications"])
+staff_router = APIRouter(prefix="/staff", tags=["notifications"])
 
 
 @router.post("/devices")
@@ -42,6 +44,10 @@ async def register_device(
             is_active=True,
             last_seen_at=now,
         ))
+    # This phone now belongs to a customer session: stop staff pushes to it
+    await db.execute(
+        update(StaffDeviceToken).where(StaffDeviceToken.token == payload.token).values(is_active=False)
+    )
     # Update account language preference
     if payload.language in ("en", "ar"):
         account.language = payload.language
@@ -135,3 +141,56 @@ async def mark_all_read(
     )
     await db.commit()
     return {"message": "All marked read"}
+
+
+# ── Staff phones ─────────────────────────────────────────────────────────────
+
+@staff_router.post("/devices")
+async def register_staff_device(
+    payload: DeviceTokenIn,
+    staff: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register the phone a staff member is logged in on, for staff pushes."""
+    if payload.platform not in ("android", "ios"):
+        raise HTTPException(status_code=400, detail="platform must be 'android' or 'ios'")
+
+    result = await db.execute(select(StaffDeviceToken).where(StaffDeviceToken.token == payload.token))
+    device = result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    language = payload.language if payload.language in ("en", "ar") else "en"
+
+    if device:
+        device.admin_user_id = staff.id
+        device.platform = payload.platform
+        device.language = language
+        device.is_active = True
+        device.last_seen_at = now
+    else:
+        db.add(StaffDeviceToken(
+            admin_user_id=staff.id,
+            token=payload.token,
+            platform=payload.platform,
+            language=language,
+            is_active=True,
+            last_seen_at=now,
+        ))
+    # This phone now belongs to a staff session: stop customer pushes to it
+    await db.execute(update(DeviceToken).where(DeviceToken.token == payload.token).values(is_active=False))
+    await db.commit()
+    return {"message": "Device registered"}
+
+
+@staff_router.delete("/devices/{token}")
+async def unregister_staff_device(
+    token: str,
+    staff: AdminUser = Depends(get_current_staff),
+    db: AsyncSession = Depends(get_db),
+):
+    await db.execute(
+        update(StaffDeviceToken)
+        .where(StaffDeviceToken.token == token, StaffDeviceToken.admin_user_id == staff.id)
+        .values(is_active=False)
+    )
+    await db.commit()
+    return {"message": "Device unregistered"}

@@ -17,6 +17,24 @@ class DeviceToken(Base):
     __table_args__ = (Index("ix_device_tokens_account", "account_id"),)
 
 
+class StaffDeviceToken(Base):
+    """A staff member's phone. Kept apart from customer tokens: a phone gets
+    pushes only for whoever is logged in on it."""
+
+    __tablename__ = "staff_device_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    admin_user_id = Column(Integer, ForeignKey("admin_users.id"), nullable=False)
+    token = Column(String(512), nullable=False, unique=True)
+    platform = Column(String(10), nullable=False)  # android | ios
+    language = Column(String(5), nullable=False, default="en")
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (Index("ix_staff_device_tokens_user", "admin_user_id"),)
+
+
 class InboxNotification(Base):
     __tablename__ = "inbox_notifications"
 

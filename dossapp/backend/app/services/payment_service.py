@@ -154,6 +154,7 @@ async def record_online_payment(
 
     # Enqueue notifications
     await _send_receipt_notifications(receipt, pdf_data, normalized_phone, email=email)
+    await _push_payment_received(db, branch_id, receipt, online=True)
 
     return receipt
 
@@ -241,6 +242,7 @@ async def record_cash_payment(
     await db.commit()
 
     await _send_receipt_notifications(receipt, pdf_data, normalized_phone, email=email)
+    await _push_payment_received(db, branch_id, receipt, online=False)
     return receipt
 
 
@@ -328,7 +330,86 @@ async def record_manual_payment(
     await db.commit()
 
     await _send_receipt_notifications(receipt, pdf_data, normalized_phone, email=email)
+    await _push_payment_received(db, branch_id, receipt, online=False)
     return receipt
+
+
+_MONTHS_EN = ["January", "February", "March", "April", "May", "June",
+              "July", "August", "September", "October", "November", "December"]
+_MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+              "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+
+
+def _month_names(period: str) -> tuple[str, str]:
+    """'2026-11' -> ('November', 'نوفمبر'). Falls back to the raw period."""
+    try:
+        m = int(period.split("-")[1])
+        return _MONTHS_EN[m - 1], _MONTHS_AR[m - 1]
+    except (IndexError, ValueError):
+        return period, period
+
+
+def _money(amount: str) -> str:
+    try:
+        return f"{float(amount):,.0f}"
+    except (TypeError, ValueError):
+        return str(amount)
+
+
+async def _push_payment_received(db: AsyncSession, branch_id: int, receipt: Receipt, online: bool) -> None:
+    """Tell the parent their payment went through; tell staff about online ones.
+
+    Runs after the payment is committed and never raises: a push problem must
+    not undo or fail a recorded payment. Staff are only told about online
+    payments, since cash and card are entered by staff themselves.
+    """
+    from app.models.account import Account
+    from app.services.push_service import send_push_to_account, send_push_to_staff
+
+    month_en, month_ar = _month_names(receipt.period)
+    amount = _money(receipt.amount_paid)
+    key = f"{branch_id}:{receipt.athlete_number}:{receipt.period}"
+
+    try:
+        result = await db.execute(
+            select(Account).where(
+                Account.branch_id == branch_id,
+                Account.athlete_number == receipt.athlete_number,
+            )
+        )
+        account = result.scalars().first()
+        if account:
+            if account.language == "ar":
+                title = "تم استلام الدفع ✓"
+                body = (f"تم دفع {amount} جنيه لاشتراك {receipt.athlete_name} عن شهر {month_ar}. "
+                        f"إيصال رقم {receipt.receipt_number} موجود في التطبيق.")
+            else:
+                title = "Payment received ✓"
+                body = (f"{amount} EGP paid for {receipt.athlete_name}'s {month_en} fee. "
+                        f"Receipt {receipt.receipt_number} is in the app.")
+            await send_push_to_account(
+                db, account.id, "payment_received", title, body,
+                data={"screen": "receipts", "receipt_number": receipt.receipt_number},
+                dedupe_key=f"paid:{key}",
+            )
+    except Exception as e:
+        logger.error(f"Payment push to parent failed ({key}): {e}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+    if online:
+        who = f"{receipt.athlete_name} (#{receipt.athlete_number})"
+        await send_push_to_staff(
+            db, branch_id,
+            en=("Online payment received",
+                f"{who} paid {amount} EGP online for {month_en}. {receipt.branch_name}."),
+            ar=("تم استلام دفع أونلاين",
+                f"{who} دفع {amount} جنيه أونلاين عن شهر {month_ar}. {receipt.branch_name}."),
+            data={"screen": "payments", "branch_id": branch_id},
+            dedupe_key=f"staffpaid:{key}",
+        )
 
 
 async def _send_receipt_notifications(
