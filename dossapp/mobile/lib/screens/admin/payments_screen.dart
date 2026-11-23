@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -8,7 +9,7 @@ import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
-import '../../widgets/press_feedback.dart';
+import '../../widgets/ui_kit.dart';
 
 class PaymentsScreen extends StatefulWidget {
   final int branchId;
@@ -18,7 +19,10 @@ class PaymentsScreen extends StatefulWidget {
   State<PaymentsScreen> createState() => _PaymentsScreenState();
 }
 
-class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProviderStateMixin {
+class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProviderStateMixin, AutoRefresh {
+  @override
+  Future<void> silentReload() => _load(silent: true);
+
   List<Map<String, dynamic>>? _payments;
   bool _loading = true;
   String? _error;
@@ -43,8 +47,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _load({bool silent = false}) async {
+    silent = silent && _payments != null;
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
       _payments = await ApiService.getBranchPayments(
         widget.branchId,
@@ -55,10 +60,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         _period = _payments!.first['period']?.toString();
       }
       _period ??= DateTime.now().toString().substring(0, 7);
-      _animController.forward(from: 0);
+      _error = null;
+      if (!silent) _animController.forward(from: 0);
     } catch (e) {
-      _error = e.toString();
+      if (!silent) _error = e.toString();
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
@@ -91,36 +98,47 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
     return Column(
       children: [
-        // ── Summary Header ──
+        // ── Summary: one headline number on a plain surface ──
         if (!_loading && _payments != null)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: AppColors.successGradient,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.success.withValues(alpha: 0.25),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Row(
               children: [
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(formatPeriod(_period ?? ''), style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
-                    const SizedBox(height: 4),
-                    Text(formatMoney(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
-                  ],
-                )),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
-                  child: Text('$paidCount paid', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                  width: 48, height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.savings_rounded, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Collected in ${formatPeriod(_period ?? '')}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(formatMoney(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
+                  child: Text('${formatNumber(paidCount)} paid', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
@@ -133,16 +151,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             children: [
               Expanded(
                 child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search by name or number...',
-                    hintStyle: const TextStyle(fontSize: 14),
-                    prefixIcon: const Icon(Icons.search, size: 20),
+                  decoration: const InputDecoration(
+                    hintText: 'Search by name or number',
+                    prefixIcon: Icon(Icons.search),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
-                    filled: true,
-                    fillColor: Colors.white,
                   ),
                   onChanged: (v) {
                     _searchDebounce?.cancel();
@@ -154,9 +166,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
               ),
               const SizedBox(width: 8),
               Container(
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+                width: 48, height: 48,
+                decoration: BoxDecoration(
+                  color: _statusFilter.isEmpty ? AppColors.surfaceVariant : AppColors.primarySurface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
+                ),
                 child: PopupMenuButton<String>(
-                  icon: Icon(Icons.filter_list, size: 20, color: _statusFilter.isEmpty ? AppColors.textSecondary : AppColors.primary),
+                  icon: Icon(Icons.filter_list, size: 22, color: _statusFilter.isEmpty ? AppColors.textSecondary : AppColors.primary),
                   tooltip: 'Filter status',
                   position: PopupMenuPosition.under,
                   onSelected: (v) { _statusFilter = v; _load(); },
@@ -188,9 +205,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 16),
                 itemCount: list.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, indent: 70),
                 itemBuilder: (ctx, i) {
                   final delay = (i * 0.05).clamp(0.0, 0.5);
                   return AnimatedBuilder(
@@ -204,7 +222,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                         child: Opacity(opacity: value, child: child),
                       );
                     },
-                    child: PressFeedback(child: _paymentCard(list[i])),
+                    child: _paymentCard(list[i]),
                   );
                 },
               ),
@@ -226,13 +244,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   }
 
   Future<void> _downloadReceipt(int receiptId, String receiptNumber) async {
+    final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
     try {
       final pdfBytes = await ApiService.adminDownloadReceiptPdf(receiptId);
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/receipt_$receiptNumber.pdf');
       await file.writeAsBytes(pdfBytes);
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')], sharePositionOrigin: origin),
       );
     } catch (e) {
       if (mounted) {
@@ -241,149 +260,76 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     }
   }
 
+  // Name and amount on the first line; class and payment facts as two quiet
+  // lines beneath. "Paid" is the normal state here so it gets no badge; only
+  // a payment that is not yet paid is flagged (Von Restorff).
   Widget _paymentCard(Map<String, dynamic> p) {
     final isPaid = p['status'] == 'paid';
     final name = p['athlete_name'] ?? 'Athlete #${p['athlete_number']}';
-    final level = p['level'] ?? '';
-    final type = p['athlete_type'] ?? '';
-    final subtitle = [level, type].where((s) => s.isNotEmpty).join(' \u2022 ');
+    final level = (p['level'] ?? '') as String;
+    final type = (p['athlete_type'] ?? '') as String;
     final coach = p['coach'] as String?;
     final trainingTime = p['training_time'] as String?;
     final channel = p['payment_channel'] as String?;
     final receiptId = p['receipt_id'] as int?;
     final receiptNumber = p['receipt_number'] as String?;
 
-    // Channel badge color
-    Color channelColor;
-    switch (channel) {
-      case 'Online':
-        channelColor = AppColors.secondary;
-        break;
-      case 'Cash':
-        channelColor = AppColors.success;
-        break;
-      case 'Card':
-        channelColor = const Color(0xFF7C3AED);
-        break;
-      default:
-        channelColor = AppColors.textMuted;
-    }
+    final classLine = [
+      if (level.isNotEmpty) level,
+      if (type.isNotEmpty && type != level) type,
+      if (coach != null) 'Coach $coach',
+      if (trainingTime != null) trainingTime,
+    ].join(' \u2022 ');
+    final paymentLine = [
+      if (channel != null) channel,
+      if (receiptNumber != null) 'Receipt $receiptNumber',
+    ].join(' \u2022 ');
 
-    final hasScheduleInfo = coach != null || trainingTime != null;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 4, 12),
+      child: Row(
         children: [
-          Row(
+          InitialsAvatar(name.toString()),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
-              Container(
-                width: 42, height: 42,
-                decoration: BoxDecoration(
-                  color: isPaid ? AppColors.successLight : AppColors.warningLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '#',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: isPaid ? AppColors.success : AppColors.warning),
-                )),
-              ),
-              const SizedBox(width: 12),
-              // Name + details
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (subtitle.isNotEmpty)
-                    Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  Expanded(
+                    child: Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                  const SizedBox(width: 8),
+                  if (!isPaid)
+                    Container(
+                      margin: const EdgeInsetsDirectional.only(end: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(6)),
+                      child: const Text('Pending', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warningDark)),
+                    ),
+                  Text(formatMoney(p['amount_paid']), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
                 ],
-              )),
-              // Amount
-              Text(formatMoney(p['amount_paid']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-            ],
-          ),
-
-          // Coach + training time row
-          if (hasScheduleInfo) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const SizedBox(width: 54), // align with name
-                if (coach != null) ...[
-                  Icon(Icons.person_outline, size: 14, color: AppColors.textMuted),
-                  const SizedBox(width: 4),
-                  Text(coach, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                ],
-                if (coach != null && trainingTime != null)
-                  const Text(' \u2022 ', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                if (trainingTime != null) ...[
-                  Icon(Icons.schedule, size: 14, color: AppColors.textMuted),
-                  const SizedBox(width: 4),
-                  Expanded(child: Text(trainingTime, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
-                ],
-              ],
-            ),
-          ],
-
-          // Status + channel badges + download
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const SizedBox(width: 54),
-              // Status badge
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isPaid ? AppColors.successLight : AppColors.warningLight,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  (p['status'] as String).toUpperCase(),
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: isPaid ? AppColors.success : AppColors.warning),
-                ),
               ),
-              // Channel badge
-              if (channel != null) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: channelColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    channel,
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: channelColor),
-                  ),
-                ),
+              if (classLine.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(classLine, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
-              // Receipt number
-              if (receiptNumber != null) ...[
-                const SizedBox(width: 6),
-                Text(receiptNumber, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              if (paymentLine.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(paymentLine, style: const TextStyle(fontSize: 13, color: AppColors.textMuted), maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
-              const Spacer(),
-              // Download button
-              if (isPaid && receiptId != null)
-                SizedBox(
-                  width: 32, height: 32,
-                  child: IconButton(
-                    onPressed: () => _downloadReceipt(receiptId, receiptNumber ?? '$receiptId'),
-                    icon: const Icon(Icons.download_rounded, size: 18),
-                    color: AppColors.primary,
-                    padding: EdgeInsets.zero,
-                    tooltip: 'Download Receipt',
-                  ),
-                ),
             ],
-          ),
+          )),
+          // 48px target (Fitts's Law); was 32px
+          if (isPaid && receiptId != null)
+            IconButton(
+              onPressed: () => _downloadReceipt(receiptId, receiptNumber ?? '$receiptId'),
+              icon: const Icon(Icons.download_rounded, size: 22),
+              color: AppColors.primary,
+              tooltip: 'Download receipt',
+            )
+          else
+            const SizedBox(width: 12),
         ],
       ),
     );

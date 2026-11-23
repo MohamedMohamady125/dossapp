@@ -249,30 +249,9 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 100,
-            floating: true,
+          const SliverAppBar(
             pinned: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-              onPressed: () => Navigator.pop(context),
-            ),
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 16, bottom: 14),
-              title: Text(
-                'Branch Management',
-                style: GoogleFonts.barlowCondensed(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-              ),
-            ),
+            title: Text('Branches'),
           ),
           if (_loading)
             const SliverFillRemaining(

@@ -1,123 +1,64 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/report.dart';
+import '../services/api_service.dart';
 import '../utils/theme.dart';
 import '../utils/translations.dart';
 import '../utils/formatters.dart';
+import 'ui_kit.dart';
 
-/// Color for a 1-5 score.
-Color scoreColor(double score) {
-  if (score >= 4.5) return AppColors.success;
-  if (score >= 3.5) return AppColors.secondary;
-  if (score >= 2.5) return AppColors.warning;
-  return AppColors.error;
-}
-
-/// Row of 5 water drops showing a rating (display only).
-class RatingDrops extends StatelessWidget {
-  final int value;
-  final double size;
-  final Color? color;
-
-  const RatingDrops({super.key, required this.value, this.size = 18, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? scoreColor(value.toDouble());
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(5, (i) {
-        final filled = i < value;
-        return Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: Icon(
-            filled ? Icons.water_drop_rounded : Icons.water_drop_outlined,
-            size: size,
-            color: filled ? c : AppColors.border,
-          ),
-        );
-      }),
+/// Downloads a report's PDF and hands it to the system sheet (open, save,
+/// share), the same way receipts work (Jakob's Law: one pattern for PDFs).
+Future<void> openReportPdf(BuildContext context, MonthlyReport report, {required bool staff}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
+  try {
+    final bytes = await ApiService.downloadReportPdf(report.id, staff: staff);
+    final dir = await getTemporaryDirectory();
+    final name = report.pdfFilename ?? 'report_${report.period}.pdf';
+    final file = File('${dir.path}/$name');
+    await file.writeAsBytes(bytes);
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')], sharePositionOrigin: origin),
     );
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text('Could not open the PDF: $e')));
   }
 }
 
-/// Tappable rating row used in the editor.
-class RatingInput extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  const RatingInput({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = scoreColor(value.toDouble());
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: c.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, size: 20, color: c),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-          ),
-          Row(
-            children: List.generate(5, (i) {
-              final filled = i < value;
-              return GestureDetector(
-                onTap: () => onChanged(i + 1),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-                  child: AnimatedScale(
-                    scale: filled ? 1.0 : 0.85,
-                    duration: AppAnimation.fastDuration,
-                    child: Icon(
-                      filled ? Icons.water_drop_rounded : Icons.water_drop_outlined,
-                      size: 26,
-                      color: filled ? c : AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Full report display card (athlete view + staff history).
-class ReportCard extends StatelessWidget {
+/// One month's report: the note, the PDF, or both.
+class ReportCard extends StatefulWidget {
   final MonthlyReport report;
   final VoidCallback? onDelete;
 
-  const ReportCard({super.key, required this.report, this.onDelete});
+  /// True on staff screens: picks the staff PDF endpoint.
+  final bool staff;
+
+  const ReportCard({super.key, required this.report, this.onDelete, this.staff = false});
+
+  @override
+  State<ReportCard> createState() => _ReportCardState();
+}
+
+class _ReportCardState extends State<ReportCard> {
+  bool _opening = false;
+
+  Future<void> _open() async {
+    setState(() => _opening = true);
+    await openReportPdf(context, widget.report, staff: widget.staff);
+    if (mounted) setState(() => _opening = false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final overall = report.overall;
+    final report = widget.report;
+    final note = report.note;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -129,15 +70,27 @@ class ReportCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header: month + overall ring ──
+          // ── Header: month and who sent it ──
           Container(
-            padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+            padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 8, 14),
             decoration: const BoxDecoration(
               gradient: AppColors.primaryGradient,
               borderRadius: BorderRadius.vertical(top: Radius.circular(17)),
             ),
             child: Row(
               children: [
+                Container(
+                  width: 42, height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    report.hasPdf ? Icons.picture_as_pdf_rounded : Icons.sticky_note_2_rounded,
+                    color: Colors.white, size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,144 +98,81 @@ class ReportCard extends StatelessWidget {
                       Text(
                         formatPeriod(report.period),
                         style: GoogleFonts.barlowCondensed(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.3,
+                          fontSize: 21, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3,
                         ),
                       ),
-                      const SizedBox(height: 2),
                       Text(
                         '${s.reportBy} ${report.createdByName}',
-                        style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+                        style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.75)),
                       ),
                     ],
                   ),
                 ),
-                // Overall score ring
-                SizedBox(
-                  width: 58,
-                  height: 58,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 58,
-                        height: 58,
-                        child: CircularProgressIndicator(
-                          value: overall / 5.0,
-                          strokeWidth: 5,
-                          strokeCap: StrokeCap.round,
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          valueColor: const AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            overall.toStringAsFixed(1),
-                            style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800),
-                          ),
-                          Text(
-                            '/5',
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 9),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (onDelete != null)
+                if (widget.onDelete != null)
                   IconButton(
-                    onPressed: onDelete,
-                    icon: Icon(Icons.delete_outline_rounded, color: Colors.white.withValues(alpha: 0.8), size: 20),
+                    onPressed: widget.onDelete,
+                    tooltip: s.delete,
+                    icon: Icon(Icons.delete_outline_rounded, color: Colors.white.withValues(alpha: 0.85), size: 22),
+                  )
+                else
+                  const SizedBox(width: 8),
+              ],
+            ),
+          ),
+
+          // ── Note ──
+          if (note != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    s.noteFromCoach,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
                   ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(note, style: const TextStyle(fontSize: 15, color: AppColors.textPrimary, height: 1.5)),
+                ],
+              ),
             ),
-          ),
 
-          // ── Ratings ──
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
-            child: Column(
-              children: [
-                _ratingRow(s.technique, Icons.pool_rounded, report.technique),
-                _ratingRow(s.endurance, Icons.bolt_rounded, report.endurance),
-                _ratingRow(s.commitment, Icons.event_available_rounded, report.commitment),
-                _ratingRow(s.discipline, Icons.military_tech_rounded, report.discipline),
-              ],
-            ),
-          ),
-
-          // ── Notes & goals ──
-          if (report.coachNotes != null && report.coachNotes!.trim().isNotEmpty)
-            _noteBlock(
-              icon: Icons.chat_bubble_outline_rounded,
-              iconColor: AppColors.secondary,
-              bg: AppColors.secondaryLight.withValues(alpha: 0.4),
-              title: s.coachNotes,
-              text: report.coachNotes!.trim(),
-            ),
-          if (report.goals != null && report.goals!.trim().isNotEmpty)
-            _noteBlock(
-              icon: Icons.flag_rounded,
-              iconColor: AppColors.accent,
-              bg: AppColors.accentLight,
-              title: s.nextMonthGoals,
-              text: report.goals!.trim(),
+          // ── PDF: a full-width row, 56px tall (Fitts's Law) ──
+          if (report.hasPdf)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+              child: Material(
+                color: AppColors.primarySurface,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _opening ? null : _open,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        const IconBadge(Icons.picture_as_pdf_rounded, size: 36),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            report.pdfFilename ?? s.pdfReport,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (_opening)
+                          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary))
+                        else
+                          Text(s.openPdf, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           const SizedBox(height: 14),
-        ],
-      ),
-    );
-  }
-
-  Widget _ratingRow(String label, IconData icon, int value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.textSecondary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
-          ),
-          RatingDrops(value: value),
-        ],
-      ),
-    );
-  }
-
-  Widget _noteBlock({
-    required IconData icon,
-    required Color iconColor,
-    required Color bg,
-    required String title,
-    required String text,
-  }) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: iconColor),
-              const SizedBox(width: 6),
-              Text(
-                title.toUpperCase(),
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: iconColor, letterSpacing: 0.8),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(text, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary, height: 1.5)),
         ],
       ),
     );

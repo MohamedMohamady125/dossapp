@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
 
     whatsapp_provider: str = "stub"
+    # The message staff send to a parent with the login details. Change it with
+    # the CREDENTIALS_MESSAGE_TEMPLATE variable; write \n for a new line.
+    # Placeholders: {name} {code} {password} {branch}
+    credentials_message_template: str = (
+        "Aquathletic Academy\n"
+        "App login details for {name}\n\n"
+        "Login code: {code}\n"
+        "Password: {password}\n\n"
+        "You will be asked to choose your own password the first time you sign in."
+    )
     whatsapp_api_key: str = ""
     whatsapp_phone_number_id: str = ""
 

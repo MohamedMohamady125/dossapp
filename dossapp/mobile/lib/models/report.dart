@@ -1,15 +1,13 @@
+/// A monthly report: an uploaded PDF, a written note, or a PDF with a note.
 class MonthlyReport {
   final int id;
   final int branchId;
   final int athleteNumber;
   final String? athleteName;
   final String period; // YYYY-MM
-  final int technique;
-  final int endurance;
-  final int commitment;
-  final int discipline;
-  final String? coachNotes;
-  final String? goals;
+  final String? note;
+  final bool hasPdf;
+  final String? pdfFilename;
   final String createdByName;
   final String createdByRole;
   final DateTime? updatedAt;
@@ -20,32 +18,30 @@ class MonthlyReport {
     required this.athleteNumber,
     this.athleteName,
     required this.period,
-    required this.technique,
-    required this.endurance,
-    required this.commitment,
-    required this.discipline,
-    this.coachNotes,
-    this.goals,
+    this.note,
+    this.hasPdf = false,
+    this.pdfFilename,
     required this.createdByName,
     required this.createdByRole,
     this.updatedAt,
   });
 
-  double get overall => (technique + endurance + commitment + discipline) / 4.0;
-
   factory MonthlyReport.fromJson(Map<String, dynamic> json) {
+    // Reports written before notes and goals were merged keep both texts.
+    final parts = [json['coach_notes'], json['goals']]
+        .whereType<String>()
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
     return MonthlyReport(
       id: json['id'],
       branchId: json['branch_id'],
       athleteNumber: json['athlete_number'],
       athleteName: json['athlete_name'],
       period: json['period'],
-      technique: json['technique'],
-      endurance: json['endurance'],
-      commitment: json['commitment'],
-      discipline: json['discipline'],
-      coachNotes: json['coach_notes'],
-      goals: json['goals'],
+      note: parts.isEmpty ? null : parts.join('\n\n'),
+      hasPdf: json['has_pdf'] ?? false,
+      pdfFilename: json['pdf_filename'],
       createdByName: json['created_by_name'] ?? '',
       createdByRole: json['created_by_role'] ?? '',
       updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at']) : null,

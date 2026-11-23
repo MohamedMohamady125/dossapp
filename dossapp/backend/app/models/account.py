@@ -12,6 +12,9 @@ class Account(Base):
     login_code = Column(String(50), nullable=False, unique=True)
     password_hash = Column(String(255), nullable=False)
     must_change_password = Column(Boolean, default=True, nullable=False)
+    # The password staff handed out, kept only until the parent finishes signing
+    # up so staff can read it out again. Cleared the moment a real one is set.
+    temp_password = Column(String(50), nullable=True)
     name_at_creation = Column(String(300), nullable=False)
     dob_at_creation = Column(String(50), nullable=True)
     email = Column(String(255), nullable=True)

@@ -234,6 +234,7 @@ async def customer_change_password(
 
     account.password_hash = hash_password(req.new_password)
     account.must_change_password = False
+    account.temp_password = None
     db.add(account)
     return {"message": "Password changed successfully"}
 
@@ -348,11 +349,41 @@ async def customer_verify_code(
     await _check_code(db, verification, req.code)
 
     verification.verified = True
-    account.email = req.email.strip().lower()
+    email = req.email.strip().lower()
+    account.email = email
     db.add(verification)
-    db.add(account)
 
-    return {"verified": True}
+    # The parent already uses the app for another child on this email, and
+    # has just proved the email is theirs. Join that family with its password
+    # instead of asking them to invent a second one.
+    joined = False
+    if account.must_change_password:
+        result = await db.execute(
+            select(Account)
+            .where(
+                func.lower(Account.email) == email,
+                Account.id != account.id,
+                Account.must_change_password == False,  # noqa: E712
+                Account.status.in_(USABLE_STATUSES),
+            )
+            .order_by(Account.last_login_at.desc().nullslast(), Account.id)
+            .limit(1)
+        )
+        family = result.scalars().first()
+        if family:
+            account.password_hash = family.password_hash
+            account.must_change_password = False
+            account.temp_password = None
+            account.language = family.language
+            joined = True
+    db.add(account)
+    await db.flush()
+
+    return {
+        "verified": True,
+        "joined_family": joined,
+        "profiles": [p.model_dump() for p in await build_profiles(db, account)] if joined else [],
+    }
 
 
 # ── Onboarding: complete (set password after email verified) ──
@@ -388,6 +419,7 @@ async def customer_complete_onboarding(
 
     account.password_hash = await hash_password_async(req.new_password)
     account.must_change_password = False
+    account.temp_password = None
     account.email = req.email.strip().lower()
     db.add(account)
 
@@ -534,6 +566,7 @@ async def forgot_password_reset(
     new_hash = await hash_password_async(req.new_password)
     for target in targets:
         target.password_hash = new_hash
+        target.temp_password = None
         if hasattr(target, 'must_change_password'):
             target.must_change_password = False
         db.add(target)

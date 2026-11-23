@@ -39,6 +39,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
     } catch (e) {
       _error = e.toString();
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 

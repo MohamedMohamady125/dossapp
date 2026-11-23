@@ -93,6 +93,11 @@ class AthleteDetail extends AthleteProfile {
   final bool hasAccount;
   final bool accountCompleted;
   final bool isPaid;
+  // Present only while the parent has not finished signing up
+  final String? loginCode;
+  final String? tempPassword;
+  final String? credentialsMessage;
+  final String? whatsappPhone;
 
   AthleteDetail({
     required super.branch,
@@ -118,6 +123,10 @@ class AthleteDetail extends AthleteProfile {
     this.hasAccount = false,
     this.accountCompleted = false,
     this.isPaid = false,
+    this.loginCode,
+    this.tempPassword,
+    this.credentialsMessage,
+    this.whatsappPhone,
   });
 
   factory AthleteDetail.fromJson(Map<String, dynamic> json) {
@@ -144,6 +153,10 @@ class AthleteDetail extends AthleteProfile {
       hasAccount: json['has_account'] ?? false,
       accountCompleted: json['account_completed'] ?? false,
       isPaid: json['is_paid'] ?? false,
+      loginCode: json['login_code'],
+      tempPassword: json['temp_password'],
+      credentialsMessage: json['credentials_message'],
+      whatsappPhone: json['whatsapp_phone'],
       schedule: (json['schedule'] as List?)
               ?.map((s) => ScheduleSlot.fromJson(s))
               .toList() ??

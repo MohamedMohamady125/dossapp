@@ -1,5 +1,5 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_provider.dart';
 import '../../services/api_service.dart';
@@ -24,7 +24,10 @@ class AdminHomeScreen extends StatefulWidget {
   State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
-class _AdminHomeScreenState extends State<AdminHomeScreen> {
+class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _loadPendingCount();
+
   int _currentIndex = 0;
   int? _selectedBranchId;
   List<Map<String, dynamic>>? _branches;
@@ -46,6 +49,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     try {
       final auth = context.read<AuthProvider>();
       final branches = await ApiService.getBranches();
+      if (!mounted) return;
       setState(() {
         _branches = branches;
         _loadingBranches = false;
@@ -56,7 +60,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         }
       });
     } catch (e) {
-      setState(() => _loadingBranches = false);
+      if (mounted) setState(() => _loadingBranches = false);
     }
   }
 
@@ -107,22 +111,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset('assets/images/logo.png', height: 32, width: 32),
-            const SizedBox(width: 8),
-            Text(
-              s.appName,
-              style: GoogleFonts.barlowCondensed(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ],
-        ),
+        // The title says which branch you are looking at and is also how you
+        // switch (Jakob's Law: title-as-switcher). This replaces a logo, the
+        // app name, a separate swap icon and a strip repeating the branch.
+        titleSpacing: 16,
+        title: _branchTitle(auth, selectedBranch),
         actions: [
           IconButton(
             icon: _pendingReinstatements > 0
@@ -134,27 +127,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               _loadPendingCount();
             },
           ),
-          if (auth.isAdmin && _branches != null && _branches!.length > 1)
-            PopupMenuButton<int>(
-              icon: const Icon(Icons.swap_horiz_rounded, size: 22),
-              tooltip: s.branches,
-              position: PopupMenuPosition.under,
-              onSelected: (id) => setState(() { _selectedBranchId = id; _refreshKey++; }),
-              itemBuilder: (ctx) => _branches!.map((b) => PopupMenuItem(
-                value: b['id'] as int,
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedBranchId == b['id'] ? Icons.radio_button_checked : Icons.radio_button_off,
-                      size: 18, color: _selectedBranchId == b['id'] ? AppColors.primary : AppColors.textMuted,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(b['name'] as String)),
-                    Text(formatNumber(b['athlete_count']), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                  ],
-                ),
-              )).toList(),
-            ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 22),
             position: PopupMenuPosition.under,
@@ -236,35 +208,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ],
           ),
         ],
-        bottom: selectedBranch != null ? PreferredSize(
-          preferredSize: const Size.fromHeight(40),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.only(left: 16, bottom: 10),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.border, width: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${selectedBranch['name']} \u2022 ${formatNumber(selectedBranch['athlete_count'])} ${s.athletes.toLowerCase()}',
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ) : null,
       ),
       body: _buildCurrentTab(auth),
       bottomNavigationBar: Container(
@@ -278,13 +221,49 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             _visitedTabs.add(i);
           }),
           destinations: [
-            NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: s.home),
+            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people), label: s.athletes),
             NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: s.payments),
             NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: s.analytics),
             NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: s.pricing),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _branchTitle(AuthProvider auth, Map<String, dynamic>? selectedBranch) {
+    final name = (selectedBranch?['name'] as String?) ?? S.of(context).appName;
+    final canSwitch = auth.isAdmin && _branches != null && _branches!.length > 1;
+
+    final label = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+        if (canSwitch) const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textSecondary),
+      ],
+    );
+    if (!canSwitch) return label;
+
+    return PopupMenuButton<int>(
+      tooltip: S.of(context).branches,
+      position: PopupMenuPosition.under,
+      onSelected: (id) => setState(() { _selectedBranchId = id; _refreshKey++; }),
+      itemBuilder: (ctx) => _branches!.map((b) => PopupMenuItem(
+        value: b['id'] as int,
+        child: Row(
+          children: [
+            Icon(
+              _selectedBranchId == b['id'] ? Icons.check_rounded : null,
+              size: 18, color: AppColors.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(b['name'] as String)),
+            Text(formatNumber(b['athlete_count']), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          ],
+        ),
+      )).toList(),
+      // 48px tall target (Fitts's Law)
+      child: SizedBox(height: 48, child: Align(alignment: AlignmentDirectional.centerStart, child: label)),
     );
   }
 
@@ -302,7 +281,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           case 0: return AthletesScreen(branchId: _selectedBranchId!, key: ValueKey('ath-$_selectedBranchId-$_refreshKey'));
           case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
           case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
-          case 3: return PriceCatalogScreen(key: ValueKey('pricing-$_refreshKey'));
+          case 3: return PriceCatalogScreen(branchId: _selectedBranchId, key: ValueKey('pricing-$_selectedBranchId-$_refreshKey'));
           default: return const SizedBox.shrink();
         }
       }),

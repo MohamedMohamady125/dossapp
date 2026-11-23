@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
+import 'app_refresh.dart';
 
 /// Handles Firebase Cloud Messaging setup + device token registration.
 ///
@@ -15,13 +16,19 @@ class NotificationService {
   static bool _initialized = false;
   static String? _currentToken;
   static String _language = 'en';
+  // Who is logged in on this phone: staff and parents register on different endpoints.
+  static bool _staff = false;
+
+  static Future<void> _send(String token) => _staff
+      ? ApiService.registerStaffDevice(token, _platform(), language: _language)
+      : ApiService.registerDevice(token, _platform(), language: _language);
 
   static final _localNotifications = FlutterLocalNotificationsPlugin();
 
   static const _androidChannel = AndroidNotificationChannel(
     'aqua_athletic_default',
     'Aquathletic',
-    description: 'Schedule, payment and attendance notifications',
+    description: 'Schedule, payment, attendance and staff notifications',
     importance: Importance.high,
   );
 
@@ -52,6 +59,8 @@ class NotificationService {
 
       // Show pushes that arrive while the app is in the foreground
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        // A push means something changed (a payment, a class, a report)
+        AppRefresh.dataChanged();
         final notification = message.notification;
         if (notification == null) return;
         _localNotifications.show(
@@ -73,7 +82,7 @@ class NotificationService {
 
       FirebaseMessaging.instance.onTokenRefresh.listen((token) {
         _currentToken = token;
-        ApiService.registerDevice(token, _platform(), language: _language).catchError((_) {});
+        _send(token).catchError((_) {});
       });
     } catch (e) {
       debugPrint('Notification setup error: $e');
@@ -90,15 +99,17 @@ class NotificationService {
     return saved ?? 'en';
   }
 
-  /// Register this device's FCM token with the backend (call after customer login).
-  static Future<void> registerToken() async {
+  /// Register this device's FCM token with the backend (call after login).
+  /// Pass [staff] for admin, assistant and coach sessions.
+  static Future<void> registerToken({bool staff = false}) async {
+    _staff = staff;
     if (!_firebaseReady) return;
     try {
       _language = await _getLanguage();
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null) {
         _currentToken = token;
-        await ApiService.registerDevice(token, _platform(), language: _language);
+        await _send(token);
       }
     } catch (e) {
       debugPrint('Token registration failed: $e');
@@ -109,7 +120,11 @@ class NotificationService {
   static Future<void> unregisterToken() async {
     if (!_firebaseReady || _currentToken == null) return;
     try {
-      await ApiService.unregisterDevice(_currentToken!);
+      if (_staff) {
+        await ApiService.unregisterStaffDevice(_currentToken!);
+      } else {
+        await ApiService.unregisterDevice(_currentToken!);
+      }
     } catch (e) {
       debugPrint('Token unregistration failed: $e');
     }

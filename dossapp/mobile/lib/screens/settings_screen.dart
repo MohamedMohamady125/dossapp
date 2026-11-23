@@ -1,3 +1,4 @@
+import 'auth/profile_picker_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -49,6 +50,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: s.changeEmail,
                 onTap: () => _showChangeEmailDialog(context),
               ),
+            if (auth.isCustomer)
+              _settingsTile(
+                icon: Icons.person_add_alt_1_outlined,
+                title: s.addSwimmer,
+                onTap: () => showAddSwimmerSheet(context),
+              ),
           ]),
 
           const SizedBox(height: 20),
@@ -96,7 +103,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               icon: Icons.info_outline,
               title: s.appVersion,
               trailing: const Text(
-                '1.0.0',
+                '1.0.1',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
             ),
@@ -625,20 +632,36 @@ class _ChangeEmailSheet extends StatefulWidget {
 class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
   bool _loading = false;
   String? _error;
+  // Step 2 once a code has been sent to the new address. The email only
+  // changes after the parent proves they can read it: email is what links
+  // a family's swimmers together.
+  bool _codeSent = false;
+  final _codeCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     if (!widget.formKey.currentState!.validate()) return;
+    final email = widget.emailCtrl.text.trim();
+    final messenger = ScaffoldMessenger.of(widget.parentContext);
     setState(() { _loading = true; _error = null; });
     try {
-      await ApiService.updateEmail(widget.emailCtrl.text.trim());
+      if (!_codeSent) {
+        await ApiService.sendVerificationCode(email);
+        if (mounted) setState(() { _loading = false; _codeSent = true; });
+        return;
+      }
+      await ApiService.verifyCode(email, _codeCtrl.text.trim());
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(widget.parentContext).showSnackBar(
-          SnackBar(content: Text(widget.s.emailUpdated)),
-        );
+        messenger.showSnackBar(SnackBar(content: Text(widget.s.emailUpdated)));
       }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) setState(() { _loading = false; _error = e is ApiException ? e.message : e.toString(); });
     }
   }
 
@@ -692,6 +715,8 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                   controller: widget.emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   autofocus: true,
+                  autocorrect: false,
+                  enabled: !_codeSent,
                   decoration: InputDecoration(
                     labelText: s.newEmail,
                     prefixIcon: const Icon(Icons.email_outlined, size: 20),
@@ -702,6 +727,30 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                     return null;
                   },
                 ),
+                // Step 2: the code, shown right under the email it was sent to
+                if (_codeSent) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      s.codeSentTo(widget.emailCtrl.text.trim()),
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _codeCtrl,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      labelText: s.codeLabel,
+                      counterText: '',
+                      prefixIcon: const Icon(Icons.pin_outlined, size: 20),
+                    ),
+                    validator: (v) => (v == null || v.trim().length != 6) ? s.required : null,
+                  ),
+                ],
                 // Error
                 if (_error != null) ...[
                   const SizedBox(height: 12),
@@ -733,9 +782,14 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                     ),
                     child: _loading
                         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(s.save, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        : Text(_codeSent ? s.verifyAndSave : s.sendCode, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
                 ),
+                if (_codeSent)
+                  TextButton(
+                    onPressed: _loading ? null : () => setState(() { _codeSent = false; _error = null; _codeCtrl.clear(); }),
+                    child: Text(s.useDifferentEmail),
+                  ),
               ],
             ),
           ),

@@ -13,3 +13,7 @@
 # Google Play Services
 -keep class com.google.android.gms.** { *; }
 -dontwarn com.google.android.gms.**
+
+# Play Core (deferred components) - not used, ignore missing classes
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }

@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/api_service.dart';
@@ -15,7 +16,16 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
+class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefresh {
+  bool _loadedOnce = false;
+
+  @override
+  Future<void> silentReload() => _load(silent: true);
+
+  // Refreshes on changes and when reopened; no timer needed here
+  @override
+  Duration? get refreshEvery => null;
+
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String? _error;
@@ -26,20 +36,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    silent = silent && _loadedOnce;
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final items = await ApiService.getNotifications();
+      if (!mounted) return;
       setState(() {
         _items = items;
+        _loadedOnce = true;
+        _error = null;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        if (!silent) _error = e.toString();
         _loading = false;
       });
     }
@@ -130,7 +147,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final s = S.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.notifications),
+        title: Text(s.alerts),
         actions: [
           if (hasUnread)
             TextButton(

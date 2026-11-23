@@ -7,11 +7,10 @@ class AppColors {
   static const primaryLight = Color(0xFF2D5FAA);
   static const primarySurface = Color(0xFFE8F0FE);
 
-  // Aqua accent (swimming theme)
+  // Navy is the only brand colour on screen. Orange is used for one thing:
+  // a payment that is due. Aqua is kept for charts only.
   static const secondary = Color(0xFF0891B2);
   static const secondaryLight = Color(0xFFCFFAFE);
-
-  // Athletic accent (energy)
   static const accent = Color(0xFFF97316);
   static const accentLight = Color(0xFFFFF7ED);
 
@@ -43,9 +42,9 @@ class AppColors {
   static const genderMale = Color(0xFF3B82F6);
   static const genderFemale = Color(0xFFEC4899);
 
-  // Gradients
+  // Gradients (no glow or blur, just the fill)
   static const primaryGradient = LinearGradient(
-    colors: [Color(0xFF1A3A6B), Color(0xFF0891B2)],
+    colors: [Color(0xFF1A3A6B), Color(0xFF2D5FAA)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -57,7 +56,7 @@ class AppColors {
   );
 
   static const successGradient = LinearGradient(
-    colors: [Color(0xFF059669), Color(0xFF047857)],
+    colors: [Color(0xFF059669), Color(0xFF10B981)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

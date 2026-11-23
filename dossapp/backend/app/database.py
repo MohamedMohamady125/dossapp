@@ -54,6 +54,10 @@ def _add_missing_columns(sync_conn):
         cols = {c["name"] for c in insp.get_columns("accounts")}
         if "language" not in cols:
             sync_conn.execute(text("ALTER TABLE accounts ADD COLUMN language VARCHAR(5) NOT NULL DEFAULT 'en'"))
+        if "temp_password" not in cols:
+            # Several workers start at once; IF NOT EXISTS lets the losers pass
+            guard = "IF NOT EXISTS " if sync_conn.dialect.name == "postgresql" else ""
+            sync_conn.execute(text(f"ALTER TABLE accounts ADD COLUMN {guard}temp_password VARCHAR(50)"))
 
     if "branches" in insp.get_table_names():
         cols = {c["name"] for c in insp.get_columns("branches")}

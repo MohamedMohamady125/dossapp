@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/report.dart';
@@ -8,8 +9,10 @@ import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/report_widgets.dart';
+import '../../widgets/ui_kit.dart';
 
-/// Staff screen: write/edit the monthly report for one athlete + see history.
+/// Staff screen: send the monthly report for one athlete (a PDF or a note)
+/// and see what was sent before.
 class ReportEditorScreen extends StatefulWidget {
   final int branchId;
   final int athleteNumber;
@@ -34,12 +37,13 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
 
   late String _period;
   late List<String> _periodOptions;
-  int _technique = 3;
-  int _endurance = 3;
-  int _commitment = 3;
-  int _discipline = 3;
+  // Two ways to report, because classes differ: some hand out a PDF, others
+  // only need a few lines (Hick's Law: two clear choices, nothing else).
+  bool _pdfMode = true;
+  PlatformFile? _pdf;
   final _notesCtrl = TextEditingController();
-  final _goalsCtrl = TextEditingController();
+
+  static const _maxPdfBytes = 10 * 1024 * 1024;
 
   @override
   void initState() {
@@ -56,7 +60,6 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
   @override
   void dispose() {
     _notesCtrl.dispose();
-    _goalsCtrl.dispose();
     super.dispose();
   }
 
@@ -85,42 +88,64 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
 
   void _applyExisting() {
     final existing = _existingForPeriod;
-    if (existing != null) {
-      _technique = existing.technique;
-      _endurance = existing.endurance;
-      _commitment = existing.commitment;
-      _discipline = existing.discipline;
-      _notesCtrl.text = existing.coachNotes ?? '';
-      _goalsCtrl.text = existing.goals ?? '';
-    } else {
-      _technique = 3;
-      _endurance = 3;
-      _commitment = 3;
-      _discipline = 3;
-      _notesCtrl.clear();
-      _goalsCtrl.clear();
+    _pdf = null;
+    _notesCtrl.text = existing?.note ?? '';
+    // Open on the kind that was sent last time for this month
+    if (existing != null) _pdfMode = existing.hasPdf;
+  }
+
+  bool get _canSend => _pdfMode ? _pdf != null : _notesCtrl.text.trim().isNotEmpty;
+
+  Future<void> _pickPdf() async {
+    final s = S.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        withData: true,
+      );
+      final file = result?.files.single;
+      if (file == null || file.bytes == null) return;
+      if (file.size > _maxPdfBytes) {
+        messenger.showSnackBar(SnackBar(content: Text(s.pdfTooLarge), backgroundColor: AppColors.error));
+        return;
+      }
+      if (mounted) setState(() => _pdf = file);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: AppColors.error));
     }
   }
 
   Future<void> _save() async {
+    final s = S.of(context);
+    FocusScope.of(context).unfocus();
     setState(() => _saving = true);
     try {
-      await ApiService.upsertReport(
-        branchId: widget.branchId,
-        athleteNumber: widget.athleteNumber,
-        period: _period,
-        technique: _technique,
-        endurance: _endurance,
-        commitment: _commitment,
-        discipline: _discipline,
-        coachNotes: _notesCtrl.text.trim(),
-        goals: _goalsCtrl.text.trim(),
-      );
+      final note = _notesCtrl.text.trim();
+      if (_pdfMode) {
+        await ApiService.uploadReportPdf(
+          branchId: widget.branchId,
+          athleteNumber: widget.athleteNumber,
+          period: _period,
+          bytes: _pdf!.bytes!,
+          filename: _pdf!.name,
+          note: note,
+        );
+      } else {
+        await ApiService.sendReportNote(
+          branchId: widget.branchId,
+          athleteNumber: widget.athleteNumber,
+          period: _period,
+          note: note,
+        );
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.of(context).reportSaved), backgroundColor: AppColors.success),
+          SnackBar(content: Text(s.reportSent), backgroundColor: AppColors.success),
         );
         await _load();
+        if (mounted) setState(() => _pdf = null);
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -183,13 +208,6 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
           decoration: BoxDecoration(
             gradient: AppColors.primaryGradient,
             borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.2),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
           ),
           child: Row(
             children: [
@@ -278,53 +296,68 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
 
         const SizedBox(height: 16),
 
-        // ── Ratings ──
-        RatingInput(label: S.of(context).technique, icon: Icons.pool_rounded, value: _technique, onChanged: (v) => setState(() => _technique = v)),
-        RatingInput(label: S.of(context).endurance, icon: Icons.bolt_rounded, value: _endurance, onChanged: (v) => setState(() => _endurance = v)),
-        RatingInput(label: S.of(context).commitment, icon: Icons.event_available_rounded, value: _commitment, onChanged: (v) => setState(() => _commitment = v)),
-        RatingInput(label: S.of(context).discipline, icon: Icons.military_tech_rounded, value: _discipline, onChanged: (v) => setState(() => _discipline = v)),
-
-        const SizedBox(height: 6),
-
-        // ── Notes ──
-        TextField(
-          controller: _notesCtrl,
-          maxLines: 4,
-          maxLength: 2000,
-          decoration: InputDecoration(
-            labelText: s.coachNotes,
-            alignLabelWithHint: true,
-            counterText: '',
+        // ── PDF or note ──
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: [
+              ButtonSegment(value: true, icon: const Icon(Icons.picture_as_pdf_rounded, size: 18), label: Text(s.uploadPdf)),
+              ButtonSegment(value: false, icon: const Icon(Icons.sticky_note_2_rounded, size: 18), label: Text(s.writeNote)),
+            ],
+            selected: {_pdfMode},
+            onSelectionChanged: (v) => setState(() => _pdfMode = v.first),
           ),
         ),
         const SizedBox(height: 12),
+
+        if (_pdfMode) ...[
+          _pdfPicker(s),
+          const SizedBox(height: 12),
+        ],
+
         TextField(
-          controller: _goalsCtrl,
-          maxLines: 3,
-          maxLength: 2000,
+          controller: _notesCtrl,
+          minLines: _pdfMode ? 2 : 5,
+          maxLines: 10,
+          maxLength: 4000,
+          textCapitalization: TextCapitalization.sentences,
+          onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: s.nextMonthGoals,
+            labelText: _pdfMode ? s.optionalNote : s.noteHint,
             alignLabelWithHint: true,
             counterText: '',
           ),
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
-        // ── Save ──
+        // ── Send: the one filled action (Von Restorff) ──
         FilledButton.icon(
-          onPressed: _saving ? null : _save,
+          onPressed: (_saving || !_canSend) ? null : _save,
           icon: _saving
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Icon(isEdit ? Icons.save_rounded : Icons.send_rounded),
-          label: Text(_saving ? '...' : (isEdit ? s.editReport : s.saveReport)),
+              : const Icon(Icons.send_rounded),
+          label: Text(isEdit ? s.replaceReport : s.sendReport),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.notifications_active_outlined, size: 15, color: AppColors.textSecondary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(s.parentNotified, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ),
+          ],
         ),
 
         // ── Existing report for selected period (preview + delete) ──
         if (_existingForPeriod != null) ...[
           const SizedBox(height: 24),
-          _sectionLabel(formatPeriod(_period)),
+          SectionTitle(s.alreadySent),
           ReportCard(
+            staff: true,
             report: _existingForPeriod!,
             onDelete: () => _deleteReport(_existingForPeriod!),
           ),
@@ -333,8 +366,8 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
         // ── History ──
         if (history.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _sectionLabel(s.reports),
-          ...history.map((r) => ReportCard(report: r, onDelete: () => _deleteReport(r))),
+          SectionTitle(s.reports),
+          ...history.map((r) => ReportCard(staff: true, report: r, onDelete: () => _deleteReport(r))),
         ],
 
         const SizedBox(height: 24),
@@ -342,12 +375,60 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
     );
   }
 
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 4),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 1),
+  // A large drop target: empty it invites the pick, filled it shows the file.
+  Widget _pdfPicker(S s) {
+    final file = _pdf;
+    final existing = _existingForPeriod;
+    final sentName = (existing != null && existing.hasPdf) ? existing.pdfFilename : null;
+    return Material(
+      color: file != null ? AppColors.primarySurface : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: file != null ? AppColors.primary : AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _saving ? null : _pickPdf,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              IconBadge(
+                file != null ? Icons.picture_as_pdf_rounded : Icons.upload_file_rounded,
+                size: 48,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file?.name ?? s.choosePdf,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      file != null
+                          ? '${(file.size / 1024 / 1024).toStringAsFixed(1)} MB'
+                          : sentName != null
+                              ? '${s.alreadySent}: $sentName'
+                              : 'PDF, 10 MB max',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              if (file != null)
+                Text(s.changePdf, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary))
+              else
+                const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+            ],
+          ),
+        ),
       ),
     );
   }

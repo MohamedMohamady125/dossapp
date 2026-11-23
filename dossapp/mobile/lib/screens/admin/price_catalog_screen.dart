@@ -4,11 +4,14 @@ import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
-import '../../widgets/press_feedback.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/ui_kit.dart';
 
 class PriceCatalogScreen extends StatefulWidget {
-  const PriceCatalogScreen({super.key});
+  /// The branch chosen in the admin header. Prices are shown for that branch
+  /// only, so this tab matches the other three (Working Memory).
+  final int? branchId;
+  const PriceCatalogScreen({super.key, this.branchId});
 
   @override
   State<PriceCatalogScreen> createState() => _PriceCatalogScreenState();
@@ -27,7 +30,9 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   @override
   void initState() {
     super.initState();
+    _selectedBranchId = widget.branchId;
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() { if (mounted) setState(() {}); });
     _loadData();
   }
 
@@ -52,9 +57,12 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
         setState(() {
           _branches = results[0];
           _entries = results[1];
-          _missing = results[2];
+          _missing = _forBranch(results[2]);
           _loading = false;
         });
+        // Unfinished work first: open on the to-do list when there is one
+        // (Zeigarnik Effect).
+        if (_missing!.isNotEmpty) _tabController.index = 1;
       }
     } catch (e) {
       if (mounted) {
@@ -64,6 +72,11 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
         });
       }
     }
+  }
+
+  List<Map<String, dynamic>> _forBranch(List<Map<String, dynamic>> items) {
+    if (_selectedBranchId == null) return items;
+    return items.where((m) => m['branch_id'] == _selectedBranchId).toList();
   }
 
   Future<void> _loadEntries() async {
@@ -79,7 +92,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
       if (mounted) {
         setState(() {
           _entries = results[0];
-          _missing = results[1];
+          _missing = _forBranch(results[1]);
           _loading = false;
         });
       }
@@ -144,7 +157,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            isEdit ? 'Edit Price' : 'Assign Price',
+                            isEdit ? 'Edit price' : 'Add price',
                             style: GoogleFonts.barlowCondensed(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -167,7 +180,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // Branch dropdown
-                          if (!isEdit && _branches != null) ...[
+                          if (!isEdit && _branches != null && widget.branchId == null) ...[
                             DropdownButtonFormField<int>(
                               initialValue: formBranchId,
                               decoration:
@@ -296,8 +309,21 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white),
                                   )
-                                : Text(isEdit ? 'Save Changes' : 'Assign Price'),
+                                : Text(isEdit ? 'Save changes' : 'Save price'),
                           ),
+                          if (isEdit) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: saving
+                                  ? null
+                                  : () {
+                                      Navigator.pop(ctx);
+                                      _confirmDelete(entry);
+                                    },
+                              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                              child: const Text('Delete this price'),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -353,303 +379,248 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     return b['name'] as String;
   }
 
-  String _formatPrice(String price) {
-    final d = double.tryParse(price);
-    if (d == null) return price;
-    if (d == d.truncateToDouble()) return d.toInt().toString();
-    return d.toStringAsFixed(2);
-  }
-
   @override
   Widget build(BuildContext context) {
     final missingCount = _missing?.length ?? 0;
 
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) => [
-          SliverAppBar(
-            expandedHeight: 100,
-            floating: true,
-            pinned: true,
-            automaticallyImplyLeading: false,
-            flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 16, bottom: 50),
-              title: Text(
-                'Price Catalog',
-                style: GoogleFonts.barlowCondensed(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white),
-              ),
-              background: Container(
-                  decoration:
-                      const BoxDecoration(gradient: AppColors.primaryGradient)),
-            ),
-            bottom: TabBar(
+      body: Column(
+        children: [
+          // Plain tabs under the admin header. The old screen stacked a second
+          // coloured "Price Catalog" header on top of the app bar.
+          Material(
+            color: Colors.white,
+            child: TabBar(
               controller: _tabController,
-              indicatorColor: Colors.white,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white60,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 3,
+              dividerColor: AppColors.border,
               tabs: [
-                const Tab(text: 'All Prices'),
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Missing'),
-                      if (missingCount > 0) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.error,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '$missingCount',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                const Tab(text: 'Price list'),
+                Tab(text: missingCount > 0 ? 'Needs a price ($missingCount)' : 'Needs a price'),
               ],
             ),
           ),
+          Expanded(
+            child: _loading
+                ? const SkeletonList(count: 5, padding: EdgeInsets.all(16))
+                : _error != null
+                    ? ErrorState(message: _error!, onRetry: _loadData)
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildCatalogTab(),
+                          _buildMissingTab(),
+                        ],
+                      ),
+          ),
         ],
-        body: _loading
-            ? const SkeletonList(count: 5, padding: EdgeInsets.all(16))
-            : _error != null
-                ? ErrorState(message: _error!, onRetry: _loadData)
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildCatalogTab(),
-                      _buildMissingTab(),
-                    ],
-                  ),
       ),
-      floatingActionButton: (!_loading && _error == null)
+      // One filled action, and only where adding is the task (Von Restorff).
+      floatingActionButton: (!_loading && _error == null && _tabController.index == 0)
           ? FloatingActionButton.extended(
               onPressed: () => _showEntryForm(),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: Text('Add Price',
-                  style: GoogleFonts.barlow(
-                      fontWeight: FontWeight.w600, color: Colors.white)),
-              backgroundColor: AppColors.accent,
+              icon: const Icon(Icons.add),
+              label: const Text('Add price'),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
             )
           : null,
     );
   }
 
-  // ── CATALOG TAB ──
+  // ── PRICE LIST TAB ──
+
+  static int _sessionCount(Map<String, dynamic> e) =>
+      int.tryParse(RegExp(r'\d+').firstMatch((e['sessions'] ?? '') as String)?.group(0) ?? '') ?? 0;
+
+  static String _segmentLabel(String? segment) =>
+      segment == null ? '' : segment == 'Student' ? 'Gems students' : segment == 'Outsider' ? 'Outsiders' : segment;
 
   Widget _buildCatalogTab() {
-    return Column(
-      children: [
-        // Branch filter
-        if (_branches != null && _branches!.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: DropdownButtonFormField<int?>(
-              initialValue: _selectedBranchId,
-              decoration: const InputDecoration(
-                labelText: 'Filter by Branch',
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                isDense: true,
-              ),
-              items: [
-                const DropdownMenuItem(
-                    value: null, child: Text('All Branches')),
-                ..._branches!.map((b) => DropdownMenuItem(
-                      value: b['id'] as int,
-                      child: Text(b['name'] as String),
-                    )),
-              ],
-              onChanged: (v) {
-                setState(() => _selectedBranchId = v);
-                _loadEntries();
-              },
-            ),
-          ),
-        Expanded(
-          child: _entries == null || _entries!.isEmpty
-              ? EmptyState(
-                  icon: Icons.attach_money_outlined,
-                  title: 'No prices yet',
-                  subtitle: 'Add pricing for your programs.',
-                  actionLabel: 'Add Price',
-                  onAction: () => _showEntryForm(),
-                )
-              : _buildGroupedList(),
-        ),
-      ],
-    );
-  }
+    if (_entries == null || _entries!.isEmpty) {
+      return EmptyState(
+        icon: Icons.sell_outlined,
+        title: 'No prices yet',
+        subtitle: 'Prices come from the Sk. tab of the roster sheet. You can also add one here.',
+        actionLabel: 'Add price',
+        onAction: () => _showEntryForm(),
+      );
+    }
 
-  Widget _buildGroupedList() {
-    final grouped = <int, List<Map<String, dynamic>>>{};
+    // One card per program, its session prices as rows inside (Chunking).
+    // The old list drew a separate card for every single price.
+    final groups = <String, List<Map<String, dynamic>>>{};
     for (final e in _entries!) {
-      final bid = e['branch_id'] as int;
-      grouped.putIfAbsent(bid, () => []).add(e);
+      final branch = _selectedBranchId == null ? '${_branchName(e['branch_id'] as int)} \u2022 ' : '';
+      final segment = _segmentLabel(e['segment'] as String?);
+      final key = '$branch${e['program_name']}${segment.isEmpty ? '' : ' \u2022 $segment'}';
+      groups.putIfAbsent(key, () => []).add(e);
     }
-
-    final branchIds = grouped.keys.toList()..sort();
-    final items = <Widget>[];
-
-    for (final bid in branchIds) {
-      items.add(Padding(
-        padding: EdgeInsets.only(
-            top: items.isNotEmpty ? 20 : 8, bottom: 8, left: 16, right: 16),
-        child: Text(
-          _branchName(bid),
-          style: GoogleFonts.barlowCondensed(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary),
-        ),
-      ));
-
-      for (final entry in grouped[bid]!) {
-        items.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-          child: PressFeedback(
-            onTap: () => _showEntryForm(entry: entry),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry['program_name'] as String,
-                            style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary),
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              if (entry['segment'] != null) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: entry['segment'] == 'Student'
-                                        ? AppColors.primary
-                                            .withValues(alpha: 0.1)
-                                        : AppColors.accent
-                                            .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    entry['segment'] as String,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: entry['segment'] == 'Student'
-                                          ? AppColors.primary
-                                          : AppColors.accent,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                              ],
-                              if (entry['sessions'] != null)
-                                Text(
-                                  entry['sessions'] as String,
-                                  style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textMuted),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${_formatPrice(entry['price'] as String)} EGP',
-                      style: GoogleFonts.barlowCondensed(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          size: 20, color: AppColors.error),
-                      tooltip: 'Delete',
-                      onPressed: () => _confirmDelete(entry),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ));
-      }
-    }
-
-    items.add(const SizedBox(height: 80));
+    final titles = groups.keys.toList()..sort();
 
     return RefreshIndicator(
       onRefresh: _loadEntries,
-      child: ListView(children: items),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        itemCount: titles.length,
+        itemBuilder: (ctx, i) {
+          final rows = groups[titles[i]]!..sort((a, b) => _sessionCount(b).compareTo(_sessionCount(a)));
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                  child: Row(
+                    children: [
+                      IconBadge(
+                        titles[i].toLowerCase().contains('private') ? Icons.person_rounded
+                            : titles[i].toLowerCase().contains('team') ? Icons.emoji_events_rounded
+                            : Icons.pool_rounded,
+                        size: 36,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          titles[i],
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                for (final entry in rows)
+                  InkWell(
+                    onTap: () => _showEntryForm(entry: entry),
+                    child: Padding(
+                      // 48px row (Fitts's Law)
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              (entry['sessions'] as String?) ?? 'Monthly',
+                              style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                            ),
+                          ),
+                          Text(
+                            '${formatNumber(double.tryParse(entry['price'] as String)?.round() ?? 0)} EGP',
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
-  // ── MISSING PRICES TAB ──
+  // ── NEEDS A PRICE TAB ──
 
   Widget _buildMissingTab() {
     if (_missing == null || _missing!.isEmpty) {
       return const EmptyState(
         icon: Icons.check_circle_outline_rounded,
-        title: 'All Priced!',
-        subtitle:
-            'Every athlete program has a matching price in the catalog.',
+        title: 'Every swimmer has a price',
+        subtitle: 'Nothing to do here.',
       );
     }
 
-    // Group by branch
-    final grouped = <int, List<Map<String, dynamic>>>{};
-    for (final m in _missing!) {
-      final bid = m['branch_id'] as int;
-      grouped.putIfAbsent(bid, () => []).add(m);
-    }
-    final branchIds = grouped.keys.toList()..sort();
+    final swimmers = _missing!.fold<int>(0, (n, m) => n + (m['athlete_count'] as int));
 
-    final items = <Widget>[];
+    return RefreshIndicator(
+      onRefresh: _loadEntries,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          // What is left and why it matters, in one sentence (Goal-Gradient).
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.warningLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                const IconBadge(Icons.priority_high_rounded, color: AppColors.warningDark),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${formatNumber(swimmers)} swimmer${swimmers == 1 ? '' : 's'} can\'t be billed until '
+                    '${_missing!.length == 1 ? 'this price is' : 'these ${_missing!.length} prices are'} added.',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.warningDark, height: 1.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < _missing!.length; i++) ...[
+                  _missingRow(_missing![i]),
+                  if (i < _missing!.length - 1) const Divider(height: 1, indent: 68),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    // Warning banner
-    items.add(
-      Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.warningLight,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-        ),
+  Widget _missingRow(Map<String, dynamic> m) {
+    final programLabel = m['program_label'] as String;
+    final athleteCount = m['athlete_count'] as int;
+    final samples = (m['sample_athletes'] as List).cast<String>();
+
+    // The server names the exact program + sessions a price is needed for,
+    // so the form opens pre-filled and staff only type the price
+    // (Tesler's Law: the system absorbs the matching rules).
+    final program = (m['program_name'] as String?) ??
+        (programLabel.contains(' (')
+            ? programLabel.substring(0, programLabel.indexOf(' ('))
+            : programLabel);
+    final sessions = m['sessions'] as String?;
+    final branchPrefix = _selectedBranchId == null ? '${m['branch_name']} \u2022 ' : '';
+
+    return InkWell(
+      onTap: () => _showEntryForm(
+        prefillBranchId: m['branch_id'] as int,
+        prefillProgram: program,
+        prefillSessions: sessions,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.warning_amber_rounded,
-                  color: AppColors.warning, size: 22),
+              width: 40, height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(12)),
+              child: Text('$athleteCount', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: AppColors.warningDark)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -657,145 +628,28 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_missing!.length} program${_missing!.length == 1 ? '' : 's'} without prices',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.textPrimary),
+                    sessions != null ? '$branchPrefix$program \u2022 $sessions' : '$branchPrefix$programLabel',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                   ),
                   const SizedBox(height: 2),
-                  const Text(
-                    'These athletes have no bill. Tap to assign a price.',
-                    style: TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary),
+                  Text(
+                    '${samples.take(2).join(', ')}${athleteCount > 2 ? ' and ${athleteCount - 2} more' : ''}',
+                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
+              child: const Text('Add price', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
             ),
           ],
         ),
       ),
-    );
-
-    for (final bid in branchIds) {
-      final branchName = grouped[bid]!.first['branch_name'] as String;
-      items.add(Padding(
-        padding: EdgeInsets.only(
-            top: items.length > 1 ? 16 : 8, bottom: 6, left: 16, right: 16),
-        child: Text(
-          branchName,
-          style: GoogleFonts.barlowCondensed(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary),
-        ),
-      ));
-
-      for (final m in grouped[bid]!) {
-        final programLabel = m['program_label'] as String;
-        final athleteCount = m['athlete_count'] as int;
-        final samples = (m['sample_athletes'] as List).cast<String>();
-
-        // The server names the exact program + sessions a price is needed for,
-        // so the form opens pre-filled and staff only type the price
-        // (Tesler's Law: the system absorbs the matching rules).
-        final cleanProgram = (m['program_name'] as String?) ??
-            (programLabel.contains(' (')
-                ? programLabel.substring(0, programLabel.indexOf(' ('))
-                : programLabel);
-        final missingSessions = m['sessions'] as String?;
-
-        items.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-          child: PressFeedback(
-            onTap: () => _showEntryForm(
-              prefillBranchId: bid,
-              prefillProgram: cleanProgram,
-              prefillSessions: missingSessions,
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                    color: AppColors.error.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.money_off_rounded,
-                        color: AppColors.error, size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          programLabel,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${formatNumber(athleteCount)} athlete${athleteCount == 1 ? '' : 's'} affected',
-                          style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.error),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          samples.join(', ') +
-                              (athleteCount > samples.length
-                                  ? ' +${athleteCount - samples.length} more'
-                                  : ''),
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'Assign',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ));
-      }
-    }
-
-    items.add(const SizedBox(height: 80));
-
-    return RefreshIndicator(
-      onRefresh: _loadEntries,
-      child: ListView(children: items),
     );
   }
 }

@@ -20,7 +20,7 @@ from app.models.account import Account
 from app.models.payment import Payment
 from app.models.receipt import Receipt
 from pydantic import BaseModel as PydanticBaseModel
-from app.routers.deps import get_current_customer, get_current_customer_allow_suspended, get_linked_accounts
+from app.routers.deps import USABLE_STATUSES, get_current_customer, get_current_customer_allow_suspended, get_linked_accounts
 from app.schemas.athlete import AthleteProfile, BillResponse, ScheduleSlot
 from app.schemas.payment import PaymentIntentResponse, ReceiptOut
 from app.services.notifications import enqueue_notification
@@ -471,6 +471,63 @@ async def switch_profile(
         must_change_password=target.must_change_password,
         profiles=await build_profiles(db, target),
     )
+
+
+
+class LinkSwimmerBody(PydanticBaseModel):
+    login_code: str
+    password: str
+
+
+@router.post("/link-swimmer")
+async def link_swimmer(
+    body: LinkSwimmerBody,
+    request: Request,
+    account: Account = Depends(get_current_customer_allow_suspended),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add another child to a parent who is already signed in.
+
+    The parent has proved their email, and the new child's login code and
+    temporary password prove the front desk gave them that child. So the new
+    account joins the same email and password with no second verification.
+    """
+    from app.routers.auth import _check_login_allowed, _record_login_failure, build_profiles
+    from app.utils.auth import verify_password_async
+
+    email = (account.email or "").strip().lower()
+    if account.must_change_password or not email:
+        raise HTTPException(status_code=400, detail="Finish setting up your own account first")
+
+    limiter_id = f"link:{account.id}"
+    _check_login_allowed("customer", limiter_id, request)
+    wrong = HTTPException(status_code=400, detail="That login code or password is not correct")
+
+    code = body.login_code.strip()
+    result = await db.execute(select(Account).where(func.upper(Account.login_code) == code.upper()))
+    target = result.scalars().first()
+    if not target or not await verify_password_async(body.password, target.password_hash):
+        _record_login_failure("customer", limiter_id, request)
+        raise wrong
+    if target.status not in USABLE_STATUSES:
+        raise wrong
+    if target.id == account.id or (target.email or "").strip().lower() == email:
+        raise HTTPException(status_code=400, detail="This swimmer is already on your account")
+    if not target.must_change_password:
+        # Someone already finished signing this swimmer up under another email
+        raise HTTPException(
+            status_code=400,
+            detail="This swimmer is already set up. Ask the front desk for new login details.",
+        )
+
+    target.email = email
+    target.password_hash = account.password_hash
+    target.must_change_password = False
+    target.temp_password = None
+    target.language = account.language
+    db.add(target)
+    await db.flush()
+    return await build_profiles(db, account)
 
 
 # ── Reinstatement ──

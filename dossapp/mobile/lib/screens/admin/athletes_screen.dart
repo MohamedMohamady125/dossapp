@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/ui_kit.dart';
 import '../reports/report_editor_screen.dart';
 
 class AthletesScreen extends StatefulWidget {
@@ -18,12 +20,23 @@ class AthletesScreen extends StatefulWidget {
   State<AthletesScreen> createState() => _AthletesScreenState();
 }
 
-class _AthletesScreenState extends State<AthletesScreen> {
+class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _load();
+
   List<AthleteDetail>? _athletes;
   bool _loading = true;
   String? _error;
   String _search = '';
+  // Staff work on this month's swimmers; the full historical roster is one
+  // tap away (Pareto, Hick's Law: a default plus one alternative).
+  bool _enrolledOnly = true;
+  // Tapping a summary tile narrows the list to that group: 'paid', 'unpaid'
+  // or 'noprice' (Hick's Law: the numbers are the filters).
+  String? _status;
   Timer? _debounce;
+
+  static bool _isEnrolled(AthleteDetail a) => a.type != null || a.days != null || a.schedule.isNotEmpty;
 
   @override
   void initState() {
@@ -49,10 +62,24 @@ class _AthletesScreenState extends State<AthletesScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  static bool _noPrice(AthleteDetail a) => !a.isPaid && a.bill == null && _isEnrolled(a);
+  static bool _unpaid(AthleteDetail a) => !a.isPaid && a.bill != null && _isEnrolled(a);
+
   List<AthleteDetail> get _filtered {
     if (_athletes == null) return [];
-    if (_search.isEmpty) return _athletes!;
-    final q = _search.toLowerCase();
+    if (_search.isEmpty && _status != null) {
+      return _athletes!.where((a) => switch (_status) {
+        'paid' => a.isPaid && _isEnrolled(a),
+        'unpaid' => _unpaid(a),
+        _ => _noPrice(a),
+      }).toList();
+    }
+    // Searching looks through everyone, so a swimmer is never "missing"
+    // because of the filter (Postel's Law).
+    if (_search.isEmpty) {
+      return _enrolledOnly ? _athletes!.where(_isEnrolled).toList() : _athletes!;
+    }
+    final q = _search.trim().toLowerCase().replaceFirst(RegExp(r'^[m#](?=\d)'), '');
     return _athletes!.where((a) =>
       a.name.toLowerCase().contains(q) ||
       a.athleteNumber.toString().contains(q) ||
@@ -75,37 +102,84 @@ class _AthletesScreenState extends State<AthletesScreen> {
     }
 
     final list = _filtered;
+    final all = _athletes ?? const <AthleteDetail>[];
+    final enrolledCount = all.where(_isEnrolled).length;
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
             decoration: const InputDecoration(
-              hintText: 'Search athletes...',
+              hintText: 'Search by name or number',
               prefixIcon: Icon(Icons.search),
               isDense: true,
             ),
             onChanged: _onSearchChanged,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            children: [
-              Text(
-                '${formatNumber(list.length)} athletes',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-              ),
-              const Spacer(),
-              if (_athletes != null)
-                Text(
-                  '${_athletes!.where((a) => a.hasAccount).length} provisioned',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-                ),
-            ],
+        if (_search.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Row(
+              children: [
+                Expanded(child: StatTile(
+                  icon: Icons.pool_rounded, color: AppColors.primary,
+                  value: formatNumber(enrolledCount), label: 'This month',
+                  selected: _status == null && _enrolledOnly,
+                  onTap: () => setState(() { _status = null; _enrolledOnly = true; }),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: StatTile(
+                  icon: Icons.check_circle_rounded, color: AppColors.success,
+                  value: formatNumber(all.where((a) => a.isPaid && _isEnrolled(a)).length), label: 'Paid',
+                  selected: _status == 'paid',
+                  onTap: () => setState(() => _status = _status == 'paid' ? null : 'paid'),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: StatTile(
+                  icon: Icons.account_balance_wallet_rounded, color: AppColors.accent,
+                  value: formatNumber(all.where(_unpaid).length), label: 'Unpaid',
+                  selected: _status == 'unpaid',
+                  onTap: () => setState(() => _status = _status == 'unpaid' ? null : 'unpaid'),
+                )),
+                const SizedBox(width: 8),
+                Expanded(child: StatTile(
+                  icon: Icons.sell_rounded, color: AppColors.warningDark,
+                  value: formatNumber(all.where(_noPrice).length), label: 'No price',
+                  selected: _status == 'noprice',
+                  onTap: () => setState(() => _status = _status == 'noprice' ? null : 'noprice'),
+                )),
+              ],
+            ),
           ),
-        ),
+        if (_search.isEmpty && _status == null && enrolledCount != all.length)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(value: true, label: Text('This month (${formatNumber(enrolledCount)})')),
+                  ButtonSegment(value: false, label: Text('Everyone (${formatNumber(all.length)})')),
+                ],
+                selected: {_enrolledOnly},
+                onSelectionChanged: (v) => setState(() => _enrolledOnly = v.first),
+              ),
+            ),
+          )
+        else if (_search.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                '${formatNumber(list.length)} found',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            ),
+          ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _load,
@@ -116,16 +190,17 @@ class _AthletesScreenState extends State<AthletesScreen> {
                         height: MediaQuery.of(context).size.height * 0.5,
                         child: EmptyState(
                           icon: Icons.search_off_rounded,
-                          title: 'No athletes found',
+                          title: 'No swimmers found',
                           subtitle: _search.isNotEmpty
                               ? 'No results for "$_search"'
-                              : 'This branch has no athletes yet',
+                              : 'This branch has no swimmers yet',
                         ),
                       ),
                     ],
                   )
-                : ListView.builder(
+                : ListView.separated(
                     itemCount: list.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, indent: 70),
                     // No AnimatedListItem here — causes jank on fast scroll with 1500+ athletes
                     itemBuilder: (ctx, i) => _buildAthleteRow(list[i]),
                   ),
@@ -135,44 +210,41 @@ class _AthletesScreenState extends State<AthletesScreen> {
     );
   }
 
+  // One row = who, what class, and a single status in words. The old row had
+  // up to three unlabelled icons and a five-part subtitle (Cognitive Load).
   Widget _buildAthleteRow(AthleteDetail a) {
+    final noPrice = a.bill == null && a.billMissing != null && _isEnrolled(a);
+    final classLine = [
+      if (a.level != null) a.level!,
+      if (a.type != null && a.type != a.level) a.type!,
+    ].join(' \u2022 ');
+    final subtitle = [
+      '#${a.athleteNumber}',
+      if (classLine.isNotEmpty) classLine,
+      if (!_isEnrolled(a)) 'Not enrolled this month',
+    ].join(' \u2022 ');
+
+    // Exactly one status, by priority: paid, then a missing price, then what is owed.
+    final Widget? status;
+    if (a.isPaid) {
+      status = const StatusPill('Paid', AppColors.success, icon: Icons.check_rounded);
+    } else if (noPrice) {
+      status = const StatusPill('No price', AppColors.warningDark);
+    } else if (a.bill != null && _isEnrolled(a)) {
+      status = Text(formatMoney(a.bill), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary));
+    } else {
+      status = null;
+    }
+
     return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: a.accountCompleted ? AppColors.success : a.hasAccount ? AppColors.warning : AppColors.surfaceVariant,
-        child: Text(
-          '${a.athleteNumber}',
-          style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w600,
-            color: a.hasAccount ? Colors.white : AppColors.textSecondary,
-          ),
-        ),
-      ),
-      title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text([
-        if (a.level != null) a.level!,
-        if (a.type != null) a.type!,
-        if (a.bill != null) 'Bill: ${formatMoney(a.bill)}',
-        if (a.isPaid) 'Paid: ${formatMoney(a.pay)}',
-        if (a.bill == null && a.billMissing != null) '\u26A0 ${a.billMissing}',
-      ].join(' \u2022 '), style: TextStyle(fontSize: 12, color: a.billMissing != null && a.bill == null ? AppColors.warning : AppColors.textSecondary)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: InitialsAvatar(a.name),
+      title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      subtitle: Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (a.isPaid)
-            const Icon(Icons.check_circle, color: AppColors.success, size: 20),
-          if (a.bill == null && a.billMissing != null)
-            const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
-          if (a.accountCompleted)
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.verified_user, color: AppColors.success, size: 20),
-            )
-          else if (a.hasAccount)
-            const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Icon(Icons.person_outline, color: AppColors.warning, size: 20),
-            ),
-          const Icon(Icons.chevron_right, color: AppColors.textMuted),
+          if (status != null) status,
         ],
       ),
       onTap: () => _showAthleteDetail(a),
@@ -362,40 +434,12 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           ),
         ),
 
-        // ── Gradient Header ──
-        Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: AppColors.primaryGradient,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.2),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
+        // ── Who ──
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
             children: [
-              Container(
-                width: 52, height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Center(
-                  child: Text(
-                    'M${athlete.athleteNumber}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-              ),
+              InitialsAvatar(athlete.name, size: 56),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -403,85 +447,92 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                   children: [
                     Text(
                       athlete.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
-                      athlete.branch,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 13,
-                      ),
+                      '#${athlete.athleteNumber} \u2022 ${athlete.branch}',
+                      style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                     ),
+                    if (athlete.accountCompleted || athlete.hasAccount) ...[
+                      const SizedBox(height: 6),
+                      StatusPill(
+                        athlete.accountCompleted ? 'Uses the app' : 'Invited to the app',
+                        athlete.accountCompleted ? AppColors.primary : AppColors.textSecondary,
+                        icon: Icons.phone_iphone_rounded,
+                      ),
+                    ],
                   ],
                 ),
               ),
-              if (athlete.hasAccount)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.verified_user_rounded, color: Colors.white, size: 14),
-                      SizedBox(width: 4),
-                      Text('Active', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
             ],
           ),
         ),
 
+        // ── Payment first: it is why staff open this sheet (Pareto), and its
+        //    button is the only filled one here (Von Restorff). ──
+        const SizedBox(height: 16),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _paymentBlock(athlete),
+        ),
+
+        // ── App login: second, while the parent still has to sign up. It
+        //    disappears once they do, so the card gets shorter over time. ──
+        if (!athlete.accountCompleted) ...[
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _ProvisionButton(
+              branchId: athlete.branchId,
+              athleteNumber: athlete.athleteNumber,
+              phone: athlete.phone1,
+              onDone: widget.onProvision,
+              alreadyProvisioned: athlete.hasAccount,
+              savedCode: athlete.loginCode,
+              savedPassword: athlete.tempPassword,
+              savedMessage: athlete.credentialsMessage,
+              whatsappPhone: athlete.whatsappPhone,
+            ),
+          ),
+        ],
+
+        // ── Class ──
+        _group('Class', Icons.pool_rounded, AppColors.primary, [
+          _infoRow('Level', athlete.level),
+          if (athlete.type != athlete.level) _infoRow('Type', athlete.type),
+          _infoRow('Days', athlete.days),
+          _infoRow('Sessions', athlete.sessions),
+          _infoRow('Membership', athlete.segment),
+          for (final slot in athlete.schedule)
+            _infoRow(
+              slot.dayPair ?? 'Schedule',
+              [if (slot.timeBlock != null) slot.timeBlock!, if (slot.coach != null) 'Coach ${slot.coach}'].join(' \u2022 '),
+            ),
+        ]),
+
+        // ── Contact ──
+        _group('Contact', Icons.phone_rounded, AppColors.primary, [
+          _infoRow('Phone 1', athlete.phone1),
+          _infoRow('Phone 2', athlete.phone2),
+        ]),
+
+        // ── Personal ──
+        _group('Personal', Icons.person_rounded, AppColors.primary, [
+          _infoRow('Age', athlete.age?.toStringAsFixed(1)),
+          _infoRow('Date of birth', athlete.dateOfBirth),
+          _infoRow('Gender', athlete.gender == 'M' ? 'Male' : athlete.gender == 'F' ? 'Female' : athlete.gender),
+          _infoRow('Comment', athlete.comment),
+        ]),
+
+        // ── Secondary actions, outlined so they do not compete ──
         const SizedBox(height: 20),
-
-        // ── Personal Section ──
-        _sectionHeader('Personal'),
-        _infoRow(Icons.school_rounded, 'Step', athlete.level),
-        _infoRow(Icons.category_rounded, 'Type', athlete.type),
-        _infoRow(Icons.cake_rounded, 'Age', athlete.age?.toStringAsFixed(1)),
-        _infoRow(Icons.calendar_month_rounded, 'DOB', athlete.dateOfBirth),
-        _infoRow(Icons.wc_rounded, 'Gender', athlete.gender == 'M' ? 'Male' : athlete.gender == 'F' ? 'Female' : athlete.gender),
-
-        const SizedBox(height: 8),
-
-        // ── Enrollment Section ──
-        _sectionHeader('Enrollment'),
-        _infoRow(Icons.date_range_rounded, 'Days', athlete.days),
-        _infoRow(Icons.event_repeat_rounded, 'Sessions', athlete.sessions),
-        _infoRow(Icons.hub_rounded, 'Segment', athlete.segment),
-        _infoRow(Icons.receipt_rounded, 'Bill', athlete.bill != null ? formatMoney(athlete.bill) : athlete.billMissing != null ? '\u26A0 ${athlete.billMissing}' : null),
-        _infoRow(Icons.payments_rounded, 'Paid', athlete.pay != null ? formatMoney(athlete.pay) : null),
-        _infoRow(Icons.receipt_long_rounded, 'Receipt No.', athlete.receiptNo),
-        _infoRow(Icons.comment_rounded, 'Comment', athlete.comment),
-
-        const SizedBox(height: 8),
-
-        // ── Contact Section ──
-        _sectionHeader('Contact'),
-        _infoRow(Icons.phone_rounded, 'Phone 1', athlete.phone1),
-        _infoRow(Icons.phone_android_rounded, 'Phone 2', athlete.phone2),
-
-        // ── Monthly Report ──
-        const SizedBox(height: 8),
-        _sectionHeader('Monthly Report'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
-            icon: const Icon(Icons.assignment_rounded, size: 18, color: AppColors.secondary),
-            label: const Text('View / Write Monthly Report', style: TextStyle(color: AppColors.secondary)),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-              side: BorderSide(color: AppColors.secondary.withValues(alpha: 0.4)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
+            icon: const Icon(Icons.assignment_outlined, size: 18),
+            label: const Text('Monthly report'),
+            style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -495,222 +546,144 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           ),
         ),
 
-        // ── Schedule ──
-        if (athlete.schedule.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _sectionHeader('Schedule'),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                children: [
-                  for (int i = 0; i < athlete.schedule.length; i++) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppColors.secondaryLight,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.pool_rounded, size: 16, color: AppColors.secondary),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  athlete.schedule[i].dayPair ?? 'Unscheduled',
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                                if (athlete.schedule[i].timeBlock != null)
-                                  Text(
-                                    athlete.schedule[i].timeBlock!,
-                                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (athlete.schedule[i].coach != null)
-                            Text(
-                              athlete.schedule[i].coach!,
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (i < athlete.schedule.length - 1)
-                      const Divider(height: 1, indent: 46),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-
-        // ── Payment Status ──
-        const SizedBox(height: 24),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: (athlete.isPaid || _markedPaid)
-              ? Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.successLight,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Paid${_markedPaid && athlete.bill != null ? " - ${formatMoney(athlete.bill)}" : athlete.pay != null ? " - ${formatMoney(athlete.pay)}" : ""}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.success, fontSize: 16),
-                          ),
-                          if (_receiptNumber != null)
-                            Text('Receipt: $_receiptNumber', style: const TextStyle(color: AppColors.success, fontSize: 13))
-                          else if (athlete.receiptNo != null)
-                            Text('Receipt: ${athlete.receiptNo}', style: const TextStyle(color: AppColors.success, fontSize: 13)),
-                        ],
-                      )),
-                    ],
-                  ),
-                )
-              : athlete.bill != null
-                  ? FilledButton.icon(
-                      onPressed: _markingPaid ? null : _showPaymentMethodDialog,
-                      icon: _markingPaid
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.paid_rounded),
-                      label: Text(_markingPaid ? 'Marking...' : 'Mark as Paid (${formatMoney(athlete.bill)})'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.success,
-                        minimumSize: const Size(double.infinity, 52),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    )
-                  : Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.warningLight,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 24),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Cannot calculate bill', style: TextStyle(color: AppColors.warningDark, fontSize: 14, fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      athlete.billMissing ?? 'No price set for this athlete',
-                                      style: const TextStyle(color: AppColors.warning, fontSize: 12, fontWeight: FontWeight.w500),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          onPressed: () => _showSetBillDialog(),
-                          icon: const Icon(Icons.edit_rounded, size: 18),
-                          label: const Text('Set Bill Amount'),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
-                        ),
-                      ],
-                    ),
-        ),
-
-        // Only show provision/reset buttons if user hasn't completed onboarding yet
-        if (!athlete.accountCompleted) ...[
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _ProvisionButton(
-              branchId: athlete.branchId,
-              athleteNumber: athlete.athleteNumber,
-              phone: athlete.phone1,
-              onDone: widget.onProvision,
-              alreadyProvisioned: athlete.hasAccount,
-            ),
-          ),
-        ],
         const SizedBox(height: 32),
       ],
     );
   }
 
-  Widget _sectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
-      child: Text(
-        title.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textMuted,
-          letterSpacing: 1.2,
+  Widget _paymentBlock(AthleteDetail athlete) {
+    final paid = athlete.isPaid || _markedPaid;
+    final receipt = _receiptNumber ?? athlete.receiptNo;
+
+    if (paid) {
+      final amount = _markedPaid && athlete.bill != null ? athlete.bill : athlete.pay;
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.successLight.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
         ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 30),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  amount != null ? 'Paid ${formatMoney(amount)}' : 'Paid',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary),
+                ),
+                Text(
+                  [
+                    if (receipt != null) 'Receipt $receipt',
+                    if (athlete.bill != null) 'Price ${formatMoney(athlete.bill)}',
+                  ].join(' \u2022 '),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+              ],
+            )),
+          ],
+        ),
+      );
+    }
+
+    if (athlete.bill != null) {
+      return FilledButton(
+        onPressed: _markingPaid ? null : _showPaymentMethodDialog,
+        child: _markingPaid
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : Text('Mark as paid \u2022 ${formatMoney(athlete.bill)}'),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('No price for this class yet', style: TextStyle(color: AppColors.warningDark, fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(
+            athlete.billMissing ?? 'Add it on the Pricing tab, or set an amount for this swimmer only.',
+            style: const TextStyle(color: AppColors.warningDark, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => _showSetBillDialog(),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 44),
+              backgroundColor: Colors.white,
+            ),
+            child: const Text('Set amount for this swimmer'),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String? value) {
-    if (value == null || value.isEmpty) return const SizedBox.shrink();
+  // A titled card of label/value rows (Common Region). Renders nothing when
+  // every row is empty, so staff never see a heading with no content.
+  Widget _group(String title, IconData icon, Color color, List<Widget?> rows) {
+    final shown = rows.whereType<Widget>().toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
-              borderRadius: BorderRadius.circular(8),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                IconBadge(icon, color: color, size: 28),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              ],
             ),
-            child: Icon(icon, size: 16, color: AppColors.textSecondary),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
             ),
+            child: Column(
+              children: [
+                for (var i = 0; i < shown.length; i++) ...[
+                  shown[i],
+                  if (i < shown.length - 1) const Divider(height: 1),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _infoRow(String label, String? value) {
+    if (value == null || value.isEmpty) return null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
             ),
           ),
         ],
@@ -725,6 +698,11 @@ class _ProvisionButton extends StatefulWidget {
   final String? phone;
   final VoidCallback onDone;
   final bool alreadyProvisioned;
+  // Login details the server still holds because signup is unfinished
+  final String? savedCode;
+  final String? savedPassword;
+  final String? savedMessage;
+  final String? whatsappPhone;
 
   const _ProvisionButton({
     required this.branchId,
@@ -732,6 +710,10 @@ class _ProvisionButton extends StatefulWidget {
     required this.onDone,
     this.phone,
     this.alreadyProvisioned = false,
+    this.savedCode,
+    this.savedPassword,
+    this.savedMessage,
+    this.whatsappPhone,
   });
 
   @override
@@ -742,14 +724,28 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
   bool _loading = false;
   String? _code;
   String? _pass;
+  String? _message;
+  String? _waPhone;
+  // Set after this staff member creates or resets, to confirm it worked
+  String? _justDone;
 
   bool _wasProvisioned = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _code = widget.savedCode;
+    _pass = widget.savedPassword;
+    _message = widget.savedMessage;
+    _waPhone = widget.whatsappPhone;
+  }
 
   Future<void> _provision() async {
     setState(() => _loading = true);
     try {
       final Map<String, dynamic> result;
-      if (widget.alreadyProvisioned || _wasProvisioned) {
+      final isReset = widget.alreadyProvisioned || _wasProvisioned;
+      if (isReset) {
         result = await ApiService.reprovisionAccount(widget.branchId, widget.athleteNumber, 'in_person');
       } else {
         result = await ApiService.provisionAccount(widget.branchId, widget.athleteNumber, 'in_person');
@@ -759,6 +755,9 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
         setState(() {
           _code = result['login_code'] ?? '';
           _pass = result['temp_password'] ?? '';
+          _message = result['credentials_message'] ?? _message;
+          _waPhone = result['whatsapp_phone'] ?? _waPhone;
+          _justDone = isReset ? 'New password created' : 'Account created';
         });
         widget.onDone();
       }
@@ -770,20 +769,28 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
     if (mounted) setState(() => _loading = false);
   }
 
-  void _sendViaWhatsApp() {
-    if (_code == null || _pass == null) return;
-    final phone = (widget.phone ?? '').replaceAll(RegExp(r'[^\d+]'), '');
-    final message = Uri.encodeComponent(
+  /// The text comes from the server so the academy can reword it without an
+  /// app update; the fallback only covers an older server.
+  String get _whatsAppText =>
+      _message ??
       'Aquathletic Academy\n'
-      'Your login credentials:\n'
-      'Login Code: $_code\n'
-      'Password: $_pass\n\n'
-      'Please change your password on first login.',
-    );
-    final url = phone.isNotEmpty
-        ? 'https://wa.me/$phone?text=$message'
-        : 'https://wa.me/?text=$message';
-    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+          'Your login details:\n'
+          'Login code: $_code\n'
+          'Password: $_pass';
+
+  Future<void> _sendViaWhatsApp() async {
+    if (_code == null || _pass == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    // WhatsApp wants the country code and digits only
+    final phone = _waPhone ?? (widget.phone ?? '').replaceAll(RegExp(r'[^\d]'), '');
+    final text = Uri.encodeComponent(_whatsAppText);
+    final url = phone.isNotEmpty ? 'https://wa.me/$phone?text=$text' : 'https://wa.me/?text=$text';
+    try {
+      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('not opened');
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not open WhatsApp on this phone')));
+    }
   }
 
   @override
@@ -800,93 +807,111 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
       );
     }
 
-    final hasCredentials = _code != null && _pass != null;
+    final hasAccount = widget.alreadyProvisioned || _wasProvisioned;
+    final hasCode = _code != null && _code!.isNotEmpty;
+    final hasPassword = _pass != null && _pass!.isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Show credentials if generated
-        if (hasCredentials) ...[
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.successLight,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: AppColors.success),
-                const SizedBox(width: 8),
-                Text(
-                  widget.alreadyProvisioned ? 'Password Reset' : 'Account Created',
-                  style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _CopyableField(label: 'Login Code', value: _code!),
-          const SizedBox(height: 12),
-          _CopyableField(label: 'Temp Password', value: _pass!),
-          const SizedBox(height: 12),
+    if (!hasAccount) {
+      return OutlinedButton.icon(
+        icon: const Icon(Icons.person_add_outlined, size: 18),
+        label: const Text('Create app account'),
+        onPressed: _provision,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+      );
+    }
+
+    // One bordered group (Common Region): everything about the login lives here
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.copy_all, size: 18),
-                  label: const Text('Copy'),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: 'Login Code: $_code\nPassword: $_pass'));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Credentials copied')),
-                    );
-                  },
-                ),
+              Icon(
+                _justDone != null ? Icons.check_circle_rounded : Icons.key_rounded,
+                size: 20,
+                color: _justDone != null ? AppColors.success : AppColors.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('Send WhatsApp'),
-                  onPressed: _sendViaWhatsApp,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF25D366),
+                child: Text(
+                  _justDone ?? 'App login details',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: _justDone != null ? AppColors.success : AppColors.textPrimary,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const Divider(),
-          const SizedBox(height: 8),
-        ],
-
-        // Action buttons
-        if (!hasCredentials) ...[
-          FilledButton.icon(
-            icon: Icon(widget.alreadyProvisioned ? Icons.refresh_rounded : Icons.person_add_rounded),
-            label: Text(widget.alreadyProvisioned
-                ? 'Reset Password'
-                : 'Create Account'),
-            onPressed: _provision,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
+          const SizedBox(height: 4),
+          const Text(
+            'Shown here until the parent signs in and sets their own password.',
+            style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
           ),
-        ] else ...[
-          OutlinedButton.icon(
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: const Text('Reset Password Again'),
-            onPressed: _provision,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 44),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          const SizedBox(height: 12),
+          if (hasCode) _CopyableField(label: 'Login Code', value: _code!),
+          if (hasPassword) ...[
+            const SizedBox(height: 12),
+            _CopyableField(label: 'Temp Password', value: _pass!),
+            const SizedBox(height: 14),
+            // The one standout action on the card (Von Restorff)
+            FilledButton.icon(
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Send through WhatsApp'),
+              onPressed: _sendViaWhatsApp,
+              style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             ),
-          ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.copy_all, size: 18),
+                    label: const Text('Copy'),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: _whatsAppText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Login details copied')),
+                      );
+                    },
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('New password'),
+                    onPressed: _provision,
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 10),
+            const Text(
+              'This password was created before passwords were kept here. Create a new one to see it and send it.',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Create new password'),
+              onPressed: _provision,
+              style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

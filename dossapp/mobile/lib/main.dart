@@ -11,6 +11,7 @@ import 'services/notification_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/change_password_screen.dart';
 import 'screens/auth/onboarding_screen.dart';
+import 'screens/auth/profile_picker_screen.dart';
 import 'screens/customer/home_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 import 'screens/coach/coach_home_screen.dart';
@@ -35,11 +36,14 @@ Future<void> main() async {
   await NotificationService.init();
 
   // Firebase Crashlytics — catch Flutter errors + async errors
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+  // (Crashlytics has no web implementation; web is only used for local previews.)
+  if (!kIsWeb) {
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
 
   runApp(
     MultiProvider(
@@ -86,8 +90,12 @@ class AquathleticApp extends StatelessWidget {
             screen = const CoachHomeScreen();
           } else if (auth.isStaff) {
             screen = const AdminHomeScreen();
+          } else if (auth.needsProfileChoice) {
+            screen = const ProfilePickerScreen();
           } else {
-            screen = const CustomerHomeScreen();
+            // Keyed by swimmer: switching rebuilds home from scratch, so no
+            // data of the previous child is ever left on screen.
+            screen = CustomerHomeScreen(key: ValueKey('home-${auth.sessionKey}'));
           }
 
           return AnimatedSwitcher(

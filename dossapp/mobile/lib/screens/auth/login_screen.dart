@@ -186,13 +186,6 @@ class _LoginScreenState extends State<LoginScreen>
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(logoSize * 0.27),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.2),
-                                          blurRadius: 24,
-                                          offset: const Offset(0, 8),
-                                        ),
-                                      ],
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(logoSize * 0.27),
@@ -242,19 +235,19 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                         ),
-                        // Invisible tap layer covering entire header — 3 taps opens staff login
+                        // Invisible tap layer covering entire header — 5 taps opens staff login
                         Positioned.fill(
                           child: GestureDetector(
-                            behavior: HitTestBehavior.translucent,
+                            behavior: HitTestBehavior.opaque,
                             onTap: () {
                               final now = DateTime.now();
                               if (_lastLogoTap != null &&
-                                  now.difference(_lastLogoTap!).inSeconds > 3) {
+                                  now.difference(_lastLogoTap!).inSeconds > 10) {
                                 _logoTapCount = 0;
                               }
                               _lastLogoTap = now;
                               _logoTapCount++;
-                              if (_logoTapCount >= 3) {
+                              if (_logoTapCount >= 5) {
                                 _logoTapCount = 0;
                                 setState(() => _isAdmin = true);
                               }
@@ -337,9 +330,14 @@ class _LoginScreenState extends State<LoginScreen>
                           child: TextFormField(
                             controller: _codeController,
                             autovalidateMode: AutovalidateMode.onUserInteraction,
+                            // Postel's Law: take the code or the email, any case
+                            keyboardType: _isAdmin ? TextInputType.text : TextInputType.emailAddress,
+                            autocorrect: false,
                             decoration: InputDecoration(
                               labelText:
-                                  _isAdmin ? s.username : s.loginCode,
+                                  _isAdmin ? s.username : s.loginCodeOrEmail,
+                              helperText: _isAdmin ? null : s.loginHelp,
+                              helperMaxLines: 2,
                               prefixIcon: const Icon(Icons.person_outline,
                                   size: 20),
                             ),
@@ -404,6 +402,24 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                         ),
                       ),
+
+                      // Signed out by the server: say so, once, where they are looking
+                      if (_error == null && context.watch<AuthProvider>().sessionExpired)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.textSecondary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  S.of(context).sessionExpired,
+                                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
 
                       // Error display with slide-in
                       AnimatedSize(
@@ -484,16 +500,6 @@ class _LoginScreenState extends State<LoginScreen>
                                       ])
                                     : AppColors.primaryGradient,
                                 borderRadius: BorderRadius.circular(14),
-                                boxShadow: _loading
-                                    ? null
-                                    : [
-                                        BoxShadow(
-                                          color: AppColors.primary
-                                              .withValues(alpha: 0.3),
-                                          blurRadius: 12,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
                               ),
                               child: Center(
                                 child: _loading

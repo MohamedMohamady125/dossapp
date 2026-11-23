@@ -31,6 +31,7 @@ from app.schemas.payment import PaymentOut, ReceiptOut
 from app.services.notifications import enqueue_notification
 from app.utils.auth import generate_login_code, generate_temp_password, hash_password
 from app.utils.phone import normalize_phone
+from app.config import settings
 
 # Discount patterns to flag in comments
 _DISCOUNT_PATTERNS = re.compile(
@@ -74,6 +75,36 @@ class BranchOut(BaseModel):
 def _require_admin_role(admin: AdminUser):
     if admin.role != "admin":
         raise HTTPException(status_code=403, detail="Admin role required")
+
+
+_DEFAULT_CREDENTIALS_MESSAGE = (
+    "Aquathletic Academy\nApp login details for {name}\n\nLogin code: {code}\nPassword: {password}"
+)
+
+
+def credentials_message(name: str, code: Optional[str], password: Optional[str], branch: str = "") -> Optional[str]:
+    """The WhatsApp text staff send with a swimmer's login details."""
+    if not code or not password:
+        return None
+    values = {"name": name, "code": code, "password": password, "branch": branch}
+    template = (settings.credentials_message_template or "").replace("\\n", "\n")
+    try:
+        text = template.format(**values)
+    except (KeyError, IndexError, ValueError):
+        text = ""
+    # A template that lost the login details is useless: fall back
+    if code not in text or password not in text:
+        text = _DEFAULT_CREDENTIALS_MESSAGE.format(**values)
+    return text
+
+
+def whatsapp_number(*phones: Optional[str]) -> Optional[str]:
+    """First usable phone, as WhatsApp wants it: country code, digits only."""
+    for raw in phones:
+        number = normalize_phone(raw)
+        if number:
+            return number.lstrip("+")
+    return None
 
 
 @router.get("/admin/branches/manage", response_model=list[BranchOut])
@@ -480,11 +511,14 @@ async def list_athletes(
 
     # Get existing accounts for this branch (with onboarding status)
     result = await db.execute(
-        select(Account.athlete_number, Account.must_change_password).where(Account.branch_id == branch_id)
+        select(Account.athlete_number, Account.must_change_password, Account.login_code, Account.temp_password)
+        .where(Account.branch_id == branch_id)
     )
     account_rows = result.all()
     provisioned = {row[0] for row in account_rows}
     completed_onboarding = {row[0] for row in account_rows if not row[1]}
+    # Login details staff can still hand out: signup not finished yet
+    pending_logins = {row[0]: (row[2], row[3]) for row in account_rows if row[1]}
 
     # Resolve bills: check overrides first, then price catalog
     from app.services.price_resolver import load_branch_catalog, resolve_price_from_catalog, diagnose_missing_bill
@@ -547,6 +581,11 @@ async def list_athletes(
             receipt_no=a.receipt_no,
             has_account=a.athlete_number in provisioned,
             account_completed=a.athlete_number in completed_onboarding,
+            login_code=pending_logins.get(a.athlete_number, (None, None))[0],
+            temp_password=pending_logins.get(a.athlete_number, (None, None))[1],
+            credentials_message=credentials_message(
+                a.name, *pending_logins.get(a.athlete_number, (None, None)), branch=roster.branch_name),
+            whatsapp_phone=whatsapp_number(a.phone1, a.phone2) if a.athlete_number in pending_logins else None,
             is_paid=excel_paid or a.athlete_number in db_paid_set,
             schedule=[
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
@@ -622,6 +661,12 @@ async def get_athlete_detail(
         receipt_no=athlete.receipt_no,
         has_account=has_account,
         account_completed=account_completed,
+        login_code=account.login_code if has_account and not account_completed else None,
+        temp_password=account.temp_password if has_account and not account_completed else None,
+        credentials_message=credentials_message(
+            athlete.name, account.login_code, account.temp_password, roster.branch_name,
+        ) if has_account and not account_completed else None,
+        whatsapp_phone=whatsapp_number(athlete.phone1, athlete.phone2),
         is_paid=excel_paid,
         schedule=[
             ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)
@@ -664,6 +709,7 @@ async def provision_account(
         athlete_number=athlete_number,
         login_code=login_code,
         password_hash=hash_password(temp_password),
+        temp_password=temp_password,
         must_change_password=True,
         name_at_creation=athlete.name,
         dob_at_creation=athlete.date_of_birth,
@@ -693,6 +739,8 @@ async def provision_account(
         temp_password=temp_password,
         delivery_method=req.delivery_method,
         sent_to=sent_to,
+        credentials_message=credentials_message(athlete.name, login_code, temp_password, roster.branch_name),
+        whatsapp_phone=whatsapp_number(athlete.phone1, athlete.phone2),
     )
 
 
@@ -717,6 +765,7 @@ async def reprovision_account(
     was_suspended = account.status == "suspended"
     temp_password = generate_temp_password()
     account.password_hash = hash_password(temp_password)
+    account.temp_password = temp_password
     account.must_change_password = True
     account.status = "active"
     db.add(account)
@@ -737,11 +786,12 @@ async def reprovision_account(
             reviewed_at=datetime.now(timezone.utc),
         ))
 
+    source = _get_roster_source()
+    roster = await source.get_branch_roster(branch_id)
+    athlete = next((a for a in roster.athletes if a.athlete_number == athlete_number), None) if roster else None
+
     sent_to = None
     if req.delivery_method in ("auto_send", "both"):
-        source = _get_roster_source()
-        roster = await source.get_branch_roster(branch_id)
-        athlete = next((a for a in roster.athletes if a.athlete_number == athlete_number), None) if roster else None
         phone = normalize_phone(athlete.phone1) if athlete else None
         if phone:
             msg = (
@@ -760,6 +810,11 @@ async def reprovision_account(
         temp_password=temp_password,
         delivery_method=req.delivery_method,
         sent_to=sent_to,
+        credentials_message=credentials_message(
+            athlete.name if athlete else account.name_at_creation, account.login_code, temp_password,
+            roster.branch_name if roster else "",
+        ),
+        whatsapp_phone=whatsapp_number(athlete.phone1, athlete.phone2) if athlete else None,
     )
 
 
@@ -1076,7 +1131,9 @@ async def get_analytics(
     analytics = {"period": period, "branches": {}}
 
     for bid, roster in rosters.items():
-        athletes = roster.athletes
+        # This month's swimmers only. The roster also keeps past swimmers
+        # with no class, which made "Enrolled" and every chart 4 times too big.
+        athletes = [a for a in roster.athletes if a.type or a.days or a.schedule]
 
         # ── Basic counts ──
         level_counts: dict[str, int] = {}

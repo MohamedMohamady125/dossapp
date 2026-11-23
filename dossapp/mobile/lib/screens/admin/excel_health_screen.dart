@@ -31,6 +31,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
     } catch (e) {
       _error = e.toString();
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
@@ -138,9 +139,9 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (data['last_refreshed'] != null)
-                          _detailRow(Icons.refresh_rounded, 'Last refreshed', '${data['last_refreshed']}'),
+                          _detailRow(Icons.refresh_rounded, 'App last read the sheet', formatWhen(data['last_refreshed'])),
                         if (data['last_modified'] != null)
-                          _detailRow(Icons.edit_calendar_rounded, 'File modified', '${data['last_modified']}'),
+                          _detailRow(Icons.edit_calendar_rounded, 'Sheet last edited', formatWhen(data['last_modified'])),
 
                         if (errors.isNotEmpty) ...[
                           const SizedBox(height: 12),

@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
@@ -16,7 +17,10 @@ class CoachHomeScreen extends StatefulWidget {
   State<CoachHomeScreen> createState() => _CoachHomeScreenState();
 }
 
-class _CoachHomeScreenState extends State<CoachHomeScreen> {
+class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _load();
+
   Map<String, dynamic>? _schedule;
   bool _loading = true;
   String? _error;
@@ -163,13 +167,6 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> {
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,96 +278,27 @@ class _SessionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primarySurface,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.calendar_today_rounded, size: 16, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          dayPair ?? 'Unscheduled days',
+                          [dayPair ?? 'Unscheduled days', if (timeBlock != null) timeBlock!].join(' \u2022 '),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.people_rounded, size: 14, color: AppColors.secondary),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${swimmers.length}',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.secondary),
-                            ),
-                          ],
-                        ),
+                      Text(
+                        '${swimmers.length} swimmer${swimmers.length == 1 ? '' : 's'}',
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
-                  if (timeBlock != null) ...[
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 32),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.schedule_rounded, size: 14, color: AppColors.textMuted),
-                          const SizedBox(width: 4),
-                          Text(
-                            timeBlock!,
-                            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
                   const Divider(height: 24),
-                  ...swimmers.asMap().entries.map(
-                    (entry) {
-                      final name = entry.value;
-                      final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 28, height: 28,
-                              decoration: BoxDecoration(
-                                color: AppColors.surfaceVariant,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  initial,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                  for (final name in swimmers)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(name, style: const TextStyle(fontSize: 15, color: AppColors.textPrimary)),
+                    ),
                 ],
               ),
             ),

@@ -1,7 +1,7 @@
 name: aqua_athletic
 description: "Aquathletic Academy - Parent & Admin App"
 publish_to: 'none'
-version: 1.0.0+8
+version: 1.0.1+15
 
 environment:
   sdk: ^3.9.2
@@ -24,6 +24,7 @@ dependencies:
   firebase_crashlytics: ^5.2.4
   flutter_local_notifications: ^20.1.0
   google_fonts: ^6.2.1
+  file_picker: ^11.0.3
 
 dev_dependencies:
   flutter_test:

@@ -10,6 +10,7 @@ so it's safe to run them repeatedly (serverless lazy loads, crons, dev loop).
 """
 
 import hashlib
+import json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -67,38 +68,83 @@ def _t(lang: str, en: str, ar: str) -> str:
     return ar if lang == "ar" else en
 
 
-def _schedule_hash(athlete: Athlete) -> str:
-    parts = sorted((s.coach or "", s.time_block or "", s.day_pair or "") for s in athlete.schedule)
-    return hashlib.sha256(repr(parts).encode()).hexdigest()
+# What a parent is told about when it changes. Level, class type, days and
+# sessions come from the swimmer's roster row; the slots (days, time, coach)
+# come from the class tabs.
+_DETAIL_LABELS = {
+    "step": ("Level", "المستوى"),
+    "type": ("Class type", "نوع الحصة"),
+    "days": ("Days", "الأيام"),
+    "sessions": ("Sessions", "عدد الحصص"),
+}
 
 
-def _schedule_json(athlete: Athlete) -> list[dict]:
-    return [
-        {"coach": s.coach, "time_block": s.time_block, "day_pair": s.day_pair}
+def _clean_text(value) -> str:
+    return " ".join(str(value).split()) if value is not None else ""
+
+
+def _same(a, b) -> bool:
+    """Spacing and letter case are not a change worth a notification."""
+    return _clean_text(a).casefold() == _clean_text(b).casefold()
+
+
+def _class_details(athlete: Athlete) -> dict:
+    slots = sorted(
+        [_clean_text(s.day_pair), _clean_text(s.time_block), _clean_text(s.coach)]
         for s in athlete.schedule
-    ]
+    )
+    details = {field: _clean_text(getattr(athlete, field)) for field in _DETAIL_LABELS}
+    details.update({"v": 2, "slots": slots})
+    return details
 
 
-def _schedule_body(athlete: Athlete, lang: str) -> str:
+def _details_hash(details: dict) -> str:
+    comparable = {
+        k: ([[c.casefold() for c in slot] for slot in v] if k == "slots" else str(v).casefold())
+        for k, v in details.items()
+    }
+    return hashlib.sha256(json.dumps(comparable, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _slots_text(slots: list, lang: str) -> str:
+    parts = []
+    for day_pair, time_block, coach in slots:
+        part = day_pair or _t(lang, "Days TBD", "أيام غير محددة")
+        if time_block:
+            part += f" {time_block}"
+        if coach:
+            part += f" {_t(lang, 'with Coach', 'مع كابتن')} {coach}"
+        parts.append(part)
+    return _t(lang, "; ", "؛ ").join(parts)
+
+
+def _changes_body(name: str, old: dict, new: dict, lang: str) -> str:
+    """One short line per thing that changed, newest value first."""
     lines = []
-    for s in athlete.schedule:
-        part = s.day_pair or ("أيام غير محددة" if lang == "ar" else "Days TBD")
-        if s.time_block:
-            part += f" {s.time_block}"
-        if s.coach:
-            coach_label = "مع كابتن" if lang == "ar" else "with Coach"
-            part += f" {coach_label} {s.coach}"
-        lines.append(part)
-    if lines:
-        prefix = f"جدول {athlete.name}: " if lang == "ar" else f"{athlete.name}'s schedule: "
-        body = prefix + "؛ ".join(lines) if lang == "ar" else prefix + "; ".join(lines)
-    else:
-        body = (
-            f"تم تحديث جدول {athlete.name}."
-            if lang == "ar"
-            else f"{athlete.name}'s schedule was updated."
-        )
-    return body[:1000]
+    slots_changed = old.get("slots", []) != new.get("slots", []) and _details_hash(
+        {"slots": old.get("slots", [])}) != _details_hash({"slots": new.get("slots", [])})
+    for field, (en, ar) in _DETAIL_LABELS.items():
+        before, after = old.get(field, ""), new.get(field, "")
+        if _same(before, after):
+            continue
+        # The class tabs already say the days, in more detail
+        if field == "days" and slots_changed and new.get("slots"):
+            continue
+        label = _t(lang, en, ar)
+        if after and before:
+            lines.append(_t(lang, f"{label} is now {after} (was {before})", f"{label} الآن {after} (كان {before})"))
+        elif after:
+            lines.append(_t(lang, f"{label} is now {after}", f"{label} الآن {after}"))
+        else:
+            lines.append(_t(lang, f"{label} was removed", f"تم حذف {label}"))
+    if slots_changed:
+        if new.get("slots"):
+            lines.append(_t(lang, "Schedule: ", "الجدول: ") + _slots_text(new["slots"], lang))
+        else:
+            lines.append(_t(lang, "Schedule was removed", "تم حذف الجدول"))
+    if not lines:
+        return _t(lang, f"{name}'s class details were updated.", f"تم تحديث بيانات حصة {name}.")
+    return (f"{name}: " + _t(lang, ". ", "، ").join(lines))[:1000]
 
 
 async def _all_accounts(db: AsyncSession, branch_id: int) -> dict[int, Account]:
@@ -119,10 +165,10 @@ async def _active_accounts(db: AsyncSession, branch_id: int) -> dict[int, Accoun
     return {a.athlete_number: a for a in result.scalars().all()}
 
 
-# ── 1. Schedule changes ──
+# ── 1. Class changes (level, type, days, sessions, time, coach) ──
 
 async def check_schedule_changes(roster: BranchRoster, db: AsyncSession) -> int:
-    """Notify customers whose athlete's schedule appeared or changed."""
+    """Notify the parent when anything about their swimmer's class changes."""
     accounts = await _active_accounts(db, roster.branch_id)
 
     result = await db.execute(
@@ -130,52 +176,68 @@ async def check_schedule_changes(roster: BranchRoster, db: AsyncSession) -> int:
     )
     snapshots = {s.athlete_number: s for s in result.scalars().all()}
 
-    seed_mode = len(snapshots) == 0
-    sent = 0
+    # First run for this branch, or first run since snapshots started holding
+    # level/type/days/sessions: record what is there now and stay silent, so a
+    # deploy never pushes "updated" to every parent.
+    seed_mode = not any(isinstance(s.schedule_json, dict) for s in snapshots.values())
     needs_notify = []
 
     for athlete in roster.athletes:
-        new_hash = _schedule_hash(athlete)
+        enrolled = _is_enrolled(athlete)
+        details = _class_details(athlete)
+        new_hash = _details_hash(details)
         snap = snapshots.get(athlete.athlete_number)
 
         if snap is None:
-            if not athlete.schedule:
+            if not enrolled:
                 continue
             db.add(ScheduleSnapshot(
                 branch_id=roster.branch_id,
                 athlete_number=athlete.athlete_number,
                 schedule_hash=new_hash,
-                schedule_json=_schedule_json(athlete),
+                schedule_json=details,
             ))
             if not seed_mode:
-                needs_notify.append((athlete, new_hash, True))  # is_new=True
-        elif snap.schedule_hash != new_hash:
+                needs_notify.append((athlete, {}, details, "", new_hash))
+        elif not isinstance(snap.schedule_json, dict):
             snap.schedule_hash = new_hash
-            snap.schedule_json = _schedule_json(athlete)
-            if athlete.schedule:
-                needs_notify.append((athlete, new_hash, False))  # is_new=False
+            snap.schedule_json = details
+        elif snap.schedule_hash != new_hash:
+            old_details, old_hash = snap.schedule_json, snap.schedule_hash
+            snap.schedule_hash = new_hash
+            snap.schedule_json = details
+            # Leaving a class is not announced: the sheet is cleared at every
+            # month change and that would message every family.
+            if enrolled and not seed_mode:
+                needs_notify.append((athlete, old_details, details, old_hash, new_hash))
 
     await db.commit()
 
     if seed_mode:
-        logger.info(f"Seeded schedule snapshots for branch {roster.branch_id} (no notifications)")
+        logger.info(f"Seeded class snapshots for branch {roster.branch_id} (no notifications)")
         return 0
 
-    for athlete, new_hash, is_new in needs_notify:
+    sent = 0
+    today = local_now().strftime("%Y%m%d")
+    for athlete, old_details, details, old_hash, new_hash in needs_notify:
         account = accounts.get(athlete.athlete_number)
-        if account:
-            lang = account.language or "en"
-            title = _t(lang,
-                       "Schedule added" if is_new else "Schedule updated",
-                       "تم إضافة الجدول" if is_new else "تم تحديث الجدول")
-            ok = await send_push_to_account(
-                db, account.id, "schedule_change",
-                title,
-                _schedule_body(athlete, lang),
-                data={"screen": "schedule"},
-                dedupe_key=f"sched:{roster.branch_id}:{athlete.athlete_number}:{new_hash}",
-            )
-            sent += 1 if ok else 0
+        if not account:
+            continue
+        lang = account.language or "en"
+        is_new = not any(old_details.get(f) for f in (*_DETAIL_LABELS, "slots"))
+        title = _t(lang,
+                   "Class added" if is_new else "Class details updated",
+                   "تمت إضافة الحصة" if is_new else "تم تحديث بيانات الحصة")
+        ok = await send_push_to_account(
+            db, account.id, "schedule_change",
+            title,
+            _changes_body(athlete.name, old_details, details, lang),
+            data={"screen": "schedule"},
+            # Old and new together, per day: going back to an earlier class
+            # later is a real change and must not be swallowed as a repeat.
+            dedupe_key=f"sched:{roster.branch_id}:{athlete.athlete_number}:{old_hash[:16]}:{new_hash[:16]}:{today}",
+        )
+        sent += 1 if ok else 0
 
     return sent
 

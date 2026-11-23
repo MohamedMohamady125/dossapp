@@ -42,7 +42,8 @@ class _AnimatedListItemState extends State<AnimatedListItem>
       curve: AppAnimation.enterCurve,
     ));
 
-    Future.delayed(widget.delay * widget.index, () {
+    // Cap the stagger: row 50 must not wait 2.5 s to appear
+    Future.delayed(widget.delay * widget.index.clamp(0, 8), () {
       if (mounted) _controller.forward();
     });
   }

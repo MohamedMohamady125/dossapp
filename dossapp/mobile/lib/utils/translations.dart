@@ -27,6 +27,37 @@ class S {
   String get parentAthlete => _t('Parent / Athlete', 'ولي أمر / سباح');
   String get staff => _t('Staff', 'الموظفين');
   String get loginCode => _t('Login Code', 'رمز الدخول');
+  String get loginCodeOrEmail => _t('Login code or email', 'رمز الدخول أو البريد الإلكتروني');
+  String get loginHelp => _t(
+    'Use your email, or your code: branch letters and swimmer number, like MAD-1091.',
+    'استخدم بريدك الإلكتروني أو الرمز: حروف الفرع ورقم السباح، مثل MAD-1091.',
+  );
+  String get whoIsSwimming => _t('Who are you checking on?', 'من تريد متابعته؟');
+  String get chooseSwimmerSubtitle => _t(
+    'Your email has more than one swimmer. Pick one to open.',
+    'بريدك الإلكتروني مرتبط بأكثر من سباح. اختر واحدا لفتحه.',
+  );
+  String get switchAnytime => _t(
+    'You can switch any time by tapping the name at the top of the home screen.',
+    'يمكنك التبديل في أي وقت بالضغط على الاسم أعلى الشاشة الرئيسية.',
+  );
+  String get switchSwimmer => _t('Switch swimmer', 'تبديل السباح');
+  String get sessionExpired => _t('You were signed out. Please log in again.', 'تم تسجيل خروجك. من فضلك سجّل الدخول مرة أخرى.');
+  String get confirmingPayment => _t('Confirming payment...', 'جاري تأكيد الدفع...');
+  String get sendCode => _t('Send code', 'إرسال الكود');
+  String codeSentTo(String email) => _t('We sent a 6 digit code to $email. Enter it to save this email.', 'أرسلنا كودًا من 6 أرقام إلى $email. أدخله لحفظ هذا البريد.');
+  String get codeLabel => _t('6 digit code', 'الكود المكوّن من 6 أرقام');
+  String get verifyAndSave => _t('Verify and save', 'تأكيد وحفظ');
+  String get useDifferentEmail => _t('Use a different email', 'استخدام بريد آخر');
+  String get viewingNow => _t('Viewing now', 'المعروض الآن');
+  String nowViewing(String name) => _t('Now viewing $name', 'تعرض الآن $name');
+  String get addSwimmer => _t('Add another swimmer', 'إضافة سباح آخر');
+  String get addSwimmerHelp => _t(
+      'Enter the login code and password the front desk gave you for this child. They will use your email and password from now on.',
+      'أدخل كود الدخول وكلمة المرور التي حصلت عليها من الاستقبال لهذا الطفل. سيستخدم بريدك وكلمة مرورك من الآن.');
+  String get addSwimmerButton => _t('Add swimmer', 'إضافة السباح');
+  String swimmerAdded(String name) => _t(name.isEmpty ? 'Swimmer added' : '$name was added', name.isEmpty ? 'تمت إضافة السباح' : 'تمت إضافة $name');
+  String get fillCodeAndPassword => _t('Enter the login code and the password', 'أدخل كود الدخول وكلمة المرور');
   String get username => _t('Username', 'اسم المستخدم');
   String get password => _t('Password', 'كلمة المرور');
   String get forgotPassword => _t('Forgot Password?', 'نسيت كلمة المرور؟');
@@ -226,6 +257,21 @@ class S {
     'سيقوم الكابتن بنشر تقريرك الشهري هنا.',
   );
   String get reportBy => _t('By', 'بواسطة');
+  String get uploadPdf => _t('Upload PDF', 'رفع ملف PDF');
+  String get writeNote => _t('Write a note', 'كتابة ملاحظة');
+  String get choosePdf => _t('Choose a PDF', 'اختر ملف PDF');
+  String get changePdf => _t('Change', 'تغيير');
+  String get pdfTooLarge => _t('That PDF is larger than 10 MB', 'حجم الملف أكبر من 10 ميجابايت');
+  String get noteHint => _t('Write the note for the parent', 'اكتب الملاحظة لولي الأمر');
+  String get optionalNote => _t('Add a note (optional)', 'أضف ملاحظة (اختياري)');
+  String get sendReport => _t('Send report', 'إرسال التقرير');
+  String get replaceReport => _t('Send and replace', 'إرسال واستبدال');
+  String get reportSent => _t('Report sent. The parent has been notified.', 'تم إرسال التقرير وإشعار ولي الأمر.');
+  String get parentNotified => _t('The parent gets a notification as soon as you send it.', 'يصل إشعار لولي الأمر فور الإرسال.');
+  String get openPdf => _t('Open PDF', 'فتح الملف');
+  String get pdfReport => _t('PDF report', 'تقرير PDF');
+  String get noteFromCoach => _t('Note from the coach', 'ملاحظة من الكابتن');
+  String get alreadySent => _t('Already sent', 'تم الإرسال');
   String get swimmers => _t('Swimmers', 'السباحين');
   String get reported => _t('Reported', 'تم التقييم');
   String get notReported => _t('Pending', 'قيد الانتظار');

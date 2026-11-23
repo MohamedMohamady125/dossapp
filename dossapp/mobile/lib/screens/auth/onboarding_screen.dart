@@ -93,9 +93,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await ApiService.verifyCode(_verifiedEmail, code);
+      final result = await ApiService.verifyCodeDetailed(_verifiedEmail, code);
       _verifiedCode = code;
-      if (mounted) setState(() => _step = 2);
+      if (!mounted) return;
+      if (result['joined_family'] == true) {
+        // This parent already has a password: skip that step (Tesler's Law,
+        // the system carries the complexity) and show all their swimmers.
+        await context.read<AuthProvider>().joinedFamily((result['profiles'] as List?) ?? const []);
+        return;
+      }
+      setState(() => _step = 2);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -505,9 +512,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ])
               : AppColors.primaryGradient,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: _loading ? null : [
-            BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4)),
-          ],
         ),
         child: Center(
           child: _loading

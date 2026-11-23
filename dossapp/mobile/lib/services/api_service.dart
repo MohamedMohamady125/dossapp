@@ -1,3 +1,4 @@
+import 'app_refresh.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -29,9 +30,12 @@ class ApiService {
   }
 
   /// Wraps network exceptions into user-friendly ApiException.
-  static Future<http.Response> _safeRequest(Future<http.Response> Function() request) async {
+  static Future<http.Response> _safeRequest(
+    Future<http.Response> Function() request, {
+    Duration timeout = _timeout,
+  }) async {
     try {
-      return await request().timeout(_timeout);
+      return await request().timeout(timeout);
     } on SocketException {
       throw ApiException(0, 'No internet connection. Check your network and try again.');
     } on TimeoutException {
@@ -40,8 +44,16 @@ class ApiService {
       throw ApiException(0, 'Could not connect to the server. Please try again later.');
     } on HandshakeException {
       throw ApiException(0, 'Secure connection failed. Please try again later.');
+    } on http.ClientException {
+      // What the http package throws when the connection drops mid-request
+      throw ApiException(0, 'Connection lost. Check your network and try again.');
     }
   }
+
+  /// Called when the server refuses to renew the session (expired, or the
+  /// account was disabled). The app must return to the login screen; a
+  /// network failure never triggers this.
+  static void Function()? onSessionExpired;
 
   static Future<http.Response> _get(String path) async {
     final resp = await _safeRequest(() async => http.get(
@@ -60,7 +72,26 @@ class ApiService {
     return resp;
   }
 
-  static Future<http.Response> _post(String path, Map<String, dynamic> body) async {
+  // Requests that change nothing a screen shows: signing in, registering the
+  // phone for pushes, marking an alert read, opening the payment page.
+  static final _quietPaths = RegExp(r'^/(auth/|devices|staff/devices|notifications|me/pay/|me/switch-profile)');
+
+  /// After anything is changed from this phone, every open screen reloads
+  /// itself, so nobody has to pull to refresh to see their own action.
+  static http.Response _announce(String path, http.Response resp) {
+    if (resp.statusCode >= 200 && resp.statusCode < 300 && !_quietPaths.hasMatch(path)) {
+      AppRefresh.dataChanged();
+    }
+    return resp;
+  }
+
+  static Future<http.Response> _post(String path, Map<String, dynamic> body) async =>
+      _announce(path, await _postRaw(path, body));
+  static Future<http.Response> _delete(String path) async => _announce(path, await _deleteRaw(path));
+  static Future<http.Response> _put(String path, Map<String, dynamic> body) async =>
+      _announce(path, await _putRaw(path, body));
+
+  static Future<http.Response> _postRaw(String path, Map<String, dynamic> body) async {
     final resp = await _safeRequest(() async => http.post(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
@@ -79,7 +110,7 @@ class ApiService {
     return resp;
   }
 
-  static Future<http.Response> _delete(String path) async {
+  static Future<http.Response> _deleteRaw(String path) async {
     final resp = await _safeRequest(() async => http.delete(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
@@ -96,7 +127,7 @@ class ApiService {
     return resp;
   }
 
-  static Future<http.Response> _put(String path, Map<String, dynamic> body) async {
+  static Future<http.Response> _putRaw(String path, Map<String, dynamic> body) async {
     final resp = await _safeRequest(() async => http.put(
       Uri.parse('${AppConstants.baseUrl}$path'),
       headers: await _headers(),
@@ -146,6 +177,12 @@ class ApiService {
           return true;
         }
       }
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        _accessToken = null;
+        _refreshToken = null;
+        await _clearSessionKeys();
+        onSessionExpired?.call();
+      }
       _refreshLock!.complete(false);
       return false;
     } catch (_) {
@@ -180,7 +217,15 @@ class ApiService {
   static Future<void> logout() async {
     _accessToken = null;
     _refreshToken = null;
-    await _storage.deleteAll();
+    await _clearSessionKeys();
+  }
+
+  /// Only the session. The chosen language stays, so logging out does not
+  /// flip the app (and the next account's pushes) back to English.
+  static Future<void> _clearSessionKeys() async {
+    for (final key in const ['access_token', 'refresh_token', 'role', 'branch_id', 'must_change_password']) {
+      await _storage.delete(key: key);
+    }
   }
 
   static Future<bool> hasToken() async {
@@ -212,6 +257,36 @@ class ApiService {
     return data;
   }
 
+  /// Every swimmer this parent can open (same verified email).
+  static Future<List<Map<String, dynamic>>> getProfiles() async {
+    final resp = await _get('/me/profiles');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to load swimmers'));
+    }
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Add another child to this parent using the login details the front desk
+  /// gave for that child. Returns the parent's swimmers, new one included.
+  static Future<List<Map<String, dynamic>>> linkSwimmer(String loginCode, String password) async {
+    final resp = await _post('/me/link-swimmer', {'login_code': loginCode, 'password': password});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Could not add this swimmer'));
+    }
+    return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Open another swimmer of the same parent. Replaces the stored session.
+  static Future<Map<String, dynamic>> switchProfile(int accountId) async {
+    final resp = await _post('/me/switch-profile', {'account_id': accountId});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Could not switch swimmer'));
+    }
+    final data = jsonDecode(resp.body);
+    await _saveTokens(data);
+    return data;
+  }
+
   static Future<void> changePassword(String newPassword) async {
     final resp = await _post('/auth/customer/change-password', {'new_password': newPassword});
     if (resp.statusCode != 200) {
@@ -229,12 +304,18 @@ class ApiService {
   }
 
   static Future<bool> verifyCode(String email, String code) async {
+    final data = await verifyCodeDetailed(email, code);
+    return data['verified'] == true;
+  }
+
+  /// Same check, with the server's full answer: `joined_family` is true when
+  /// this email already has swimmers set up, and `profiles` lists them.
+  static Future<Map<String, dynamic>> verifyCodeDetailed(String email, String code) async {
     final resp = await _post('/auth/customer/verify-code', {'email': email, 'code': code});
     if (resp.statusCode != 200) {
       throw ApiException(resp.statusCode, _extractError(resp, 'Verification failed'));
     }
-    final data = jsonDecode(resp.body);
-    return data['verified'] == true;
+    return jsonDecode(resp.body) as Map<String, dynamic>;
   }
 
   static Future<void> completeOnboarding(String email, String code, String newPassword) async {
@@ -419,6 +500,22 @@ class ApiService {
     }
   }
 
+  /// Staff phones register separately so they get staff alerts (online
+  /// payments, reinstatement requests) instead of a parent's.
+  static Future<void> registerStaffDevice(String token, String platform, {String language = 'en'}) async {
+    final resp = await _post('/staff/devices', {'token': token, 'platform': platform, 'language': language});
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to register device'));
+    }
+  }
+
+  static Future<void> unregisterStaffDevice(String token) async {
+    final resp = await _delete('/staff/devices/$token');
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to unregister device'));
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getNotifications({int limit = 50, int offset = 0}) async {
     final resp = await _get('/me/notifications?limit=$limit&offset=$offset');
     if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load notifications');
@@ -482,32 +579,69 @@ class ApiService {
     return (jsonDecode(resp.body) as List).map((r) => MonthlyReport.fromJson(r)).toList();
   }
 
-  static Future<MonthlyReport> upsertReport({
+  /// Send a written note as the month's report.
+  static Future<MonthlyReport> sendReportNote({
     required int branchId,
     required int athleteNumber,
     required String period,
-    required int technique,
-    required int endurance,
-    required int commitment,
-    required int discipline,
-    String? coachNotes,
-    String? goals,
+    required String note,
   }) async {
     final resp = await _put('/staff/reports', {
       'branch_id': branchId,
       'athlete_number': athleteNumber,
       'period': period,
-      'technique': technique,
-      'endurance': endurance,
-      'commitment': commitment,
-      'discipline': discipline,
-      if (coachNotes != null && coachNotes.isNotEmpty) 'coach_notes': coachNotes,
-      if (goals != null && goals.isNotEmpty) 'goals': goals,
+      'coach_notes': note,
     });
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to save report'));
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to send report'));
     }
     return MonthlyReport.fromJson(jsonDecode(resp.body));
+  }
+
+  /// Send a PDF (with an optional note) as the month's report.
+  static Future<MonthlyReport> uploadReportPdf({
+    required int branchId,
+    required int athleteNumber,
+    required String period,
+    required List<int> bytes,
+    required String filename,
+    String? note,
+  }) async {
+    Future<http.Response> send() async {
+      final req = http.MultipartRequest('POST', Uri.parse('${AppConstants.baseUrl}/staff/reports/pdf'));
+      final headers = await _headers()..remove('Content-Type');
+      req.headers.addAll(headers);
+      req.fields['branch_id'] = '$branchId';
+      req.fields['athlete_number'] = '$athleteNumber';
+      req.fields['period'] = period;
+      if (note != null && note.isNotEmpty) req.fields['note'] = note;
+      req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+      return http.Response.fromStream(await req.send());
+    }
+
+    // A 10 MB PDF on mobile data needs longer than an ordinary request
+    const uploadTimeout = Duration(seconds: 120);
+    var resp = await _safeRequest(send, timeout: uploadTimeout);
+    if (resp.statusCode == 401 && await _tryRefresh()) {
+      resp = await _safeRequest(send, timeout: uploadTimeout);
+    }
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to upload PDF'));
+    }
+    return MonthlyReport.fromJson(jsonDecode(resp.body));
+  }
+
+  /// The PDF of a report. [staff] picks the staff or the athlete endpoint.
+  static Future<List<int>> downloadReportPdf(int reportId, {required bool staff}) async {
+    final uri = Uri.parse('${AppConstants.baseUrl}/${staff ? 'staff' : 'me'}/reports/$reportId/pdf');
+    var resp = await _safeRequest(() async => http.get(uri, headers: await _headers()));
+    if (resp.statusCode == 401 && await _tryRefresh()) {
+      resp = await _safeRequest(() async => http.get(uri, headers: await _headers()));
+    }
+    if (resp.statusCode != 200) {
+      throw ApiException(resp.statusCode, _extractError(resp, 'Failed to open the PDF'));
+    }
+    return resp.bodyBytes;
   }
 
   static Future<void> deleteReport(int reportId) async {

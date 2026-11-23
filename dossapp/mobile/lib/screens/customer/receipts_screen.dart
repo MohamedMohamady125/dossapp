@@ -1,5 +1,7 @@
+import '../../services/app_refresh.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../widgets/ui_kit.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/receipt.dart';
 import '../../services/api_service.dart';
@@ -20,7 +22,14 @@ class ReceiptsScreen extends StatefulWidget {
   State<ReceiptsScreen> createState() => _ReceiptsScreenState();
 }
 
-class _ReceiptsScreenState extends State<ReceiptsScreen> {
+class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _load(silent: true);
+
+  // Refreshes on changes and when reopened; no timer needed here
+  @override
+  Duration? get refreshEvery => null;
+
   List<Receipt>? _receipts;
   bool _loading = true;
   String? _error;
@@ -31,17 +40,21 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _load({bool silent = false}) async {
+    silent = silent && _receipts != null;
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
-      _receipts = await ApiService.getReceipts();
+      final receipts = await ApiService.getReceipts();
+      _receipts = receipts;
+      _error = null;
     } catch (e) {
-      _error = e.toString();
+      if (!silent) _error = e.toString();
     }
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _downloadPdf(Receipt receipt) async {
+    final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
     try {
       final pdfBytes = await ApiService.downloadReceiptPdf(receipt.id);
       if (!mounted) return;
@@ -49,7 +62,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       final file = File('${dir.path}/receipt_${receipt.receiptNumber}.pdf');
       await file.writeAsBytes(pdfBytes);
       await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')], sharePositionOrigin: origin),
       );
     } catch (e) {
       if (mounted) {
@@ -197,7 +210,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
 
           // Date
           Text(
-            DateFormat('dd MMM yyyy, hh:mm a').format(receipt.issuedAt),
+            DateFormat('dd MMM yyyy, hh:mm a').format(receipt.issuedAt.toLocal()),
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 14),
@@ -214,15 +227,17 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
               if (receipt.pdfAvailable)
                 _actionButton(
                   icon: Icons.download_rounded,
-                  label: 'PDF',
+                  label: 'Open PDF',
                   onPressed: () => _downloadPdf(receipt),
                 ),
-              _actionButton(
+              // Without a PDF, sharing the details as text is the fallback
+              if (!receipt.pdfAvailable)
+                _actionButton(
                 icon: Icons.share_rounded,
                 label: 'Share',
                 onPressed: () {
                   SharePlus.instance.share(
-                    ShareParams(text: 'Aquathletic Swimming Academy\n'
+                    ShareParams(sharePositionOrigin: shareOrigin(context), text: 'Aquathletic Swimming Academy\n'
                         'Receipt: ${receipt.receiptNumber}\n'
                         'Amount: ${formatMoney(receipt.amountPaid)}\n'
                         'Period: ${formatPeriod(receipt.period)}\n'
@@ -232,13 +247,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
               ),
               _actionButton(
                 icon: Icons.send_rounded,
-                label: 'Resend',
+                label: 'Email me a copy',
                 onPressed: () async {
                   try {
                     await ApiService.resendReceipt(receipt.id);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Receipt resend queued')),
+                        const SnackBar(content: Text('Sent to your email')),
                       );
                     }
                   } catch (e) {

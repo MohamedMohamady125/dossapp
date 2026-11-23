@@ -38,6 +38,12 @@ class AthleteDetail(AthleteProfile):
     receipt_no: Optional[str] = None
     has_account: bool = False
     account_completed: bool = False  # True when user finished onboarding (set email + password)
+    # Shown to staff only while signup is unfinished
+    login_code: Optional[str] = None
+    temp_password: Optional[str] = None
+    # Ready-to-send WhatsApp text and the number to send it to (digits only)
+    credentials_message: Optional[str] = None
+    whatsapp_phone: Optional[str] = None
     is_paid: bool = False
 
 
@@ -65,3 +71,5 @@ class ProvisionResponse(BaseModel):
     temp_password: str
     delivery_method: str
     sent_to: Optional[str] = None
+    credentials_message: Optional[str] = None
+    whatsapp_phone: Optional[str] = None

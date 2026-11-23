@@ -1,6 +1,10 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../../services/auth_provider.dart';
+import '../auth/profile_picker_screen.dart';
 import '../../models/athlete.dart';
 import '../../models/bill.dart';
 import '../../models/reinstatement.dart';
@@ -18,7 +22,7 @@ import 'bill_screen.dart';
 import 'receipts_screen.dart';
 import 'notifications_screen.dart';
 import 'reports_screen.dart';
-import '../../widgets/report_widgets.dart';
+import '../../widgets/ui_kit.dart';
 
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -27,7 +31,10 @@ class CustomerHomeScreen extends StatefulWidget {
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
 }
 
-class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
+class _CustomerHomeScreenState extends State<CustomerHomeScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _loadUnread();
+
   int _currentIndex = 0;
   int _refreshKey = 0;
   int _unreadCount = 0;
@@ -79,7 +86,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               _currentIndex = i;
               _visitedTabs.add(i);
             });
-            // Only refresh unread count when leaving notifications tab
+            // Opening a tab is a good moment to bring old data up to date
+            AppRefresh.nudge();
             if (i != 3) _loadUnread();
           },
           destinations: [
@@ -125,7 +133,14 @@ class _HomeTab extends StatefulWidget {
   State<_HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<_HomeTab> {
+class _HomeTabState extends State<_HomeTab> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _load();
+
+  // A payment made at the desk or on another phone shows up within 30 s
+  @override
+  Duration? get refreshEvery => const Duration(seconds: 30);
+
   AthleteProfile? _profile;
   Bill? _bill;
   List<MonthlyReport> _reports = [];
@@ -186,15 +201,7 @@ class _HomeTabState extends State<_HomeTab> {
       return Scaffold(
         body: CustomScrollView(
           slivers: [
-            SliverAppBar(
-              expandedHeight: 200,
-              pinned: true,
-              flexibleSpace: FlexibleSpaceBar(
-                background: Container(
-                  decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-                ),
-              ),
-            ),
+            const SliverAppBar(pinned: true, toolbarHeight: 64),
             SliverToBoxAdapter(
               child: Column(
                 children: const [
@@ -209,10 +216,22 @@ class _HomeTabState extends State<_HomeTab> {
     }
 
     if (_error != null) {
+      // Always leave a way out (log out), so a parent is never stuck here
       return Scaffold(
-        body: ErrorState(
-          message: _error!,
-          onRetry: _load,
+        body: Column(
+          children: [
+            Expanded(child: ErrorState(message: _error!, onRetry: _load)),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextButton(
+                  onPressed: () => context.read<AuthProvider>().logout(),
+                  child: Text(S.of(context).logout),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -233,73 +252,23 @@ class _HomeTabState extends State<_HomeTab> {
 
     return CustomScrollView(
       slivers: [
-        // ── App Bar ──
+        // ── App Bar: who this is, once, on a plain surface ──
         SliverAppBar(
-          expandedHeight: 130,
           pinned: true,
-          foregroundColor: AppColors.textPrimary,
-          iconTheme: const IconThemeData(color: AppColors.textPrimary),
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 44, height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: Text(
-                                p.name.isNotEmpty ? p.name[0].toUpperCase() : '?',
-                                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                p.name,
-                                style: GoogleFonts.barlowCondensed(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: -0.3,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text('${p.branch} \u2022 #${p.athleteNumber}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
-                            ],
-                          )),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          toolbarHeight: 76,
+          titleSpacing: 16,
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppColors.primaryGradient)),
+          title: _swimmerTitle(p),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () { _load(); widget.onRefresh(); },
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Settings',
+              icon: const Icon(Icons.settings_outlined, color: Colors.white),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
+            const SizedBox(width: 4),
           ],
         ),
 
@@ -307,64 +276,128 @@ class _HomeTabState extends State<_HomeTab> {
           padding: const EdgeInsets.all(16),
           sliver: SliverList(delegate: SliverChildListDelegate([
 
-            // ── Class & Practice Info (most important for parents) ──
-            AnimatedListItem(index: 0, child: _classInfoCard(p)),
+            // Order follows what a parent opens the app for (Pareto):
+            // is it paid, when is practice, did they attend. Each fact
+            // appears once (Cognitive Load).
 
-            // ── Practice Times ──
-            const SizedBox(height: 8),
-            AnimatedListItem(index: 1, child: _sectionLabel('Practice Times')),
-            AnimatedListItem(
-              index: 2,
-              child: p.schedule.isNotEmpty
-                  ? _scheduleCard(p.schedule)
-                  : _practiceFromRoster(p),
-            ),
-
-            // ── Attendance ──
-            if (p.attendance.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              AnimatedListItem(index: 3, child: _sectionLabel('Attendance')),
-              AnimatedListItem(index: 4, child: _attendanceCard(p.attendance)),
-            ],
-
-            // ── Monthly Report ──
-            if (_reports.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              AnimatedListItem(index: 5, child: _sectionLabel(S.of(context).monthlyReport)),
-              AnimatedListItem(index: 6, child: _reportPreviewCard(_reports.first)),
-            ],
-
-            // ── Payment Status ──
-            if (b != null && !b.noEnrollment) ...[
-              const SizedBox(height: 8),
-              AnimatedListItem(index: 5, child: _sectionLabel('Payment Status')),
+            // ── Payment ──
+            if (b != null && !b.noEnrollment)
               AnimatedListItem(
-                index: 6,
+                index: 0,
                 child: PressFeedback(
                   onTap: widget.onGoToPay,
                   child: _billStatusCard(b),
                 ),
               ),
-            ],
-
-            // ── Athlete Details ──
-            const SizedBox(height: 8),
-            AnimatedListItem(index: 7, child: _sectionLabel('Athlete Details')),
-            AnimatedListItem(index: 8, child: _detailsCard(p)),
-
-            // ── Enrollment Info ──
-            const SizedBox(height: 8),
-            AnimatedListItem(index: 9, child: _sectionLabel('Enrollment')),
-            AnimatedListItem(index: 10, child: _enrollmentCard(p)),
 
             // ── No enrollment state ──
             if (b != null && b.noEnrollment)
-              AnimatedListItem(index: 11, child: _noEnrollmentCard()),
+              AnimatedListItem(index: 0, child: _noEnrollmentCard()),
+
+            // ── The month at a glance (Chunking: three numbers) ──
+            if (p.attendance.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              AnimatedListItem(index: 1, child: _statsRow(p.attendance)),
+            ],
+
+            // ── Class & practice ──
+            const SizedBox(height: 20),
+            AnimatedListItem(index: 1, child: const SectionTitle('Class')),
+            AnimatedListItem(index: 2, child: _classCard(p)),
+
+            // ── Attendance ──
+            if (p.attendance.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              AnimatedListItem(index: 3, child: const SectionTitle('Attendance')),
+              AnimatedListItem(index: 4, child: _attendanceCard(p.attendance)),
+            ],
+
+            // ── Monthly Report ──
+            if (_reports.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              AnimatedListItem(index: 5, child: SectionTitle(S.of(context).monthlyReport)),
+              AnimatedListItem(index: 6, child: _reportPreviewCard(_reports.first)),
+            ],
+
+            // ── About the swimmer ──
+            if (p.age != null || p.dateOfBirth != null || p.gender != null) ...[
+              const SizedBox(height: 20),
+              AnimatedListItem(index: 7, child: const SectionTitle('About')),
+              AnimatedListItem(index: 8, child: _detailsCard(p)),
+            ],
 
             const SizedBox(height: 24),
           ])),
         ),
       ],
+    );
+  }
+
+  // Who this is. With several swimmers on the parent's email, the whole
+  // title is the switcher (Jakob's Law: tap the name to change account), and
+  // it says so with a chevron and a count on the avatar.
+  Widget _swimmerTitle(AthleteProfile p) {
+    final auth = context.watch<AuthProvider>();
+    final several = auth.hasSeveralSwimmers;
+
+    final avatar = Container(
+      width: 46, height: 46,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        InitialsAvatar.initialsOf(p.name),
+        style: GoogleFonts.barlow(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
+      ),
+    );
+
+    final row = Row(
+      children: [
+        if (several)
+          Badge(
+            label: Text('${auth.profiles.length}'),
+            backgroundColor: Colors.white,
+            textColor: AppColors.primary,
+            child: avatar,
+          )
+        else
+          avatar,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.barlowCondensed(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ),
+                  if (several) const Icon(Icons.expand_more_rounded, color: Colors.white, size: 24),
+                ],
+              ),
+              Text(
+                several
+                    ? '${p.branch} \u2022 #${p.athleteNumber} \u2022 ${S.of(context).switchSwimmer}'
+                    : '${p.branch} \u2022 #${p.athleteNumber}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.barlow(fontSize: 13, fontWeight: FontWeight.w400, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!several) return row;
+    return InkWell(
+      onTap: () => showSwimmerSwitcher(context),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: row),
     );
   }
 
@@ -429,6 +462,12 @@ class _HomeTabState extends State<_HomeTab> {
             ),
           ),
           actions: [
+            if (context.watch<AuthProvider>().hasSeveralSwimmers)
+              IconButton(
+                tooltip: S.of(context).switchSwimmer,
+                icon: const Icon(Icons.swap_horiz_rounded),
+                onPressed: () => showSwimmerSwitcher(context),
+              ),
             IconButton(
               icon: const Icon(Icons.refresh_rounded),
               onPressed: () { _load(); widget.onRefresh(); },
@@ -611,186 +650,157 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   // ── BILL STATUS CARD ──
+  // Colour says the state before the words do: green = paid, orange = due
+  // (the one thing here that asks for action, Von Restorff), amber = waiting.
   Widget _billStatusCard(Bill b) {
     final isPaid = b.isPaid;
     final hasBill = b.amountOwed != null;
+    final due = !isPaid && hasBill;
+
+    final title = isPaid ? 'Paid' : hasBill ? 'Payment due' : 'Bill not set yet';
+    final subtitle = isPaid
+        ? formatPeriod(b.period)
+        : hasBill
+            ? formatPeriod(b.period)
+            : 'Your branch will add the amount soon';
+
+    final tone = isPaid ? AppColors.success : AppColors.warning;
+    final fg = due ? Colors.white : AppColors.textPrimary;
+    final fgMuted = due ? Colors.white.withValues(alpha: 0.85) : AppColors.textSecondary;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 4),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isPaid ? AppColors.successLight : hasBill ? AppColors.warningLight : AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isPaid ? AppColors.success.withValues(alpha: 0.3) : hasBill ? AppColors.warning.withValues(alpha: 0.3) : AppColors.border),
+        gradient: due ? AppColors.accentGradient : null,
+        color: due ? null : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: due ? null : Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            width: 46, height: 46,
             decoration: BoxDecoration(
-              color: (isPaid ? AppColors.success : hasBill ? AppColors.warning : AppColors.textMuted).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
+              color: due ? Colors.white.withValues(alpha: 0.22) : tone.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
-              isPaid ? Icons.check_circle : hasBill ? Icons.payments : Icons.hourglass_empty,
-              color: isPaid ? AppColors.success : hasBill ? AppColors.warning : AppColors.textMuted,
-              size: 24,
+              isPaid ? Icons.check_circle_rounded : hasBill ? Icons.account_balance_wallet_rounded : Icons.hourglass_top_rounded,
+              color: due ? Colors.white : tone,
+              size: 26,
             ),
           ),
           const SizedBox(width: 14),
           Expanded(child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                isPaid ? 'Payment Complete' : hasBill ? 'Payment Due' : 'Bill Pending',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700, fontSize: 15,
-                  color: isPaid ? AppColors.success : hasBill ? AppColors.warningDark : AppColors.textSecondary,
-                ),
-              ),
+              Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: fg)),
               const SizedBox(height: 2),
-              Text(
-                isPaid ? 'Receipt: ${b.receiptNumber ?? "Available"}' : hasBill ? formatPeriod(b.period) : 'Amount not set yet',
-                style: TextStyle(fontSize: 12, color: isPaid ? AppColors.success.withValues(alpha: 0.7) : AppColors.textSecondary),
-              ),
+              Text(subtitle, style: TextStyle(fontSize: 13, color: fgMuted)),
             ],
           )),
-          if (hasBill)
-            Text(
-              formatMoney(b.amountOwed),
-              style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w800,
-                color: isPaid ? AppColors.success : AppColors.warningDark,
-              ),
-            ),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
-        ],
-      ),
-    );
-  }
-
-  // ── CLASS INFO CARD (the big one parents care about) ──
-  Widget _classInfoCard(AthleteProfile p) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          // Type + Level row
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(child: _classInfoTile(
-                icon: Icons.pool,
-                iconColor: AppColors.secondary,
-                label: 'Class Type',
-                value: p.type ?? 'Not assigned',
-              )),
-              Container(width: 1, height: 50, color: AppColors.border),
-              Expanded(child: _classInfoTile(
-                icon: Icons.stairs,
-                iconColor: AppColors.primary,
-                label: 'Level',
-                value: p.level ?? 'Not assigned',
-              )),
+              if (hasBill)
+                Text(
+                  formatMoney(b.amountOwed),
+                  style: GoogleFonts.barlowCondensed(fontSize: 24, fontWeight: FontWeight.w700, color: fg),
+                ),
+              if (due)
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                  child: const Text('Pay now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                ),
             ],
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1),
-          const SizedBox(height: 14),
-          // Days + Sessions row
-          Row(
-            children: [
-              Expanded(child: _classInfoTile(
-                icon: Icons.calendar_today,
-                iconColor: AppColors.accent,
-                label: 'Practice Days',
-                value: p.days ?? 'Not assigned',
-              )),
-              Container(width: 1, height: 50, color: AppColors.border),
-              Expanded(child: _classInfoTile(
-                icon: Icons.repeat,
-                iconColor: AppColors.success,
-                label: 'Sessions',
-                value: p.sessions ?? 'Not set',
-              )),
-            ],
-          ),
+          if (!due) ...[
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, color: fgMuted, size: 20),
+          ],
         ],
       ),
     );
   }
 
-  Widget _classInfoTile({required IconData icon, required Color iconColor, required String label, required String value}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, size: 20, color: iconColor),
-          ),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted), textAlign: TextAlign.center),
-        ],
-      ),
+  // ── STATS ROW ──
+  Widget _statsRow(Map<String, String> attendance) {
+    final present = attendance.values.where((v) => v == 'P').length;
+    final total = attendance.length;
+    final missed = total - present;
+    final rate = total > 0 ? (present * 100 / total).round() : 0;
+    return Row(
+      children: [
+        Expanded(child: StatTile(icon: Icons.pool_rounded, color: AppColors.primary, value: '$present', label: 'Attended')),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(icon: Icons.event_busy_rounded, color: missed > 0 ? AppColors.error : AppColors.textMuted, value: '$missed', label: 'Missed')),
+        const SizedBox(width: 10),
+        Expanded(child: StatTile(icon: Icons.insights_rounded, color: AppColors.primary, value: '$rate%', label: 'Attendance')),
+      ],
     );
   }
 
-  // ── PRACTICE TIMES FROM ROSTER (when no schedule data from attendance sheets) ──
-  Widget _practiceFromRoster(AthleteProfile p) {
-    if (p.days == null && p.type == null) {
-      return Card(
+  // ── CLASS CARD ──
+  // One card for everything about the class: what it is, then when and with
+  // whom (Common Region). Replaces four separate cards that repeated the same
+  // type, level, days and sessions.
+  Widget _classCard(AthleteProfile p) {
+    final title = [
+      if (p.type != null) p.type!,
+      if (p.level != null && p.level != p.type) p.level!,
+    ].join(' \u2022 ');
+    final meta = [
+      if (p.days != null) p.days!,
+      if (p.sessions != null) p.sessions!,
+    ].join(' \u2022 ');
+
+    if (title.isEmpty && meta.isEmpty && p.schedule.isEmpty) {
+      return const Card(
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(children: [
-            const Icon(Icons.info_outline, color: AppColors.textMuted, size: 20),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Practice schedule will appear once assigned', style: TextStyle(color: AppColors.textSecondary, fontSize: 13))),
-          ]),
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Class details will appear once your branch assigns them.',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          ),
         ),
       );
     }
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.pool, size: 20, color: AppColors.secondary),
-              ),
-              const SizedBox(width: 14),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (p.days != null)
-                    Text(p.days!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
-                  Text(
-                    [if (p.type != null) p.type!, if (p.sessions != null) p.sessions!].join(' \u2022 '),
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const IconBadge(Icons.pool_rounded, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.isEmpty ? 'Class not assigned yet' : title,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      ),
+                      if (meta.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(meta, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                      ],
+                    ],
                   ),
-                ],
-              )),
+                ),
+              ],
+            ),
+            if (p.schedule.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              for (final slot in p.schedule) _scheduleRow(slot),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -798,162 +808,76 @@ class _HomeTabState extends State<_HomeTab> {
 
   // ── DETAILS CARD ──
   Widget _detailsCard(AthleteProfile p) {
-    final items = <_DetailItem>[];
-    if (p.age != null) items.add(_DetailItem(Icons.cake_outlined, 'Age', '${p.age!.toStringAsFixed(1)} years'));
-    if (p.dateOfBirth != null) items.add(_DetailItem(Icons.calendar_today_outlined, 'Date of Birth', p.dateOfBirth!));
-    if (p.gender != null) {
-      items.add(_DetailItem(
-        p.gender == 'M' ? Icons.male : Icons.female,
-        'Gender',
-        p.gender == 'M' ? 'Male' : p.gender == 'F' ? 'Female' : p.gender!,
-      ));
-    }
-    if (p.level != null) items.add(_DetailItem(Icons.stairs_outlined, 'Level', p.level!));
-    if (p.type != null) items.add(_DetailItem(Icons.category_outlined, 'Type', p.type!));
-    if (p.sessions != null) items.add(_DetailItem(Icons.repeat, 'Sessions', p.sessions!));
-
-    if (items.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(children: [
-            Icon(Icons.info_outline, color: AppColors.textMuted, size: 20),
-            const SizedBox(width: 10),
-            const Text('Details will appear once updated', style: TextStyle(color: AppColors.textSecondary)),
-          ]),
-        ),
-      );
-    }
-
+    // One line: a parent knows their child, this only confirms the record
+    // is the right one (Cognitive Load: three rows said what one can).
+    final parts = <String>[
+      if (p.age != null) '${p.age!.toStringAsFixed(1)} years',
+      if (p.gender != null) p.gender == 'M' ? 'Male' : p.gender == 'F' ? 'Female' : p.gender!,
+      if (p.dateOfBirth != null) 'Born ${p.dateOfBirth!}',
+    ];
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Column(
-          children: [
-            for (var i = 0; i < items.length; i++) ...[
-              _detailRow(items[i]),
-              if (i < items.length - 1) const Divider(indent: 52, height: 1),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _detailRow(_DetailItem item) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8)),
-            child: Icon(item.icon, size: 16, color: AppColors.primary),
-          ),
-          const SizedBox(width: 12),
-          Text(item.label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-          const Spacer(),
-          Text(item.value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary)),
-        ],
-      ),
-    );
-  }
-
-  // ── SCHEDULE CARD ──
-  Widget _scheduleCard(List<ScheduleSlot> schedule) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            for (var i = 0; i < schedule.length; i++) ...[
-              _scheduleRow(schedule[i]),
-              if (i < schedule.length - 1) const SizedBox(height: 10),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _scheduleRow(ScheduleSlot s) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.pool, size: 20, color: AppColors.secondary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (s.dayPair != null)
-                Text(s.dayPair!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary)),
-              if (s.timeBlock != null)
-                Text(s.timeBlock!, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-            ],
-          )),
-          if (s.coach != null)
-            Flexible(
-              flex: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.person, size: 14, color: AppColors.primary),
-                    const SizedBox(width: 4),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 100),
-                      child: Text(s.coach!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ── ENROLLMENT CARD ──
-  Widget _enrollmentCard(AthleteProfile p) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            _enrollmentStat(Icons.location_on_outlined, 'Branch', p.branch),
-            _enrollmentDivider(),
-            _enrollmentStat(Icons.calendar_month, 'Days', p.days ?? 'N/A'),
-            _enrollmentDivider(),
-            _enrollmentStat(Icons.pool, 'Type', p.type ?? 'N/A'),
+            const IconBadge(Icons.person_rounded, color: AppColors.primary, size: 32),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                parts.join(' \u2022 '),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _enrollmentStat(IconData icon, String label, String value) {
-    return Expanded(child: Column(children: [
-      Icon(icon, size: 20, color: AppColors.primary.withValues(alpha: 0.6)),
-      const SizedBox(height: 6),
-      Text(value, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
-      const SizedBox(height: 2),
-      Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-    ]));
-  }
-
-  Widget _enrollmentDivider() {
-    return Container(width: 1, height: 36, color: AppColors.border);
+  // One practice slot: a time pill, the days, and the coach.
+  Widget _scheduleRow(ScheduleSlot s) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          if (s.timeBlock != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: AppColors.primarySurface, borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 15, color: AppColors.primary),
+                  const SizedBox(width: 5),
+                  Text(s.timeBlock!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.primary)),
+                ],
+              ),
+            )
+          else
+            const Icon(Icons.schedule_rounded, size: 18, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              s.dayPair ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary),
+            ),
+          ),
+          if (s.coach != null) ...[
+            const Icon(Icons.sports_rounded, size: 16, color: AppColors.textMuted),
+            const SizedBox(width: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                s.coach!,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   // ── NO ENROLLMENT ──
@@ -979,13 +903,14 @@ class _HomeTabState extends State<_HomeTab> {
   }
 
   // ── ATTENDANCE CARD ──
+  // One headline number with a progress bar (Goal-Gradient), then the dates.
+  // Attended days are neutral; only a missed day carries colour, so misses
+  // are what the eye lands on (Von Restorff).
   Widget _attendanceCard(Map<String, String> attendance) {
-    // Sort dates chronologically
     final sortedDates = attendance.keys.toList()..sort();
     final present = attendance.values.where((v) => v == 'P').length;
-    final absent = attendance.values.where((v) => v == 'A').length;
-    final total = present + absent;
-    final pct = total > 0 ? (present / total * 100).round() : 0;
+    final total = attendance.length;
+    final absent = total - present;
 
     return Card(
       child: Padding(
@@ -993,103 +918,70 @@ class _HomeTabState extends State<_HomeTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Summary row
             Row(
               children: [
-                _attendanceStat('$pct%', 'Rate', AppColors.primary),
-                _attendanceDivider(),
-                _attendanceStat('$present', 'Present', AppColors.success),
-                _attendanceDivider(),
-                _attendanceStat('$absent', 'Absent', AppColors.error),
-                _attendanceDivider(),
-                _attendanceStat('$total', 'Total', AppColors.textSecondary),
+                Text('$present of $total sessions', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                const Spacer(),
+                if (absent > 0)
+                  StatusPill('$absent missed', AppColors.error)
+                else
+                  const StatusPill('No misses', AppColors.primary),
               ],
             ),
-            if (sortedDates.isNotEmpty) ...[
-              const SizedBox(height: 14),
-              const Divider(height: 1),
-              const SizedBox(height: 14),
-              // Date-by-date grid
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: sortedDates.map((date) {
-                  final isPresent = attendance[date] == 'P';
-                  final parsed = DateTime.tryParse(date);
-                  final label = parsed != null ? DateFormat('d MMM').format(parsed) : date;
-                  final dayName = parsed != null ? DateFormat('E').format(parsed) : '';
-
-                  final chipW = ((MediaQuery.of(context).size.width - 80) / 5).clamp(52.0, 68.0);
-                  return Container(
-                    width: chipW,
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: isPresent
-                          ? AppColors.success.withValues(alpha: 0.08)
-                          : AppColors.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isPresent
-                            ? AppColors.success.withValues(alpha: 0.2)
-                            : AppColors.error.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          isPresent ? Icons.check_circle : Icons.cancel,
-                          size: 18,
-                          color: isPresent ? AppColors.success : AppColors.error,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isPresent ? AppColors.success : AppColors.error,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        if (dayName.isNotEmpty)
-                          Text(
-                            dayName,
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: (isPresent ? AppColors.success : AppColors.error).withValues(alpha: 0.7),
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: total > 0 ? present / total : 0,
+                minHeight: 8,
+                backgroundColor: AppColors.surfaceVariant,
+                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
               ),
-            ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: sortedDates.map((date) {
+                final isPresent = attendance[date] == 'P';
+                final parsed = DateTime.tryParse(date);
+                final label = parsed != null ? DateFormat('E d').format(parsed) : date;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isPresent ? AppColors.surfaceVariant : AppColors.errorLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPresent ? Icons.check_rounded : Icons.close_rounded,
+                        size: 14,
+                        color: isPresent ? AppColors.textSecondary : AppColors.error,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: isPresent ? AppColors.textPrimary : AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _attendanceStat(String value, String label, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: color)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-        ],
-      ),
-    );
-  }
-
-  Widget _attendanceDivider() {
-    return Container(width: 1, height: 32, color: AppColors.border);
-  }
-
   Widget _reportPreviewCard(MonthlyReport report) {
-    final overall = report.overall;
-    final color = scoreColor(overall);
+    final note = report.note;
     return PressFeedback(
       onTap: () => Navigator.push(
         context,
@@ -1104,30 +996,9 @@ class _HomeTabState extends State<_HomeTab> {
         ),
         child: Row(
           children: [
-            // Overall score ring
-            SizedBox(
-              width: 52,
-              height: 52,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    width: 52,
-                    height: 52,
-                    child: CircularProgressIndicator(
-                      value: overall / 5,
-                      strokeWidth: 4,
-                      backgroundColor: color.withValues(alpha: 0.12),
-                      valueColor: AlwaysStoppedAnimation(color),
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-                  Text(
-                    overall.toStringAsFixed(1),
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: color),
-                  ),
-                ],
-              ),
+            IconBadge(
+              report.hasPdf ? Icons.picture_as_pdf_rounded : Icons.sticky_note_2_rounded,
+              size: 46,
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1138,23 +1009,20 @@ class _HomeTabState extends State<_HomeTab> {
                     formatPeriod(report.period),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                   ),
-                  const SizedBox(height: 4),
-                  RatingDrops(value: overall.round(), size: 15),
+                  const SizedBox(height: 2),
+                  Text(
+                    note ?? S.of(context).pdfReport,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+                  ),
                 ],
               ),
             ),
             if (_reports.length > 1)
-              Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.primarySurface,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${_reports.length}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
-                ),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 8),
+                child: StatusPill('${_reports.length}', AppColors.primary),
               ),
             const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
           ],
@@ -1162,18 +1030,5 @@ class _HomeTabState extends State<_HomeTab> {
       ),
     );
   }
-
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 4),
-      child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
-    );
-  }
 }
 
-class _DetailItem {
-  final IconData icon;
-  final String label;
-  final String value;
-  _DetailItem(this.icon, this.label, this.value);
-}

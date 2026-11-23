@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
@@ -14,7 +15,14 @@ class AnalyticsScreen extends StatefulWidget {
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProviderStateMixin {
+class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProviderStateMixin, AutoRefresh {
+  @override
+  Future<void> silentReload() => _load(silent: true);
+
+  // Refreshes on changes and when reopened; no timer needed here
+  @override
+  Duration? get refreshEvery => null;
+
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
@@ -34,14 +42,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     super.dispose();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _load({bool silent = false}) async {
+    silent = silent && _data != null;
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
       _data = await ApiService.getAnalytics(scope: _scope, branchId: _scope == 'branch' ? widget.branchId : null);
-      _animController.forward(from: 0);
+      _error = null;
+      if (!silent) _animController.forward(from: 0);
     } catch (e) {
-      _error = e.toString();
+      if (!silent) _error = e.toString();
     }
+    if (!mounted) return;
     setState(() => _loading = false);
   }
 
@@ -224,7 +235,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       decoration: BoxDecoration(
         gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.25), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

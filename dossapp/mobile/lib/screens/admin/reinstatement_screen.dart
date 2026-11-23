@@ -1,3 +1,4 @@
+import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
@@ -12,7 +13,14 @@ class ReinstatementScreen extends StatefulWidget {
   State<ReinstatementScreen> createState() => _ReinstatementScreenState();
 }
 
-class _ReinstatementScreenState extends State<ReinstatementScreen> {
+class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefresh {
+  @override
+  Future<void> silentReload() => _load(silent: true);
+
+  // Refreshes on changes and when reopened; no timer needed here
+  @override
+  Duration? get refreshEvery => null;
+
   List<Map<String, dynamic>>? _requests;
   bool _loading = true;
   String? _error;
@@ -24,12 +32,14 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _load({bool silent = false}) async {
+    silent = silent && _requests != null;
+    if (!silent) setState(() { _loading = true; _error = null; });
     try {
       _requests = await ApiService.getReinstatementRequests(statusFilter: _filter);
+      _error = null;
     } catch (e) {
-      _error = e.toString();
+      if (!silent) _error = e.toString();
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -200,13 +210,6 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
