@@ -90,12 +90,17 @@ async def run_due_jobs(get_rosters) -> dict[str, int]:
                 raise RuntimeError("no rosters loaded yet")
             results[name] = await run_job(name, rosters)
             logger.info(f"Daily job {name}: sent={results[name]} branches={len(rosters)}")
-        except Exception as e:
-            logger.error(f"Daily job {name} failed, will retry: {e}")
+        except BaseException as e:
+            # BaseException on purpose: a deploy cancels this task mid-job, and
+            # a claim left behind would stop every worker from finishing today.
+            # Re-running is safe, each push is deduped per swimmer per day.
+            logger.error(f"Daily job {name} failed, will retry: {e!r}")
             try:
-                await _release(key)
-            except Exception as release_error:
-                logger.error(f"Could not release claim {key}: {release_error}")
+                await asyncio.shield(_release(key))
+            except BaseException as release_error:
+                logger.error(f"Could not release claim {key}: {release_error!r}")
+            if not isinstance(e, Exception):
+                raise
     return results
 
 

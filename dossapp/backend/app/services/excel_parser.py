@@ -922,7 +922,11 @@ def parse_workbook(file_path: str, branch_name: str, branch_id: int) -> tuple[li
         now = datetime.now()
         year = now.year
         if period_month > now.month + 2:
+            # e.g. a December sheet still loaded in January
             year -= 1
+        elif period_month < now.month - 6:
+            # e.g. the January sheet goes live on 25 December: that is next year
+            year += 1
         detected_period = f"{year}-{period_month:02d}"
         logger.info(f"Detected billing period: {detected_period} (season_col={season_month}, sheet_name={roster_month})")
     else:

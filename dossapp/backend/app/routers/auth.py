@@ -1,8 +1,9 @@
 """Auth endpoints — customer + admin login, token refresh, password change, email verification."""
 
 import logging
-import random
 import re
+import secrets
+import time
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -21,7 +22,7 @@ from app.schemas.auth import (
 )
 from app.utils.auth import (
     verify_password, hash_password, create_access_token,
-    create_refresh_token, decode_token,
+    create_refresh_token, decode_token, verify_password_async, hash_password_async,
 )
 from app.routers.deps import (
     get_current_customer, get_current_customer_allow_suspended, get_current_staff,
@@ -32,23 +33,72 @@ from app.services.notifications import get_notification_provider
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# ── Simple in-memory rate limiter for auth endpoints ──
-_login_attempts: dict[str, list[float]] = {}
-_RATE_LIMIT_WINDOW = 300  # 5 minutes
-_RATE_LIMIT_MAX = 10  # max attempts per window
+# ── Rate limiting for auth endpoints ──
+# Counters live in this worker's memory, so with several workers the real
+# ceiling is a small multiple of these numbers. Only FAILED attempts count:
+# a branch full of parents signing in correctly must never be locked out.
+_failures: dict[str, list[float]] = {}
+_RATE_LIMIT_WINDOW = 300   # 5 minutes
+_MAX_FAILS_PER_LOGIN = 8   # wrong passwords for one login code / email / username
+_MAX_FAILS_PER_IP = 40     # wrong passwords from one phone or network
+_MAX_CODE_REQUESTS = 5     # verification emails per address or account
 
 
-def _check_rate_limit(key: str):
-    """Raise 429 if too many login attempts from this key."""
-    import time
+def client_ip(request: Request) -> str:
+    """The caller's address. Behind Railway the socket peer is the proxy, so
+    read the header the proxy sets."""
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _recent(key: str, now: float) -> list[float]:
+    hits = [t for t in _failures.get(key, []) if now - t < _RATE_LIMIT_WINDOW]
+    if hits:
+        _failures[key] = hits
+    else:
+        _failures.pop(key, None)
+    return hits
+
+
+def _too_many(key: str, limit: int) -> bool:
+    return len(_recent(key, time.time())) >= limit
+
+
+def _record(key: str) -> None:
     now = time.time()
-    attempts = _login_attempts.get(key, [])
-    # Prune old entries
-    attempts = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
-    if len(attempts) >= _RATE_LIMIT_MAX:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
-    attempts.append(now)
-    _login_attempts[key] = attempts
+    if len(_failures) > 20000:  # never let the table grow without bound
+        for k in list(_failures):
+            _recent(k, now)
+    _failures[key] = _recent(key, now) + [now]
+
+
+def _login_keys(kind: str, identifier: str, request: Request) -> list[tuple[str, int]]:
+    return [
+        (f"{kind}:id:{identifier.strip().lower()[:120]}", _MAX_FAILS_PER_LOGIN),
+        (f"{kind}:ip:{client_ip(request)}", _MAX_FAILS_PER_IP),
+    ]
+
+
+def _check_login_allowed(kind: str, identifier: str, request: Request) -> None:
+    for key, limit in _login_keys(kind, identifier, request):
+        if _too_many(key, limit):
+            raise HTTPException(status_code=429, detail="Too many login attempts. Try again in a few minutes.")
+
+
+def _record_login_failure(kind: str, identifier: str, request: Request) -> None:
+    for key, _ in _login_keys(kind, identifier, request):
+        _record(key)
+
+
+def _limit_code_requests(key: str) -> None:
+    if _too_many(key, _MAX_CODE_REQUESTS):
+        raise HTTPException(status_code=429, detail="Too many codes requested. Try again in a few minutes.")
+    _record(key)
 
 
 async def _run_identity_guard(account: Account, db: AsyncSession):
@@ -76,6 +126,7 @@ async def _run_identity_guard(account: Account, db: AsyncSession):
             )
             account.status = "identity_mismatch"
             db.add(account)
+            await db.commit()  # the error below rolls the request back
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Identity mismatch — the athlete at this number has changed. Contact admin.",
@@ -115,9 +166,8 @@ def customer_token_data(account: Account) -> dict:
 @router.post("/customer/login", response_model=TokenResponse)
 async def customer_login(req: CustomerLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     """Sign in with the login code or the verified email, plus the password."""
-    _check_rate_limit(f"customer:{request.client.host if request.client else 'unknown'}")
-
     identifier = req.login_code.strip()
+    _check_login_allowed("customer", identifier, request)
     invalid = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if "@" in identifier:
@@ -129,18 +179,23 @@ async def customer_login(req: CustomerLoginRequest, request: Request, db: AsyncS
             .order_by(Account.last_login_at.desc().nullslast(), Account.id)
         )
         candidates = [a for a in result.scalars().all() if a.status in USABLE_STATUSES]
-        account = next((a for a in candidates if verify_password(req.password, a.password_hash)), None)
+        # Candidates are ordered most recently used first, so the first match
+        # is the swimmer to open. Hashing runs off the event loop.
+        account = None
+        for candidate in candidates:
+            if await verify_password_async(req.password, candidate.password_hash):
+                account = candidate
+                break
         if not account:
+            _record_login_failure("customer", identifier, request)
             raise invalid
-        # Open the swimmer used most recently, when the password allows it
-        if candidates and candidates[0].id != account.id and verify_password(req.password, candidates[0].password_hash):
-            account = candidates[0]
     else:
         result = await db.execute(
             select(Account).where(func.upper(Account.login_code) == identifier.upper())
         )
         account = result.scalars().first()
-        if not account or not verify_password(req.password, account.password_hash):
+        if not account or not await verify_password_async(req.password, account.password_hash):
+            _record_login_failure("customer", identifier, request)
             raise invalid
 
     if account.status == "disabled":
@@ -193,7 +248,33 @@ def _validate_email(email: str):
 
 
 def _generate_code() -> str:
-    return f"{random.randint(100000, 999999)}"
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
+_MAX_CODE_ATTEMPTS = 5
+# After a code is verified, the follow-up step (set the password) must happen
+# within this long of the code's expiry, or the parent starts again.
+_VERIFIED_GRACE = timedelta(minutes=20)
+
+
+async def _check_code(db: AsyncSession, verification, code: str) -> None:
+    """Reject a missing, expired, over-tried or wrong code.
+
+    A wrong guess is committed before the error is raised: the request's
+    transaction is rolled back on any error, which used to wipe the counter
+    and allowed unlimited guesses.
+    """
+    if not verification:
+        raise HTTPException(status_code=400, detail="No pending verification found")
+    if verification.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code expired")
+    if (verification.attempts or 0) >= _MAX_CODE_ATTEMPTS:
+        raise HTTPException(status_code=400, detail="Too many failed attempts. Request a new code.")
+    if not secrets.compare_digest(str(verification.code), str(code).strip()):
+        verification.attempts = (verification.attempts or 0) + 1
+        db.add(verification)
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Invalid verification code")
 
 
 async def _send_verification_email(email: str, code: str):
@@ -215,6 +296,7 @@ async def customer_send_verification(
     db: AsyncSession = Depends(get_db),
 ):
     _validate_email(req.email)
+    _limit_code_requests(f"verify:account:{account.id}")
 
     code = _generate_code()
     expires = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -260,26 +342,13 @@ async def customer_verify_code(
                 EmailVerification.purpose == "onboarding",
                 EmailVerification.verified == False,
             )
-        ).order_by(EmailVerification.created_at.desc())
+        ).order_by(EmailVerification.id.desc()).limit(1)
     )
-    verification = result.scalar_one_or_none()
-
-    if not verification:
-        raise HTTPException(status_code=400, detail="No pending verification found")
-
-    if verification.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Verification code expired")
-
-    if verification.attempts >= 5:
-        raise HTTPException(status_code=400, detail="Too many failed attempts. Request a new code.")
-
-    if verification.code != req.code:
-        verification.attempts += 1
-        db.add(verification)
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+    verification = result.scalars().first()
+    await _check_code(db, verification, req.code)
 
     verification.verified = True
-    account.email = req.email
+    account.email = req.email.strip().lower()
     db.add(verification)
     db.add(account)
 
@@ -293,6 +362,11 @@ async def customer_complete_onboarding(
     account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
+    # First-time setup only. Afterwards the password changes in Settings,
+    # where the current password is required.
+    if not account.must_change_password:
+        raise HTTPException(status_code=403, detail="Use profile settings to change your password")
+
     # Check for a verified EmailVerification for this account
     result = await db.execute(
         select(EmailVerification).where(
@@ -302,9 +376,9 @@ async def customer_complete_onboarding(
                 EmailVerification.purpose == "onboarding",
                 EmailVerification.verified == True,
             )
-        ).order_by(EmailVerification.created_at.desc()).limit(1)
+        ).order_by(EmailVerification.id.desc()).limit(1)
     )
-    verification = result.scalar_one_or_none()
+    verification = result.scalars().first()
 
     if not verification:
         raise HTTPException(status_code=400, detail="Email not verified. Complete verification first.")
@@ -312,9 +386,9 @@ async def customer_complete_onboarding(
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
-    account.password_hash = hash_password(req.new_password)
+    account.password_hash = await hash_password_async(req.new_password)
     account.must_change_password = False
-    account.email = req.email
+    account.email = req.email.strip().lower()
     db.add(account)
 
     return {"message": "Account setup complete"}
@@ -344,13 +418,14 @@ async def _find_account_by_email(db: AsyncSession, email: str):
 @router.post("/forgot-password/send-code")
 async def forgot_password_send_code(
     req: ForgotPasswordRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     generic_msg = "If an account exists with this email, a verification code has been sent"
 
     # Rate limit: max 5 code requests per email per 15 minutes
-    rate_key = f"forgot:{req.email.lower()}"
-    _check_rate_limit(rate_key)
+    _limit_code_requests(f"forgot:email:{req.email.strip().lower()[:120]}")
+    _limit_code_requests(f"forgot:ip:{client_ip(request)}")
 
     account, account_type = await _find_account_by_email(db, req.email.strip().lower())
     if not account:
@@ -359,13 +434,12 @@ async def forgot_password_send_code(
     code = _generate_code()
     expires = datetime.now(timezone.utc) + timedelta(minutes=10)
 
-    # Delete any previous unverified forgot-password codes for this email
+    # Delete every earlier forgot-password code for this email, used or not
     await db.execute(
         delete(EmailVerification).where(
             and_(
                 EmailVerification.email == req.email.strip().lower(),
                 EmailVerification.purpose == "forgot_password",
-                EmailVerification.verified == False,
             )
         )
     )
@@ -400,23 +474,10 @@ async def forgot_password_verify(
                 EmailVerification.purpose == "forgot_password",
                 EmailVerification.verified == False,
             )
-        ).order_by(EmailVerification.created_at.desc())
+        ).order_by(EmailVerification.id.desc()).limit(1)
     )
-    verification = ver_result.scalar_one_or_none()
-
-    if not verification:
-        raise HTTPException(status_code=400, detail="No pending verification found")
-
-    if verification.expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Verification code expired")
-
-    if verification.attempts >= 5:
-        raise HTTPException(status_code=400, detail="Too many failed attempts. Request a new code.")
-
-    if verification.code != req.code:
-        verification.attempts += 1
-        db.add(verification)
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+    verification = ver_result.scalars().first()
+    await _check_code(db, verification, req.code)
 
     verification.verified = True
     db.add(verification)
@@ -440,12 +501,23 @@ async def forgot_password_reset(
                 EmailVerification.purpose == "forgot_password",
                 EmailVerification.verified == True,
             )
-        )
+        ).order_by(EmailVerification.id.desc()).limit(1)
     )
-    verification = ver_result.scalar_one_or_none()
+    verification = ver_result.scalars().first()
 
     if not verification:
         raise HTTPException(status_code=400, detail="Email not verified. Complete verification first.")
+
+    # The reset must carry the same code that was verified, and soon after:
+    # knowing only the email is not enough.
+    now = datetime.now(timezone.utc)
+    if (verification.attempts or 0) >= _MAX_CODE_ATTEMPTS or verification.expires_at + _VERIFIED_GRACE < now:
+        raise HTTPException(status_code=400, detail="Verification expired. Request a new code.")
+    if not secrets.compare_digest(str(verification.code), str(req.code).strip()):
+        verification.attempts = (verification.attempts or 0) + 1
+        db.add(verification)
+        await db.commit()
+        raise HTTPException(status_code=400, detail="Invalid verification code")
 
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
@@ -459,8 +531,9 @@ async def forgot_password_reset(
     # email. Reset them together, so the new password opens all of them
     # instead of whichever one happened to be used last.
     targets = await get_linked_accounts(db, account) if account_type == "customer" else [account]
+    new_hash = await hash_password_async(req.new_password)
     for target in targets:
-        target.password_hash = hash_password(req.new_password)
+        target.password_hash = new_hash
         if hasattr(target, 'must_change_password'):
             target.must_change_password = False
         db.add(target)
@@ -480,11 +553,12 @@ async def forgot_password_reset(
 
 @router.post("/admin/login", response_model=TokenResponse)
 async def admin_login(req: AdminLoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    _check_rate_limit(f"admin:{request.client.host if request.client else 'unknown'}")
+    _check_login_allowed("staff", req.username, request)
     result = await db.execute(select(AdminUser).where(AdminUser.username == req.username))
     admin = result.scalar_one_or_none()
 
-    if not admin or not verify_password(req.password, admin.password_hash):
+    if not admin or not await verify_password_async(req.password, admin.password_hash):
+        _record_login_failure("staff", req.username, request)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not admin.is_active:
@@ -555,10 +629,18 @@ async def refresh_token(req: RefreshRequest, db: AsyncSession = Depends(get_db))
         if account_id:
             result = await db.execute(select(Account).where(Account.id == int(account_id)))
             account = result.scalar_one_or_none()
-            if account:
-                if account.status == "identity_mismatch":
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Identity mismatch — contact admin")
-                await _run_identity_guard(account, db)
+            if not account or account.status == "disabled":
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account not found or disabled")
+            if account.status == "identity_mismatch":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Identity mismatch — contact admin")
+            await _run_identity_guard(account, db)
+    elif payload.get("role") in ("admin", "assistant", "coach"):
+        result = await db.execute(select(AdminUser).where(AdminUser.id == int(payload.get("sub") or 0)))
+        staff = result.scalar_one_or_none()
+        if not staff or not staff.is_active or staff.role != payload.get("role"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
     token_data = {k: v for k, v in payload.items() if k not in ("exp", "type")}
     return TokenResponse(

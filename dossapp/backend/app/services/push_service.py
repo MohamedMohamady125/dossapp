@@ -140,6 +140,23 @@ async def send_fcm(
         return False, str(e)
 
 
+async def _claim_dedupe(db: AsyncSession, dedupe_key: str) -> bool:
+    """True the first time a key is seen, False if it was already used.
+
+    Uses a savepoint, so a duplicate does not roll back (and expire) whatever
+    the caller has loaded. A full rollback here used to break the caller's
+    loop on the first already-notified swimmer, which made a failed reminder
+    run impossible to resume.
+    """
+    try:
+        async with db.begin_nested():
+            db.add(NotificationDedupe(dedupe_key=dedupe_key))
+    except IntegrityError:
+        return False
+    await db.commit()
+    return True
+
+
 async def send_push_to_account(
     db: AsyncSession,
     account_id: int,
@@ -154,11 +171,7 @@ async def send_push_to_account(
     Returns False if the dedupe key already exists (already sent).
     """
     if dedupe_key:
-        db.add(NotificationDedupe(dedupe_key=dedupe_key))
-        try:
-            await db.commit()
-        except IntegrityError:
-            await db.rollback()
+        if not await _claim_dedupe(db, dedupe_key):
             return False
 
     db.add(InboxNotification(account_id=account_id, type=ntype, title=title, body=body, data=data))
@@ -215,11 +228,7 @@ async def send_push_to_staff(
     """
     try:
         if dedupe_key:
-            db.add(NotificationDedupe(dedupe_key=dedupe_key))
-            try:
-                await db.commit()
-            except IntegrityError:
-                await db.rollback()
+            if not await _claim_dedupe(db, dedupe_key):
                 return 0
 
         result = await db.execute(

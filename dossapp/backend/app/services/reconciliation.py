@@ -94,21 +94,30 @@ async def reconcile_branch(roster: BranchRoster, db: AsyncSession) -> int:
             )
             amount_owed = catalog_price if catalog_price is not None else amount
 
-        receipt = await record_cash_payment(
-            db=db,
-            branch_id=roster.branch_id,
-            athlete_number=athlete.athlete_number,
-            period=period,
-            amount_paid=amount,
-            amount_owed=amount_owed,
-            excel_receipt_no=receipt_no,
-            athlete_name=athlete.name,
-            branch_name=roster.branch_name,
-            level=athlete.step,
-            athlete_type=athlete.type,
-            phone=athlete.phone1,
-            email=email,
-        )
+        try:
+            receipt = await record_cash_payment(
+                db=db,
+                branch_id=roster.branch_id,
+                athlete_number=athlete.athlete_number,
+                period=period,
+                amount_paid=amount,
+                amount_owed=amount_owed,
+                excel_receipt_no=receipt_no,
+                athlete_name=athlete.name,
+                branch_name=roster.branch_name,
+                level=athlete.step,
+                athlete_type=athlete.type,
+                phone=athlete.phone1,
+                email=email,
+            )
+        except Exception as e:
+            # One bad row must not stop the rest of the sheet
+            logger.error(f"Cash payment for branch={roster.branch_id} athlete={athlete.athlete_number} not recorded: {e}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            continue
         if receipt:
             created_count += 1
             logger.info(

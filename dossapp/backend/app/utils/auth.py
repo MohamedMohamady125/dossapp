@@ -1,5 +1,6 @@
 """JWT + password hashing utilities."""
 
+import asyncio
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,16 @@ def verify_password(password: str, password_hash: str) -> bool:
         return argon2.verify(password, password_hash)
     except Exception:
         return False
+
+
+async def hash_password_async(password: str) -> str:
+    """Argon2 is deliberately slow (about 50 ms). Run it in a thread so one
+    login does not freeze every other request on this worker."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(verify_password, password, password_hash)
 
 
 def generate_temp_password(length: int = 8) -> str:

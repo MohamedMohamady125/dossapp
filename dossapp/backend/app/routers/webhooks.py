@@ -54,12 +54,20 @@ async def easykash_webhook(request: Request):
     """Handle Easykash payment callback. Verify signature, record payment, generate receipt."""
 
     payload = await _extract_payload(request)
-    logger.info(f"Easykash callback received: {payload}")
+    safe = {k: v for k, v in payload.items() if "signature" not in str(k).lower() and "hash" not in str(k).lower()}
+    logger.info(f"Easykash callback received: {safe}")
     return await _process_callback(payload)
 
 
 async def _process_callback(payload: dict, skip_signature: bool = False) -> dict:
     """Verify signature, record payment, generate receipt. Raises HTTPException on rejection."""
+
+    # The signature covers exact field names, but fields are read below
+    # without regard to case. Two keys differing only in case ("status" and
+    # "STATUS") would let an unsigned value override a signed one.
+    if len({str(k).lower() for k in payload}) != len(payload):
+        logger.warning("Easykash callback rejected: duplicate field names")
+        raise HTTPException(status_code=400, detail="Duplicate fields")
 
     # ── Signature verification ──
     if not skip_signature:

@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.account import Account
 from app.models.admin_user import AdminUser
 from app.models.push import DeviceToken, StaffDeviceToken, InboxNotification
-from app.routers.deps import get_current_customer, get_current_staff
+from app.routers.deps import get_current_customer_allow_suspended, get_current_staff
 from app.schemas.notification import DeviceTokenIn, NotificationOut, UnreadCountOut
 
 router = APIRouter(prefix="/me", tags=["notifications"])
@@ -20,7 +20,7 @@ staff_router = APIRouter(prefix="/staff", tags=["notifications"])
 @router.post("/devices")
 async def register_device(
     payload: DeviceTokenIn,
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     if payload.platform not in ("android", "ios"):
@@ -59,7 +59,7 @@ async def register_device(
 @router.delete("/devices/{token}")
 async def unregister_device(
     token: str,
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -76,7 +76,7 @@ async def unregister_device(
 async def list_notifications(
     limit: int = 50,
     offset: int = 0,
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -97,7 +97,7 @@ async def list_notifications(
 
 @router.get("/notifications/unread-count", response_model=UnreadCountOut)
 async def unread_count(
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -112,7 +112,7 @@ async def unread_count(
 @router.post("/notifications/{notification_id}/read")
 async def mark_read(
     notification_id: int,
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -131,7 +131,7 @@ async def mark_read(
 
 @router.post("/notifications/read-all")
 async def mark_all_read(
-    account: Account = Depends(get_current_customer),
+    account: Account = Depends(get_current_customer_allow_suspended),
     db: AsyncSession = Depends(get_db),
 ):
     await db.execute(

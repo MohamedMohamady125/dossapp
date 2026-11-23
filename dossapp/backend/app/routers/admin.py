@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from pydantic import BaseModel
 
@@ -917,103 +918,7 @@ async def mark_athlete_paid(
     except Exception as e:
         import traceback
         logger.error(f"mark_athlete_paid error: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-
-
-@router.get("/debug/sheet-inspect/{branch_id}/{athlete_number}")
-async def debug_sheet_inspect(
-    branch_id: int,
-    athlete_number: int,
-    admin: AdminUser = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Temporary debug: read the sheet to show headers, athlete row, and column positions."""
-    import asyncio, re as _re
-    branch_result = await db.execute(select(Branch).where(Branch.id == branch_id))
-    branch_obj = branch_result.scalar_one_or_none()
-    if not branch_obj or not branch_obj.drive_file_id:
-        return {"error": "No drive_file_id"}
-
-    def _inspect():
-        from app.services.drive_writer import _get_credentials, _find_roster_sheet_name
-        from googleapiclient.discovery import build as _build
-
-        creds = _get_credentials()
-        sheets = _build("sheets", "v4", credentials=creds, cache_discovery=False)
-        sheet_name = _find_roster_sheet_name(sheets, branch_obj.drive_file_id)
-        if not sheet_name:
-            return {"error": "No roster sheet found"}
-
-        result = sheets.spreadsheets().values().get(
-            spreadsheetId=branch_obj.drive_file_id,
-            range=f"'{sheet_name}'!A1:Z500",
-            valueRenderOption="UNFORMATTED_VALUE",
-        ).execute()
-        rows = result.get("values", [])
-
-        # Find header row
-        header_row_idx = None
-        col_map = {}
-        for i, row in enumerate(rows):
-            for j, cell in enumerate(row):
-                cell_clean = str(cell).strip().lower()
-                if cell_clean in ("id", "no", "no."):
-                    col_map["id"] = j
-                elif cell_clean == "name":
-                    col_map["name"] = j
-                elif cell_clean in ("pay", "fees", "amount"):
-                    col_map["pay"] = j
-                elif "receipt" in cell_clean:
-                    col_map["receipt_no"] = j
-            if "id" in col_map and "name" in col_map:
-                header_row_idx = i
-                break
-
-        if header_row_idx is None:
-            return {"error": "No header row found", "first_10_rows": rows[:10]}
-
-        # Find athlete row
-        id_col = col_map["id"]
-        athlete_data = None
-        for i in range(header_row_idx + 1, len(rows)):
-            row = rows[i]
-            if id_col >= len(row):
-                continue
-            cell_val = str(row[id_col]).strip()
-            num_match = _re.search(r"(\d+)", cell_val)
-            if num_match and int(num_match.group(1)) == athlete_number:
-                athlete_data = {"row_idx": i, "row": row}
-                break
-
-        # Read wider range to check if pay/receipt cols are beyond Z
-        wide_result = sheets.spreadsheets().values().get(
-            spreadsheetId=branch_obj.drive_file_id,
-            range=f"'{sheet_name}'!A{header_row_idx+1}:BZ{header_row_idx+1}",
-            valueRenderOption="UNFORMATTED_VALUE",
-        ).execute()
-        wide_header = (wide_result.get("values") or [[]])[0]
-
-        # Collect all existing receipt numbers
-        receipt_col = col_map.get("receipt_no")
-        existing_receipts = []
-        if receipt_col is not None:
-            for i in range(header_row_idx + 1, len(rows)):
-                row = rows[i]
-                if receipt_col < len(row):
-                    val = str(row[receipt_col]).strip()
-                    if val and val != "None" and val != "":
-                        existing_receipts.append(val)
-
-        return {
-            "sheet_name": sheet_name,
-            "header_row_idx": header_row_idx,
-            "col_map": col_map,
-            "athlete": athlete_data,
-            "existing_receipts": existing_receipts,
-            "total_rows": len(rows),
-        }
-
-    return await asyncio.to_thread(_inspect)
+        raise HTTPException(status_code=500, detail="Could not record the payment. Please try again.")
 
 
 @router.get("/branches/{branch_id}/payments", response_model=list[PaymentOut])
@@ -1122,7 +1027,7 @@ async def admin_resend_receipt(
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Receipt).where(Receipt.id == receipt_id))
+    result = await db.execute(select(Receipt).options(undefer(Receipt.pdf_data)).where(Receipt.id == receipt_id))
     receipt = result.scalar_one_or_none()
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -1357,7 +1262,7 @@ async def admin_download_receipt_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     """Download a receipt PDF (admin access)."""
-    result = await db.execute(select(Receipt).where(Receipt.id == receipt_id))
+    result = await db.execute(select(Receipt).options(undefer(Receipt.pdf_data)).where(Receipt.id == receipt_id))
     receipt = result.scalar_one_or_none()
     if not receipt or not receipt.pdf_data:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -1630,7 +1535,7 @@ async def list_reinstatement_requests(
                 Payment.status == "paid",
             )
         )
-        is_paid = paid_result.scalar_one_or_none() is not None
+        is_paid = paid_result.first() is not None
 
         items.append({
             "id": req.id,

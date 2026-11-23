@@ -118,6 +118,24 @@ async def report_swimmers(
     )
 
 
+def _ensure_coach_owns(staff: AdminUser, roster, athlete_number: int) -> None:
+    """Coaches may only touch reports of swimmers in their own sessions.
+    Admins and assistants are limited by branch only."""
+    if staff.role != "coach":
+        return
+    coach_key = normalize_coach_name(staff.coach_name or "")
+    athlete = next((a for a in roster.athletes if a.athlete_number == athlete_number), None)
+    if athlete is None or not any(
+        slot.coach and normalize_coach_name(slot.coach) == coach_key for slot in athlete.schedule
+    ):
+        raise HTTPException(status_code=403, detail="This athlete is not in your sessions")
+
+
+def _header_safe(name: str) -> str:
+    """A filename that is legal inside a Content-Disposition header."""
+    return re.sub(r'[^\x20-\x7e]|["\\]', "_", name) or "report.pdf"
+
+
 @router.get("/staff/reports", response_model=list[ReportOut])
 async def list_reports_for_athlete(
     branch_id: int = Query(...),
@@ -126,6 +144,8 @@ async def list_reports_for_athlete(
     db: AsyncSession = Depends(get_db),
 ):
     enforce_branch_scope(staff, branch_id)
+    if staff.role == "coach":
+        _ensure_coach_owns(staff, await _get_roster(branch_id), athlete_number)
 
     result = await db.execute(
         select(AthleteReport)
@@ -171,12 +191,7 @@ async def _save_report(
     if athlete_number not in names:
         raise HTTPException(status_code=404, detail="Athlete not found in branch roster")
 
-    # Coaches may only report on their own swimmers
-    if staff.role == "coach":
-        coach_key = normalize_coach_name(staff.coach_name or "")
-        athlete = next(a for a in roster.athletes if a.athlete_number == athlete_number)
-        if not any(slot.coach and normalize_coach_name(slot.coach) == coach_key for slot in athlete.schedule):
-            raise HTTPException(status_code=403, detail="This athlete is not in your sessions")
+    _ensure_coach_owns(staff, roster, athlete_number)
 
     note = (note or "").strip() or None
     if pdf is None and note is None:
@@ -293,7 +308,7 @@ def _pdf_response(report: AthleteReport | None) -> Response:
     return Response(
         content=bytes(report.pdf_data),
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{report.pdf_filename or "report.pdf"}"'},
+        headers={"Content-Disposition": f'inline; filename="{_header_safe(report.pdf_filename or "report.pdf")}"'},
     )
 
 
@@ -310,6 +325,8 @@ async def staff_report_pdf(
     if report is None:
         raise HTTPException(status_code=404, detail="Report not found")
     enforce_branch_scope(staff, report.branch_id)
+    if staff.role == "coach":
+        _ensure_coach_owns(staff, await _get_roster(report.branch_id), report.athlete_number)
     return _pdf_response(report)
 
 
@@ -324,6 +341,8 @@ async def delete_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     enforce_branch_scope(staff, report.branch_id)
+    if staff.role == "coach":
+        _ensure_coach_owns(staff, await _get_roster(report.branch_id), report.athlete_number)
 
     await db.delete(report)
     await db.commit()

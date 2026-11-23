@@ -409,6 +409,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Staff lists are large (a branch's swimmers is about 1.5 MB of JSON, which
+# compresses to a tenth of that). Matters on mobile data.
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=2000)
+
 # Register routers
 app.include_router(auth.router)
 app.include_router(customer.router)

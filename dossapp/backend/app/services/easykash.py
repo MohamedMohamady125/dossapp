@@ -118,8 +118,7 @@ def verify_signature(payload: dict, received: str) -> bool:
     if hmac.compare_digest(computed.lower(), received.lower()):
         return True
 
-    logger.warning(
-        "Easykash signature mismatch: fields=%s concatenated=%r computed=%s received=%s",
-        fields, concatenated, computed, received,
-    )
+    # Never log the computed value: it is the valid signature for this payload,
+    # and anyone who can read the logs could replay it.
+    logger.warning("Easykash signature mismatch: fields=%s", fields)
     return False

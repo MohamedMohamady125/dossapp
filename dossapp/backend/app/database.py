@@ -17,8 +17,11 @@ engine_kwargs: dict = {"echo": False}
 if _is_sqlite:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
 else:
-    engine_kwargs["pool_size"] = 20
-    engine_kwargs["max_overflow"] = 30
+    # Per worker process. With 4 workers this tops out at 80 connections,
+    # under Postgres's default limit of 100; beyond that requests wait for a
+    # free connection instead of failing with "too many clients".
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 10
     engine_kwargs["pool_pre_ping"] = True
     engine_kwargs["pool_recycle"] = 300
     # Only Neon/cloud PostgreSQL needs ssl=True; Railway internal Postgres does not

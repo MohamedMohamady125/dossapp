@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, LargeBinary, JSON, Index
+from sqlalchemy.orm import deferred
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -9,7 +10,9 @@ class Receipt(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=False, unique=True)
     receipt_number = Column(String(50), nullable=False, unique=True)  # P-000123 or C-<excel_no>
-    pdf_data = Column(LargeBinary, nullable=True)
+    # Deferred: lists of receipts must not drag every PDF out of the database.
+    # Load it with .options(undefer(Receipt.pdf_data)) where the file is needed.
+    pdf_data = deferred(Column(LargeBinary, nullable=True))
     issued_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Snapshot fields for re-rendering

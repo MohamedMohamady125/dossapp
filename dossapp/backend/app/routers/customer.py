@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 logger = logging.getLogger(__name__)
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from app.database import get_db
 from app.models.account import Account
@@ -40,6 +41,12 @@ class ChangePasswordBody(PydanticBaseModel):
 def _get_roster_source():
     from app.main import roster_source
     return roster_source
+
+
+def _safe_name(value) -> str:
+    """Receipt numbers come from the sheet and may hold slashes or Arabic."""
+    import re
+    return re.sub(r"[^A-Za-z0-9_-]", "_", str(value)) or "receipt"
 
 
 def _fmt_amount(amount) -> str:
@@ -89,8 +96,9 @@ async def get_profile(account: Account = Depends(get_current_customer_allow_susp
 
 
 def _is_in_payment_window() -> bool:
-    """Payment window: 25th of previous month through 1st of current month (inclusive)."""
-    today = datetime.now()
+    """Payment window: 25th of previous month through 1st of current month (inclusive), Egypt time."""
+    from app.services.push_triggers import local_now
+    today = local_now()
     return today.day >= 25 or today.day <= 1
 
 
@@ -144,11 +152,31 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
 
     is_paid = excel_paid or db_paid
 
-    # Auto-suspend if payment window closed and athlete hasn't paid
-    # But skip if admin approved a reinstatement this month (don't re-suspend)
-    if not is_paid and not _is_in_payment_window() and account.status == "active":
+    # Price first: a swimmer with no price cannot pay, so must not be suspended
+    from app.services.price_resolver import resolve_price
+    from app.services.push_triggers import local_now, _is_enrolled
+    catalog_price = await resolve_price(
+        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
+        athlete_number=account.athlete_number,
+    )
+    now = local_now()
+
+    # Auto-suspend if the payment window closed and the swimmer has not paid.
+    # Same guards as the daily job: only swimmers enrolled this month, only
+    # when there is an amount to pay, and only when the sheet is on the
+    # current month (a sheet still on last month, or already on next month,
+    # says nothing about who owes what today).
+    # Skip if admin approved a reinstatement this month (don't re-suspend).
+    if (
+        not is_paid
+        and account.status == "active"
+        and not _is_in_payment_window()
+        and _is_enrolled(athlete)
+        and catalog_price is not None
+        and period == now.strftime("%Y-%m")
+    ):
         from app.models.reinstatement_request import ReinstatementRequest
-        month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         reinstatement = await db.execute(
             select(ReinstatementRequest).where(
                 ReinstatementRequest.account_id == account.id,
@@ -162,7 +190,6 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
             await db.commit()
 
     # Previous month payment status
-    now = datetime.now()
     if now.month == 1:
         prev_period = f"{now.year - 1}-12"
     else:
@@ -176,13 +203,6 @@ async def get_bill(account: Account = Depends(get_current_customer_allow_suspend
         )
     )
     prev_paid = prev_result.scalars().first() is not None
-
-    # Primary: price catalog lookup based on athlete's type/step/segment
-    from app.services.price_resolver import resolve_price
-    catalog_price = await resolve_price(
-        db, account.branch_id, athlete.type, athlete.step, athlete.segment, athlete.sessions,
-        athlete_number=account.athlete_number,
-    )
 
     amount_owed = _fmt_amount(catalog_price) if catalog_price is not None else None
 
@@ -261,7 +281,7 @@ async def create_pay_checkout(account: Account = Depends(get_current_customer), 
 @router.get("/receipts", response_model=list[ReceiptOut])
 async def list_receipts(account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Receipt)
+        select(Receipt, Receipt.pdf_data.isnot(None))
         .join(Payment, Receipt.payment_id == Payment.id)
         .where(
             Payment.branch_id == account.branch_id,
@@ -269,7 +289,7 @@ async def list_receipts(account: Account = Depends(get_current_customer_allow_su
         )
         .order_by(Receipt.issued_at.desc())
     )
-    receipts = result.scalars().all()
+    rows = result.all()
 
     return [
         ReceiptOut(
@@ -282,9 +302,9 @@ async def list_receipts(account: Account = Depends(get_current_customer_allow_su
             athlete_name=r.athlete_name,
             branch_name=r.branch_name,
             level=r.level,
-            pdf_available=r.pdf_data is not None,
+            pdf_available=bool(has_pdf),
         )
-        for r in receipts
+        for r, has_pdf in rows
     ]
 
 
@@ -292,6 +312,7 @@ async def list_receipts(account: Account = Depends(get_current_customer_allow_su
 async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Receipt)
+        .options(undefer(Receipt.pdf_data))
         .join(Payment, Receipt.payment_id == Payment.id)
         .where(
             Receipt.id == receipt_id,
@@ -306,7 +327,7 @@ async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_c
     return Response(
         content=receipt.pdf_data,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="receipt_{receipt.receipt_number}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="receipt_{_safe_name(receipt.receipt_number)}.pdf"'},
     )
 
 
@@ -314,6 +335,7 @@ async def download_receipt_pdf(receipt_id: int, account: Account = Depends(get_c
 async def resend_receipt(receipt_id: int, account: Account = Depends(get_current_customer_allow_suspended), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Receipt)
+        .options(undefer(Receipt.pdf_data))
         .join(Payment, Receipt.payment_id == Payment.id)
         .where(
             Receipt.id == receipt_id,
@@ -341,10 +363,33 @@ async def update_email(
     account: Account = Depends(get_current_customer),
     db: AsyncSession = Depends(get_db),
 ):
+    """Change the email. The address must first be proven with a code
+    (POST /auth/customer/send-verification, then /auth/customer/verify-code).
+
+    Email is what links a parent's swimmers together, so saving an unproven
+    address would hand over another family's children.
+    """
     import re
+    from datetime import timedelta, timezone
+    from app.models.email_verification import EmailVerification
+
     email = body.email.strip().lower()
     if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", email):
         raise HTTPException(status_code=400, detail="Invalid email address")
+    if email == (account.email or "").strip().lower():
+        return {"message": "Email updated successfully"}
+
+    result = await db.execute(
+        select(EmailVerification).where(
+            EmailVerification.account_id == account.id,
+            func.lower(EmailVerification.email) == email,
+            EmailVerification.purpose == "onboarding",
+            EmailVerification.verified == True,  # noqa: E712
+            EmailVerification.expires_at > datetime.now(timezone.utc) - timedelta(minutes=20),
+        ).limit(1)
+    )
+    if not result.scalars().first():
+        raise HTTPException(status_code=400, detail="Verify this email with the code we send before saving it")
 
     account.email = email
     db.add(account)

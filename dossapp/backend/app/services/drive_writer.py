@@ -170,7 +170,7 @@ def _read_existing_receipts_unlocked(drive_file_id: str) -> list[str]:
 
     result = sheets.spreadsheets().values().get(
         spreadsheetId=drive_file_id,
-        range=f"'{sheet_name}'!A1:Z2000",
+        range=f"'{sheet_name}'!A:Z",
         valueRenderOption="UNFORMATTED_VALUE",
     ).execute()
     rows = result.get("values", [])
@@ -221,7 +221,7 @@ def _update_google_sheet(
     # Read all data to find header row and athlete row
     result = sheets.spreadsheets().values().get(
         spreadsheetId=spreadsheet_id,
-        range=f"'{sheet_name}'!A1:Z2000",
+        range=f"'{sheet_name}'!A:Z",
         valueRenderOption="UNFORMATTED_VALUE",
     ).execute()
     rows = result.get("values", [])

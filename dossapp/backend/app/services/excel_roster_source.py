@@ -17,6 +17,63 @@ from app.utils.billing import current_billing_period
 logger = logging.getLogger(__name__)
 
 
+_PARSE_LOCK_KEY = 7360001
+_parse_gate: Optional[asyncio.Lock] = None
+
+
+async def _parse_isolated(path: str, branch_name: str, branch_id: int):
+    """Parse a workbook in a throwaway process, one at a time.
+
+    Parsing a 7 MB roster takes about 12 s of CPU and 650 MB of memory.
+    In a thread it fights the request handlers for the interpreter and every
+    parent waits; in every worker at once it needs several GB. So: a child
+    process (its memory is returned when it exits), one per worker at a time,
+    and one across all workers at a time via a Postgres advisory lock.
+    Falls back to an in-process thread if a child cannot be started.
+    """
+    global _parse_gate
+    if _parse_gate is None:
+        _parse_gate = asyncio.Lock()
+
+    async def run():
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+        loop = asyncio.get_running_loop()
+        try:
+            pool = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+        except Exception as e:
+            logger.warning(f"Could not start a parser process ({e}); parsing in a thread")
+            return await asyncio.to_thread(parse_workbook, path, branch_name, branch_id)
+        try:
+            return await loop.run_in_executor(pool, parse_workbook, path, branch_name, branch_id)
+        except Exception as e:
+            if type(e).__name__ != "BrokenProcessPool":
+                raise
+            logger.warning(f"Parser process died ({e}); parsing in a thread")
+            return await asyncio.to_thread(parse_workbook, path, branch_name, branch_id)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    async with _parse_gate:
+        from sqlalchemy import text
+        from app.database import engine
+        if engine.dialect.name != "postgresql":
+            return await run()
+        try:
+            conn = await engine.connect()
+        except Exception as e:
+            logger.warning(f"No database connection for the parse lock ({e}); parsing anyway")
+            return await run()
+        try:
+            await conn.execute(text("SELECT pg_advisory_lock(:k)"), {"k": _PARSE_LOCK_KEY})
+            try:
+                return await run()
+            finally:
+                await conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _PARSE_LOCK_KEY})
+        finally:
+            await conn.close()
+
+
 class ExcelRosterSource(RosterSource):
     def __init__(self, branch_configs: list[dict]):
         """
@@ -28,6 +85,7 @@ class ExcelRosterSource(RosterSource):
         self._last_errors: dict[int, list[str]] = {}
         self._synced_prices: dict[int, str] = {}
         self._lock = asyncio.Lock()
+        self._load_locks: dict[int, asyncio.Lock] = {}
         self._initial_load_done = False
 
     async def _ensure_loaded(self):
@@ -102,12 +160,26 @@ class ExcelRosterSource(RosterSource):
             except Exception as e:
                 logger.error(f"Push trigger error for branch {branch_id}: {e}")
 
+    def _keep_previous(self, branch_id: int, athletes: list, errors: list) -> bool:
+        """A sheet that parses to nobody (tab renamed, header row moved) must
+        not replace a good roster: every parent would show as not enrolled."""
+        previous = self._cache.get(branch_id)
+        if athletes or not previous or not previous.athletes:
+            return False
+        logger.error(f"Branch {branch_id}: new sheet parsed to 0 swimmers, keeping the previous {len(previous.athletes)}")
+        self._last_errors[branch_id] = ["Sheet parsed to 0 swimmers; still showing the previous version", *errors][:20]
+        return True
+
     async def get_branch_roster(self, branch_id: int) -> Optional[BranchRoster]:
         await self._ensure_loaded()
         # Background task + admin refresh button handle updates.
-        # Only auto-check Drive if cache is completely empty for this branch.
-        if branch_id not in self._cache:
-            await self.refresh_branch(branch_id)
+        # Only auto-check Drive if cache is completely empty for this branch,
+        # and let one request do it while the others wait for the result.
+        if branch_id not in self._cache and branch_id in self._configs:
+            lock = self._load_locks.setdefault(branch_id, asyncio.Lock())
+            async with lock:
+                if branch_id not in self._cache:
+                    await self.refresh_branch(branch_id)
         return self._cache.get(branch_id)
 
     async def get_all_rosters(self) -> dict[int, BranchRoster]:
@@ -144,9 +216,11 @@ class ExcelRosterSource(RosterSource):
                 return False
 
             try:
-                athletes, coaches, price_matrix, errors, detected_period = await asyncio.to_thread(
-                    parse_workbook, tmp_path, config["branch_name"], branch_id
-                )
+                athletes, coaches, price_matrix, errors, detected_period = await _parse_isolated(tmp_path, config["branch_name"], branch_id)
+
+                if self._keep_previous(branch_id, athletes, errors):
+                    self._last_modified[branch_id] = current_modified
+                    return False
 
                 # Use period from Excel (season column / sheet name), fall back to current month
                 period = detected_period or current_billing_period()
@@ -219,9 +293,10 @@ class ExcelRosterSource(RosterSource):
             return False
 
         try:
-            athletes, coaches, price_matrix, errors, detected_period = await asyncio.to_thread(
-                parse_workbook, local_path, config["branch_name"], branch_id
-            )
+            athletes, coaches, price_matrix, errors, detected_period = await _parse_isolated(local_path, config["branch_name"], branch_id)
+            if self._keep_previous(branch_id, athletes, errors):
+                self._last_modified[branch_id] = mtime
+                return False
             period = detected_period or current_billing_period()
             roster = BranchRoster(
                 branch_id=branch_id,
