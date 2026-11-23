@@ -31,7 +31,7 @@ class _BillScreenState extends State<BillScreen>
 
   Bill? _bill;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   bool _paying = false;
   bool _awaitingPayment = false;
   bool _confirming = false;
@@ -103,18 +103,19 @@ class _BillScreenState extends State<BillScreen>
       if (becamePaid) _checkController.forward(from: 0);
     } catch (e) {
       if (!mounted) return;
-      if (!silent) _error = e.toString();
+      if (!silent) _error = e;
     }
     setState(() => _loading = false);
   }
 
   Future<void> _pay() async {
+    final s = S.read(context);
     setState(() => _paying = true);
     try {
       final intent = await ApiService.createPaymentIntent();
       final urlStr = intent['url'] as String?;
       if (urlStr == null || urlStr.isEmpty) {
-        throw ApiException(0, 'Payment is not available at the moment. Please try again later.');
+        throw ApiException(0, s.paymentUnavailable);
       }
       final url = Uri.parse(urlStr);
       // No canLaunchUrl check: on Android 11+ it answers "no" for web links
@@ -124,7 +125,7 @@ class _BillScreenState extends State<BillScreen>
         _awaitingPayment = true;
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open payment page. Please try again.')),
+          SnackBar(content: Text(s.couldNotOpenPayment)),
         );
       }
     } on ApiException catch (e) {
@@ -136,16 +137,16 @@ class _BillScreenState extends State<BillScreen>
       }
       if (mounted) {
         final msg = e.isServer
-            ? 'Payment service is temporarily unavailable. Please try again later.'
+            ? s.paymentUnavailable
             : e.isNetwork
                 ? e.message
-                : 'Payment error: ${e.message}';
+                : s.paymentError(e.message);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment error: $e')),
+          SnackBar(content: Text(s.somethingWentWrong)),
         );
       }
     }
@@ -374,7 +375,7 @@ class _BillScreenState extends State<BillScreen>
                     Expanded(
                       child: Text(
                         '${s.dayPair ?? ""} ${s.timeBlock ?? ""}'
-                        '${s.coach != null ? " \u2014 Coach: ${s.coach}" : ""}',
+                        '${s.coach != null ? " \u2022 ${S.of(context).coachNamed(s.coach!)}" : ""}',
                         style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                     ),

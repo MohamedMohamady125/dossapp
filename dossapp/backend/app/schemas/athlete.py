@@ -44,6 +44,11 @@ class AthleteDetail(AthleteProfile):
     # Ready-to-send WhatsApp text and the number to send it to (digits only)
     credentials_message: Optional[str] = None
     whatsapp_phone: Optional[str] = None
+    # For the staff sign-ups page: when the login was created, when the
+    # parent last opened the app, and whether a phone gets their pushes
+    invited_at: Optional[str] = None
+    last_login_at: Optional[str] = None
+    has_push: bool = False
     is_paid: bool = False
 
 

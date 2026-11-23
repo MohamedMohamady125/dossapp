@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import '../utils/app_error.dart';
 import 'app_refresh.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -29,24 +31,33 @@ class ApiService {
     };
   }
 
-  /// Wraps network exceptions into user-friendly ApiException.
+  /// True while the last request could not reach the server. The app shows
+  /// a small "no internet" strip instead of failing silently.
+  static final ValueNotifier<bool> offline = ValueNotifier(false);
+
+  /// Wraps network failures into an [ApiException] the screens can show.
   static Future<http.Response> _safeRequest(
     Future<http.Response> Function() request, {
     Duration timeout = _timeout,
   }) async {
     try {
-      return await request().timeout(timeout);
-    } on SocketException {
-      throw ApiException(0, 'No internet connection. Check your network and try again.');
+      final resp = await request().timeout(timeout);
+      offline.value = false;
+      return resp;
     } on TimeoutException {
-      throw ApiException(0, 'Server is taking too long to respond. Please try again.');
+      throw ApiException(0, null).._timedOut = true;
+    } on SocketException {
+      offline.value = true;
+      throw ApiException(0, null);
     } on HttpException {
-      throw ApiException(0, 'Could not connect to the server. Please try again later.');
+      offline.value = true;
+      throw ApiException(0, null);
     } on HandshakeException {
-      throw ApiException(0, 'Secure connection failed. Please try again later.');
+      throw ApiException(0, null);
     } on http.ClientException {
       // What the http package throws when the connection drops mid-request
-      throw ApiException(0, 'Connection lost. Check your network and try again.');
+      offline.value = true;
+      throw ApiException(0, null);
     }
   }
 
@@ -177,7 +188,11 @@ class ApiService {
           return true;
         }
       }
-      if (resp.statusCode == 401 || resp.statusCode == 403) {
+      // The session ends ONLY when our own server answers, in JSON, that
+      // this login is no longer valid. A gateway error page, a server crash,
+      // a timeout or a storage hiccup never signs anyone out.
+      final refusal = (resp.statusCode == 401 || resp.statusCode == 403) ? _safeJsonDecode(resp.body) : null;
+      if (refusal != null && refusal['detail'] is String) {
         _accessToken = null;
         _refreshToken = null;
         await _clearSessionKeys();
@@ -235,12 +250,18 @@ class ApiService {
 
   // ── Customer Auth ──
 
-  static String _extractError(http.Response resp, String fallback) {
+  /// What the server said for the user, or null when it said nothing a
+  /// person can read (the app then uses its own words for that failure).
+  /// FastAPI sends either a sentence or, for a badly shaped request, a list
+  /// of field problems; only a sentence is passed on.
+  static String? _extractError(http.Response resp, [String? unused]) {
     try {
-      return jsonDecode(resp.body)['detail'] ?? fallback;
+      final detail = jsonDecode(resp.body)['detail'];
+      if (detail is String && detail.trim().isNotEmpty) return detail;
     } catch (_) {
-      return fallback;
+      // Not JSON (a gateway page, an empty body)
     }
+    return null;
   }
 
   static Future<Map<String, dynamic>> customerLogin(String code, String password) async {
@@ -426,13 +447,13 @@ class ApiService {
 
   static Future<AthleteProfile> getProfile() async {
     final resp = await _get('/me/');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load profile');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return AthleteProfile.fromJson(jsonDecode(resp.body));
   }
 
   static Future<Bill> getBill() async {
     final resp = await _get('/me/bill');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load bill');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return Bill.fromJson(jsonDecode(resp.body));
   }
 
@@ -446,14 +467,14 @@ class ApiService {
 
   static Future<List<Receipt>> getReceipts() async {
     final resp = await _get('/me/receipts');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load receipts');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     final list = jsonDecode(resp.body) as List;
     return list.map((r) => Receipt.fromJson(r)).toList();
   }
 
   static Future<void> resendReceipt(int receiptId) async {
     final resp = await _post('/me/receipts/$receiptId/resend', {});
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Resend failed');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
   }
 
   static String receiptPdfUrl(int receiptId) {
@@ -479,7 +500,7 @@ class ApiService {
       }
     }
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, 'Failed to download PDF');
+      throw ApiException(resp.statusCode, _extractError(resp));
     }
     return resp.bodyBytes;
   }
@@ -518,7 +539,7 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getNotifications({int limit = 50, int offset = 0}) async {
     final resp = await _get('/me/notifications?limit=$limit&offset=$offset');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load notifications');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -530,19 +551,19 @@ class ApiService {
 
   static Future<void> markNotificationRead(int id) async {
     final resp = await _post('/me/notifications/$id/read', {});
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to mark read');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
   }
 
   static Future<void> markAllNotificationsRead() async {
     final resp = await _post('/me/notifications/read-all', {});
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to mark all read');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
   }
 
   // ── Reinstatement ──
 
   static Future<ReinstatementStatus> getReinstatementStatus() async {
     final resp = await _get('/me/reinstatement');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load reinstatement status');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return ReinstatementStatus.fromJson(jsonDecode(resp.body));
   }
 
@@ -557,7 +578,7 @@ class ApiService {
 
   static Future<List<MonthlyReport>> getMyReports() async {
     final resp = await _get('/me/reports');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load reports');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).map((r) => MonthlyReport.fromJson(r)).toList();
   }
 
@@ -682,7 +703,7 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getBranches() async {
     final resp = await _get('/branches');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load branches');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -690,14 +711,14 @@ class ApiService {
     var path = '/branches/$branchId/athletes';
     if (search != null && search.isNotEmpty) path += '?search=${Uri.encodeComponent(search)}';
     final resp = await _get(path);
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load athletes');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     final list = jsonDecode(resp.body) as List;
     return list.map((a) => AthleteDetail.fromJson(a)).toList();
   }
 
   static Future<AthleteDetail> getAthleteDetail(int branchId, int athleteNumber) async {
     final resp = await _get('/branches/$branchId/athletes/$athleteNumber');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load athlete');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return AthleteDetail.fromJson(jsonDecode(resp.body));
   }
 
@@ -759,13 +780,13 @@ class ApiService {
     if (params.isNotEmpty) path += '?${params.join('&')}';
 
     final resp = await _get(path);
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load payments');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
   static Future<void> adminResendReceipt(int receiptId) async {
     final resp = await _post('/admin/receipts/$receiptId/resend', {});
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Resend failed');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
   }
 
   static Future<Map<String, dynamic>> getAnalytics({
@@ -775,19 +796,19 @@ class ApiService {
     if (branchId != null) path += '&branch_id=$branchId';
     if (period != null) path += '&period=$period';
     final resp = await _get(path);
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load analytics');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return jsonDecode(resp.body);
   }
 
   static Future<Map<String, dynamic>> getExcelHealth() async {
     final resp = await _get('/admin/health/excel');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load health');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return jsonDecode(resp.body);
   }
 
   static Future<List<Map<String, dynamic>>> getManageBranches() async {
     final resp = await _get('/admin/branches/manage');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load branches');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -830,7 +851,7 @@ class ApiService {
     var path = '/admin/reinstatement-requests';
     if (statusFilter != null) path += '?status_filter=$statusFilter';
     final resp = await _get(path);
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load requests');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -869,7 +890,7 @@ class ApiService {
       }
     }
     if (resp.statusCode != 200) {
-      throw ApiException(resp.statusCode, 'Failed to download PDF');
+      throw ApiException(resp.statusCode, _extractError(resp));
     }
     return resp.bodyBytes;
   }
@@ -892,7 +913,7 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getBranchAdmins() async {
     final resp = await _get('/admin/branch-admins');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load branch admins');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -915,14 +936,14 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getMissingPrices() async {
     final resp = await _get('/admin/price-catalog/missing');
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load missing prices');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
   static Future<List<Map<String, dynamic>>> getPriceCatalog({int? branchId}) async {
     final path = branchId != null ? '/admin/price-catalog?branch_id=$branchId' : '/admin/price-catalog';
     final resp = await _get(path);
-    if (resp.statusCode != 200) throw ApiException(resp.statusCode, 'Failed to load price catalog');
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
@@ -965,16 +986,37 @@ class ApiService {
   }
 }
 
-class ApiException implements Exception {
+class ApiException implements Exception, HasAppError {
   final int statusCode;
-  final String message;
-  ApiException(this.statusCode, this.message);
+  final String? _serverMessage;
+
+  /// [message] is what the server said for the user, or null when the app
+  /// should use its own words for this kind of failure.
+  ApiException(this.statusCode, String? message) : _serverMessage = message;
 
   bool get isNetwork => statusCode == 0;
   bool get isAuth => statusCode == 401 || statusCode == 403;
   bool get isServer => statusCode >= 500;
   bool get isNotFound => statusCode == 404;
   bool get isSuspended => statusCode == 423;
+
+  @override
+  AppError get appError {
+    // The network layer raises status 0 for both "offline" and "too slow"
+    if (statusCode == 0) {
+      // A screen raised this itself, with its own sentence
+      if (_serverMessage != null) return AppError(ErrorKind.rejected, _serverMessage);
+      return AppError(_timedOut ? ErrorKind.timeout : ErrorKind.offline);
+    }
+    final kind = AppError.kindForStatus(statusCode);
+    // A broken server's own text is never shown; everything else is
+    return AppError(kind, kind == ErrorKind.server || kind == ErrorKind.tooMany ? null : _serverMessage);
+  }
+
+  bool _timedOut = false;
+
+  /// Always safe to show: resolved in the app's current language.
+  String get message => appError.message;
 
   @override
   String toString() => message;

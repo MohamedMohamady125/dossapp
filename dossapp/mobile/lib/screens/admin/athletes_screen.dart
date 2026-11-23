@@ -1,5 +1,9 @@
+import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
+import '../../services/locale_provider.dart';
+import '../../utils/translations_staff.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,12 +25,14 @@ class AthletesScreen extends StatefulWidget {
 }
 
 class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
+  SS get t => SS.read(context);
+
   @override
   Future<void> silentReload() => _load();
 
   List<AthleteDetail>? _athletes;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   String _search = '';
   // Staff work on this month's swimmers; the full historical roster is one
   // tap away (Pareto, Hick's Law: a default plus one alternative).
@@ -57,7 +63,7 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
     try {
       _athletes = await ApiService.getBranchAthletes(widget.branchId);
     } catch (e) {
-      if (isInitial) _error = e.toString();
+      if (isInitial) _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -96,6 +102,7 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<LocaleProvider>(); // rebuild when the language changes
     if (_loading) return const SkeletonList(count: 6, hasAvatar: true);
     if (_error != null) {
       return ErrorState(message: _error!, onRetry: _load);
@@ -110,8 +117,8 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Search by name or number',
+            decoration: InputDecoration(
+              hintText: t.searchByNameOrNumber,
               prefixIcon: Icon(Icons.search),
               isDense: true,
             ),
@@ -125,28 +132,28 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
               children: [
                 Expanded(child: StatTile(
                   icon: Icons.pool_rounded, color: AppColors.primary,
-                  value: formatNumber(enrolledCount), label: 'This month',
+                  value: formatNumber(enrolledCount), label: t.thisMonth,
                   selected: _status == null && _enrolledOnly,
                   onTap: () => setState(() { _status = null; _enrolledOnly = true; }),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: StatTile(
                   icon: Icons.check_circle_rounded, color: AppColors.success,
-                  value: formatNumber(all.where((a) => a.isPaid && _isEnrolled(a)).length), label: 'Paid',
+                  value: formatNumber(all.where((a) => a.isPaid && _isEnrolled(a)).length), label: t.paid,
                   selected: _status == 'paid',
                   onTap: () => setState(() => _status = _status == 'paid' ? null : 'paid'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: StatTile(
                   icon: Icons.account_balance_wallet_rounded, color: AppColors.accent,
-                  value: formatNumber(all.where(_unpaid).length), label: 'Unpaid',
+                  value: formatNumber(all.where(_unpaid).length), label: t.notPaid,
                   selected: _status == 'unpaid',
                   onTap: () => setState(() => _status = _status == 'unpaid' ? null : 'unpaid'),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: StatTile(
                   icon: Icons.sell_rounded, color: AppColors.warningDark,
-                  value: formatNumber(all.where(_noPrice).length), label: 'No price',
+                  value: formatNumber(all.where(_noPrice).length), label: t.noPrice,
                   selected: _status == 'noprice',
                   onTap: () => setState(() => _status = _status == 'noprice' ? null : 'noprice'),
                 )),
@@ -161,8 +168,8 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
               child: SegmentedButton<bool>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: true, label: Text('This month (${formatNumber(enrolledCount)})')),
-                  ButtonSegment(value: false, label: Text('Everyone (${formatNumber(all.length)})')),
+                  ButtonSegment(value: true, label: Text(t.thisMonthCount(enrolledCount))),
+                  ButtonSegment(value: false, label: Text(t.everyoneCount(all.length))),
                 ],
                 selected: {_enrolledOnly},
                 onSelectionChanged: (v) => setState(() => _enrolledOnly = v.first),
@@ -190,10 +197,10 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
                         height: MediaQuery.of(context).size.height * 0.5,
                         child: EmptyState(
                           icon: Icons.search_off_rounded,
-                          title: 'No swimmers found',
+                          title: t.noSwimmersFound,
                           subtitle: _search.isNotEmpty
-                              ? 'No results for "$_search"'
-                              : 'This branch has no swimmers yet',
+                              ? t.nothingFoundFor(_search)
+                              : t.branchHasNoSwimmers,
                         ),
                       ),
                     ],
@@ -221,17 +228,17 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
     final subtitle = [
       '#${a.athleteNumber}',
       if (classLine.isNotEmpty) classLine,
-      if (!_isEnrolled(a)) 'Not enrolled this month',
+      if (!_isEnrolled(a)) t.notInClassThisMonth,
     ].join(' \u2022 ');
 
     // Exactly one status, by priority: paid, then a missing price, then what is owed.
     final Widget? status;
     if (a.isPaid) {
-      status = const StatusPill('Paid', AppColors.success, icon: Icons.check_rounded);
+      status = StatusPill(t.paid, AppColors.success, icon: Icons.check_rounded);
     } else if (noPrice) {
-      status = const StatusPill('No price', AppColors.warningDark);
+      status = StatusPill(t.noPrice, AppColors.warningDark);
     } else if (a.bill != null && _isEnrolled(a)) {
-      status = Text(formatMoney(a.bill), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary));
+      status = Text(t.money(a.bill), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary));
     } else {
       status = null;
     }
@@ -251,26 +258,30 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
     );
   }
 
-  void _showAthleteDetail(AthleteDetail a) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.75,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (ctx, scroll) => Container(
-          decoration: const BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: _AthleteDetailSheet(athlete: a, onProvision: _load),
+  void _showAthleteDetail(AthleteDetail a) => showAthleteDetailSheet(context, a, _load);
+}
+
+/// The swimmer card, shared by the swimmers list and the app accounts page
+/// so both open the same thing (Jakob's Law).
+void showAthleteDetailSheet(BuildContext context, AthleteDetail a, VoidCallback onChanged) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      expand: false,
+      builder: (ctx, scroll) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        child: _AthleteDetailSheet(athlete: a, onProvision: onChanged),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _AthleteDetailSheet extends StatefulWidget {
@@ -284,6 +295,8 @@ class _AthleteDetailSheet extends StatefulWidget {
 }
 
 class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
+  SS get t => SS.read(context);
+
   bool _markingPaid = false;
   bool _markedPaid = false;
   String? _receiptNumber;
@@ -292,7 +305,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
     final method = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('How did they pay?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        title: Text(t.howDidTheyPay, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         content: Row(
           children: [
             Expanded(
@@ -306,12 +319,12 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.money_rounded, size: 36, color: AppColors.success),
                       SizedBox(height: 8),
-                      Text('Cash', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.success)),
+                      Text(t.cash, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.success)),
                     ],
                   ),
                 ),
@@ -329,12 +342,12 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                   ),
-                  child: const Column(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.credit_card_rounded, size: 36, color: AppColors.primary),
                       SizedBox(height: 8),
-                      Text('Card', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                      Text(t.card, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.primary)),
                     ],
                   ),
                 ),
@@ -362,7 +375,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
     if (mounted) setState(() => _markingPaid = false);
@@ -373,19 +386,19 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
     final amount = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Set Bill Amount', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        title: Text(t.setAmountTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Amount (EGP)',
+          decoration: InputDecoration(
+            labelText: t.amountEgp,
             prefixIcon: Icon(Icons.payments_outlined, size: 20),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t.cancel)),
           FilledButton(
             onPressed: () {
               final val = double.tryParse(controller.text.trim());
@@ -393,7 +406,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                 Navigator.pop(ctx, val);
               }
             },
-            child: const Text('Save'),
+            child: Text(t.save),
           ),
         ],
       ),
@@ -405,12 +418,12 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           Navigator.pop(context); // Close detail sheet
           widget.onProvision(); // Reload list
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Bill set to ${amount.toStringAsFixed(0)} EGP')),
+            SnackBar(content: Text(t.amountSetTo(amount))),
           );
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
         }
       }
     }
@@ -418,6 +431,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<LocaleProvider>(); // rebuild when the language changes
     final athlete = widget.athlete;
     return ListView(
       padding: EdgeInsets.zero,
@@ -457,7 +471,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     if (athlete.accountCompleted || athlete.hasAccount) ...[
                       const SizedBox(height: 6),
                       StatusPill(
-                        athlete.accountCompleted ? 'Uses the app' : 'Invited to the app',
+                        athlete.accountCompleted ? t.usesTheApp : t.invitedToApp,
                         athlete.accountCompleted ? AppColors.primary : AppColors.textSecondary,
                         icon: Icons.phone_iphone_rounded,
                       ),
@@ -498,31 +512,31 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
         ],
 
         // ── Class ──
-        _group('Class', Icons.pool_rounded, AppColors.primary, [
-          _infoRow('Level', athlete.level),
-          if (athlete.type != athlete.level) _infoRow('Type', athlete.type),
-          _infoRow('Days', athlete.days),
-          _infoRow('Sessions', athlete.sessions),
-          _infoRow('Membership', athlete.segment),
+        _group(t.classTitle, Icons.pool_rounded, AppColors.primary, [
+          _infoRow(t.level, athlete.level),
+          if (athlete.type != athlete.level) _infoRow(t.classType, athlete.type),
+          _infoRow(t.days, athlete.days),
+          _infoRow(t.sessions, athlete.sessions),
+          _infoRow(t.membership, athlete.segment),
           for (final slot in athlete.schedule)
             _infoRow(
-              slot.dayPair ?? 'Schedule',
-              [if (slot.timeBlock != null) slot.timeBlock!, if (slot.coach != null) 'Coach ${slot.coach}'].join(' \u2022 '),
+              slot.dayPair ?? t.schedule,
+              [if (slot.timeBlock != null) slot.timeBlock!, if (slot.coach != null) t.coachNamed(slot.coach!)].join(' \u2022 '),
             ),
         ]),
 
         // ── Contact ──
-        _group('Contact', Icons.phone_rounded, AppColors.primary, [
-          _infoRow('Phone 1', athlete.phone1),
-          _infoRow('Phone 2', athlete.phone2),
+        _group(t.contact, Icons.phone_rounded, AppColors.primary, [
+          _infoRow(t.phone1, athlete.phone1),
+          _infoRow(t.phone2, athlete.phone2),
         ]),
 
         // ── Personal ──
-        _group('Personal', Icons.person_rounded, AppColors.primary, [
-          _infoRow('Age', athlete.age?.toStringAsFixed(1)),
-          _infoRow('Date of birth', athlete.dateOfBirth),
-          _infoRow('Gender', athlete.gender == 'M' ? 'Male' : athlete.gender == 'F' ? 'Female' : athlete.gender),
-          _infoRow('Comment', athlete.comment),
+        _group(t.aboutSwimmer, Icons.person_rounded, AppColors.primary, [
+          _infoRow(t.age, athlete.age?.toStringAsFixed(1)),
+          _infoRow(t.birthDate, athlete.dateOfBirth),
+          _infoRow('Gender', t.genderOf(athlete.gender)),
+          _infoRow(t.note, athlete.comment),
         ]),
 
         // ── Secondary actions, outlined so they do not compete ──
@@ -531,7 +545,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: OutlinedButton.icon(
             icon: const Icon(Icons.assignment_outlined, size: 18),
-            label: const Text('Monthly report'),
+            label: Text(t.monthlyReport),
             style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             onPressed: () => Navigator.push(
               context,
@@ -572,13 +586,13 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  amount != null ? 'Paid ${formatMoney(amount)}' : 'Paid',
+                  amount != null ? t.paidAmount(amount) : t.paid,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.textPrimary),
                 ),
                 Text(
                   [
-                    if (receipt != null) 'Receipt $receipt',
-                    if (athlete.bill != null) 'Price ${formatMoney(athlete.bill)}',
+                    if (receipt != null) t.receiptNo(receipt),
+                    if (athlete.bill != null) t.priceIs(athlete.bill),
                   ].join(' \u2022 '),
                   style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                 ),
@@ -607,10 +621,10 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('No price for this class yet', style: TextStyle(color: AppColors.warningDark, fontSize: 15, fontWeight: FontWeight.w700)),
+          Text(t.noPriceForClass, style: const TextStyle(color: AppColors.warningDark, fontSize: 15, fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
           Text(
-            athlete.billMissing ?? 'Add it on the Pricing tab, or set an amount for this swimmer only.',
+            athlete.billMissing ?? t.addPriceHelp,
             style: const TextStyle(color: AppColors.warningDark, fontSize: 13),
           ),
           const SizedBox(height: 12),
@@ -620,7 +634,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
               minimumSize: const Size(double.infinity, 44),
               backgroundColor: Colors.white,
             ),
-            child: const Text('Set amount for this swimmer'),
+            child: Text(t.setAmountForSwimmer),
           ),
         ],
       ),
@@ -721,6 +735,8 @@ class _ProvisionButton extends StatefulWidget {
 }
 
 class _ProvisionButtonState extends State<_ProvisionButton> {
+  SS get t => SS.read(context);
+
   bool _loading = false;
   String? _code;
   String? _pass;
@@ -757,13 +773,13 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
           _pass = result['temp_password'] ?? '';
           _message = result['credentials_message'] ?? _message;
           _waPhone = result['whatsapp_phone'] ?? _waPhone;
-          _justDone = isReset ? 'New password created' : 'Account created';
+          _justDone = isReset ? t.newPasswordCreated : t.loginCreated;
         });
         widget.onDone();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
     if (mounted) setState(() => _loading = false);
@@ -771,16 +787,12 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
 
   /// The text comes from the server so the academy can reword it without an
   /// app update; the fallback only covers an older server.
-  String get _whatsAppText =>
-      _message ??
-      'Aquathletic Academy\n'
-          'Your login details:\n'
-          'Login code: $_code\n'
-          'Password: $_pass';
+  String get _whatsAppText => _message ?? t.whatsAppFallback(_code ?? '', _pass ?? '');
 
   Future<void> _sendViaWhatsApp() async {
     if (_code == null || _pass == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final notOpened = t.whatsAppNotOpened;
     // WhatsApp wants the country code and digits only
     final phone = _waPhone ?? (widget.phone ?? '').replaceAll(RegExp(r'[^\d]'), '');
     final text = Uri.encodeComponent(_whatsAppText);
@@ -789,12 +801,13 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
       final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
       if (!opened) throw Exception('not opened');
     } catch (_) {
-      messenger.showSnackBar(const SnackBar(content: Text('Could not open WhatsApp on this phone')));
+      messenger.showSnackBar(SnackBar(content: Text(notOpened)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    context.watch<LocaleProvider>(); // rebuild when the language changes
     if (_loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
@@ -814,7 +827,7 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
     if (!hasAccount) {
       return OutlinedButton.icon(
         icon: const Icon(Icons.person_add_outlined, size: 18),
-        label: const Text('Create app account'),
+        label: Text(t.createLogin),
         onPressed: _provision,
         style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
       );
@@ -841,7 +854,7 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  _justDone ?? 'App login details',
+                  _justDone ?? t.appLoginDetails,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -852,20 +865,20 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Shown here until the parent signs in and sets their own password.',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+          Text(
+            t.loginDetailsHelp,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
           ),
           const SizedBox(height: 12),
-          if (hasCode) _CopyableField(label: 'Login Code', value: _code!),
+          if (hasCode) _CopyableField(label: t.loginCode, value: _code!),
           if (hasPassword) ...[
             const SizedBox(height: 12),
-            _CopyableField(label: 'Temp Password', value: _pass!),
+            _CopyableField(label: t.firstPassword, value: _pass!),
             const SizedBox(height: 14),
             // The one standout action on the card (Von Restorff)
             FilledButton.icon(
               icon: const Icon(Icons.send_rounded, size: 18),
-              label: const Text('Send through WhatsApp'),
+              label: Text(t.sendOnWhatsApp),
               onPressed: _sendViaWhatsApp,
               style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             ),
@@ -875,11 +888,11 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.copy_all, size: 18),
-                    label: const Text('Copy'),
+                    label: Text(t.copy),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: _whatsAppText));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Login details copied')),
+                        SnackBar(content: Text(t.loginDetailsCopied)),
                       );
                     },
                     style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
@@ -889,7 +902,7 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('New password'),
+                    label: Text(t.newPassword),
                     onPressed: _provision,
                     style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44)),
                   ),
@@ -898,14 +911,14 @@ class _ProvisionButtonState extends State<_ProvisionButton> {
             ),
           ] else ...[
             const SizedBox(height: 10),
-            const Text(
-              'This password was created before passwords were kept here. Create a new one to see it and send it.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
+            Text(
+              t.oldPasswordNotSaved,
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
               icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Create new password'),
+              label: Text(t.createNewPassword),
               onPressed: _provision,
               style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
             ),
@@ -956,11 +969,11 @@ class _CopyableField extends StatelessWidget {
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.copy_rounded, size: 20, color: AppColors.primary),
-                  tooltip: 'Copy',
+                  tooltip: SS.read(context).copy,
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: value));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('$label copied'), duration: const Duration(seconds: 1)),
+                      SnackBar(content: Text(SS.read(context).copied(label)), duration: const Duration(seconds: 1)),
                     );
                   },
                 ),

@@ -1,8 +1,11 @@
+import '../../utils/app_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/language_toggle.dart';
+import '../../utils/translations.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
@@ -65,7 +68,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _startResendTimer();
       if (mounted) setState(() => _step = 1);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -79,7 +82,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _startResendTimer();
       _codeController.clear();
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -88,7 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _verifyCode() async {
     final code = _codeController.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Please enter the 6-digit code');
+      setState(() => _error = S.read(context).enterSixDigitCode);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -104,7 +107,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
       setState(() => _step = 2);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -118,7 +121,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         _verifiedEmail, _verifiedCode, _passwordController.text,
       );
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -147,12 +150,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   String get _strengthLabel {
+    final s = S.of(context);
     return switch (_passwordStrength) {
-      1 => 'Weak',
-      2 => 'Fair',
-      3 => 'Good',
-      4 => 'Strong',
-      5 => 'Very Strong',
+      1 => s.weak,
+      2 => s.fair,
+      3 => s.good,
+      4 => s.strong,
+      5 => s.veryStrong,
       _ => '',
     };
   }
@@ -196,7 +200,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildHeader() {
-    final titles = ['Set Up Your Email', 'Verify Your Email', 'Create Password'];
+    final s = S.of(context);
+    final titles = [s.setUpEmailTitle, s.checkEmailTitle, s.choosePasswordTitle];
     final screenH = MediaQuery.of(context).size.height;
     final headerH = (screenH * 0.22).clamp(150.0, 200.0);
     return ClipPath(
@@ -224,7 +229,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 const SizedBox(width: 4),
                 Image.asset('assets/images/logo.png', height: 36, width: 36),
                 const SizedBox(width: 10),
-                Flexible(
+                Expanded(
                   child: Text(
                     titles[_step],
                     style: GoogleFonts.barlowCondensed(
@@ -234,6 +239,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
+                const LanguageToggle(),
               ],
             ),
           ),
@@ -249,7 +256,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         final isCurrent = i == _step;
         return Expanded(
           child: Container(
-            margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
+            margin: EdgeInsetsDirectional.only(end: i < 2 ? 8 : 0),
             height: 4,
             decoration: BoxDecoration(
               color: isActive ? AppColors.primary : AppColors.border,
@@ -294,7 +301,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Enter your email address to secure your account. We\'ll send you a verification code.',
+          S.of(context).onboardingEmailIntro,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -304,14 +311,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           keyboardType: TextInputType.emailAddress,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            labelText: 'Email Address',
-            prefixIcon: Icon(Icons.email_outlined, size: 20),
+          // An email is always typed left to right, in either language
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: S.of(context).email,
+            prefixIcon: const Icon(Icons.email_outlined, size: 20),
             hintText: 'you@example.com',
           ),
           validator: (v) {
-            if (v == null || v.trim().isEmpty) return 'Email is required';
-            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v.trim())) return 'Enter a valid email';
+            final s = S.read(context);
+            if (v == null || v.trim().isEmpty) return s.emailRequired;
+            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(v.trim())) return s.invalidEmail;
             return null;
           },
           onFieldSubmitted: (_) => _sendCode(),
@@ -337,7 +347,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'We sent a 6-digit code to',
+          S.of(context).codeSentToLabel,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -369,13 +379,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         Center(
           child: _resendSeconds > 0
               ? Text(
-                  'Resend code in ${_resendSeconds}s',
+                  S.of(context).resendCodeIn(_resendSeconds),
                   style: GoogleFonts.barlow(fontSize: 13, color: AppColors.textMuted),
                 )
               : TextButton(
                   onPressed: _loading ? null : _resendCode,
                   child: Text(
-                    'Resend Code',
+                    S.of(context).resendCode,
                     style: GoogleFonts.barlow(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
                   ),
                 ),
@@ -401,7 +411,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Create a secure password for your account.',
+          S.of(context).onboardingPasswordIntro,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -412,7 +422,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           autofocus: true,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'New Password',
+            labelText: S.of(context).newPassword,
             prefixIcon: const Icon(Icons.lock_outline, size: 20),
             suffixIcon: IconButton(
               icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
@@ -420,7 +430,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           validator: (v) {
-            if (v == null || v.length < 6) return 'Password must be at least 6 characters';
+            if (v == null || v.length < 6) return S.read(context).passwordTooShort;
             return null;
           },
         ),
@@ -445,7 +455,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Use 6+ characters with uppercase, numbers & symbols',
+            S.of(context).passwordTip,
             style: GoogleFonts.barlow(fontSize: 11, color: AppColors.textMuted),
           ),
         ],
@@ -454,7 +464,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           controller: _confirmController,
           obscureText: _obscureConfirm,
           decoration: InputDecoration(
-            labelText: 'Confirm Password',
+            labelText: S.of(context).confirmPassword,
             prefixIcon: const Icon(Icons.lock_outline, size: 20),
             suffixIcon: IconButton(
               icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
@@ -462,7 +472,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           validator: (v) {
-            if (v != _passwordController.text) return 'Passwords do not match';
+            if (v != _passwordController.text) return S.read(context).passwordsMustMatch;
             return null;
           },
         ),
@@ -493,7 +503,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildActionButton() {
-    final labels = ['Send Verification Code', 'Verify Code', 'Complete Setup'];
+    final s = S.of(context);
+    final labels = [s.sendCode, s.checkCode, s.finishSetup];
     final actions = [_sendCode, _verifyCode, _setPassword];
 
     // Skip verify button on step 1 since auto-verify on 6 digits

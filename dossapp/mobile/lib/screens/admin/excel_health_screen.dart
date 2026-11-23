@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
@@ -16,7 +16,7 @@ class ExcelHealthScreen extends StatefulWidget {
 class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
   Map<String, dynamic>? _health;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -29,7 +29,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
     try {
       _health = await ApiService.getExcelHealth();
     } catch (e) {
-      _error = e.toString();
+      _error = e;
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -37,6 +37,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     if (_loading) return const SkeletonList(count: 4);
     if (_error != null) {
       return ErrorState(message: _error!, onRetry: _load);
@@ -66,10 +67,10 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                   ? Icons.check_circle_rounded
                   : Icons.warning_rounded;
           final statusLabel = !loaded
-              ? 'Failed'
+              ? t.sheetNotLoaded
               : errors.isEmpty
-                  ? 'Healthy'
-                  : '${errors.length} Warning${errors.length > 1 ? 's' : ''}';
+                  ? t.sheetOk
+                  : t.sheetProblems(errors.length);
 
           return AnimatedListItem(
             index: i,
@@ -106,7 +107,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                data['branch_name'] ?? 'Branch ${entry.key}',
+                                data['branch_name'] ?? t.branchNumber(entry.key),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                               ),
                               const SizedBox(height: 2),
@@ -124,7 +125,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '${formatNumber(data['athlete_count'] ?? 0)} athletes',
+                            t.swimmersCount((data['athlete_count'] as num?)?.toInt() ?? 0),
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                           ),
                         ),
@@ -139,9 +140,9 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (data['last_refreshed'] != null)
-                          _detailRow(Icons.refresh_rounded, 'App last read the sheet', formatWhen(data['last_refreshed'])),
+                          _detailRow(Icons.refresh_rounded, t.appLastReadSheet, t.when(data['last_refreshed'])),
                         if (data['last_modified'] != null)
-                          _detailRow(Icons.edit_calendar_rounded, 'Sheet last edited', formatWhen(data['last_modified'])),
+                          _detailRow(Icons.edit_calendar_rounded, t.sheetLastEdited, t.when(data['last_modified'])),
 
                         if (errors.isNotEmpty) ...[
                           const SizedBox(height: 12),
@@ -160,7 +161,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
                                     const Icon(Icons.report_problem_rounded, size: 16, color: AppColors.error),
                                     const SizedBox(width: 6),
                                     Text(
-                                      'Errors',
+                                      t.problems,
                                       style: const TextStyle(
                                         color: AppColors.error,
                                         fontWeight: FontWeight.w700,
@@ -215,7 +216,7 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
             child: Text(
               value,
               style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.end,
             ),
           ),
         ],

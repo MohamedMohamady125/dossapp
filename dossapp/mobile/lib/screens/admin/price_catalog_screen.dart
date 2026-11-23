@@ -1,8 +1,9 @@
+import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/ui_kit.dart';
@@ -24,7 +25,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   List<Map<String, dynamic>>? _missing;
   int? _selectedBranchId;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   late TabController _tabController;
 
   @override
@@ -67,7 +68,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e;
           _loading = false;
         });
       }
@@ -99,7 +100,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e;
           _loading = false;
         });
       }
@@ -134,6 +135,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            final t = SS.of(ctx);
             return Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
@@ -157,7 +159,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                       children: [
                         Expanded(
                           child: Text(
-                            isEdit ? 'Edit price' : 'Add price',
+                            isEdit ? t.editPrice : t.addPrice,
                             style: GoogleFonts.barlowCondensed(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -184,7 +186,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                             DropdownButtonFormField<int>(
                               initialValue: formBranchId,
                               decoration:
-                                  const InputDecoration(labelText: 'Branch'),
+                                  InputDecoration(labelText: t.branch),
                               items: _branches!
                                   .map((b) => DropdownMenuItem(
                                         value: b['id'] as int,
@@ -193,35 +195,34 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                                   .toList(),
                               onChanged: (v) =>
                                   setSheetState(() => formBranchId = v),
-                              validator: (v) => v == null ? 'Required' : null,
+                              validator: (v) => v == null ? t.required : null,
                             ),
                             const SizedBox(height: 16),
                           ],
                           TextFormField(
                             controller: programController,
-                            decoration: const InputDecoration(
-                              labelText: 'Program Name',
-                              hintText:
-                                  'e.g. Group Training, Private Training',
+                            decoration: InputDecoration(
+                              labelText: t.className,
+                              hintText: t.classNameHint,
                             ),
                             validator: (v) =>
                                 (v == null || v.trim().isEmpty)
-                                    ? 'Required'
+                                    ? t.required
                                     : null,
                           ),
                           const SizedBox(height: 16),
                           DropdownButtonFormField<String>(
                             initialValue: formSegment,
-                            decoration: const InputDecoration(
-                                labelText: 'Segment (optional)'),
-                            items: const [
+                            decoration: InputDecoration(
+                                labelText: t.membershipOptional),
+                            items: [
                               DropdownMenuItem(
                                   value: null,
-                                  child: Text('All (no segment)')),
+                                  child: Text(t.everyone)),
                               DropdownMenuItem(
-                                  value: 'Student', child: Text('Student')),
+                                  value: 'Student', child: Text(t.gemsStudents)),
                               DropdownMenuItem(
-                                  value: 'Outsider', child: Text('Outsider')),
+                                  value: 'Outsider', child: Text(t.outsiders)),
                             ],
                             onChanged: (v) =>
                                 setSheetState(() => formSegment = v),
@@ -229,27 +230,26 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: sessionsController,
-                            decoration: const InputDecoration(
-                              labelText: 'Sessions (optional)',
-                              hintText:
-                                  'e.g. 8 Sessions, 1 Session, 4 Weeks',
+                            decoration: InputDecoration(
+                              labelText: t.sessionsOptional,
+                              hintText: t.sessionsHint,
                             ),
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: priceController,
-                            decoration: const InputDecoration(
-                              labelText: 'Price (EGP)',
-                              hintText: 'e.g. 1500',
+                            decoration: InputDecoration(
+                              labelText: t.priceEgp,
+                              hintText: t.priceHint,
                             ),
                             keyboardType: TextInputType.number,
                             autofocus: prefillProgram != null,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
-                                return 'Required';
+                                return t.required;
                               }
                               if (double.tryParse(v.trim()) == null) {
-                                return 'Invalid number';
+                                return t.numbersOnly;
                               }
                               return null;
                             },
@@ -297,7 +297,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                                       if (ctx.mounted) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           SnackBar(
-                                              content: Text(e.toString())),
+                                              content: Text(AppError.messageFor(e))),
                                         );
                                       }
                                     }
@@ -309,7 +309,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white),
                                   )
-                                : Text(isEdit ? 'Save changes' : 'Save price'),
+                                : Text(isEdit ? t.save : t.savePrice),
                           ),
                           if (isEdit) ...[
                             const SizedBox(height: 8),
@@ -321,7 +321,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                                       _confirmDelete(entry);
                                     },
                               style: TextButton.styleFrom(foregroundColor: AppColors.error),
-                              child: const Text('Delete this price'),
+                              child: Text(t.deleteThisPrice),
                             ),
                           ],
                         ],
@@ -338,19 +338,20 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> entry) async {
+    final t = SS.read(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Price Entry'),
-        content: Text('Delete "${entry['program_name']}" pricing?'),
+        title: Text(t.deletePriceTitle),
+        content: Text(t.deletePriceQuestion('${entry['program_name']}')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(t.cancel)),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
+            child: Text(t.delete),
           ),
         ],
       ),
@@ -361,26 +362,28 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
         _loadEntries();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Price entry deleted')));
+              SnackBar(content: Text(t.priceDeleted)));
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.toString())));
+              .showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
         }
       }
     }
   }
 
   String _branchName(int branchId) {
-    if (_branches == null) return 'Branch $branchId';
+    final fallback = SS.of(context).branchNumber(branchId);
+    if (_branches == null) return fallback;
     final b = _branches!.firstWhere((b) => b['id'] == branchId,
-        orElse: () => {'name': 'Branch $branchId'});
+        orElse: () => {'name': fallback});
     return b['name'] as String;
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     final missingCount = _missing?.length ?? 0;
 
     return Scaffold(
@@ -398,8 +401,8 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
               indicatorWeight: 3,
               dividerColor: AppColors.border,
               tabs: [
-                const Tab(text: 'Price list'),
-                Tab(text: missingCount > 0 ? 'Needs a price ($missingCount)' : 'Needs a price'),
+                Tab(text: t.priceList),
+                Tab(text: t.needsPrice(missingCount)),
               ],
             ),
           ),
@@ -423,7 +426,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
           ? FloatingActionButton.extended(
               onPressed: () => _showEntryForm(),
               icon: const Icon(Icons.add),
-              label: const Text('Add price'),
+              label: Text(t.addPrice),
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
             )
@@ -436,16 +439,14 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   static int _sessionCount(Map<String, dynamic> e) =>
       int.tryParse(RegExp(r'\d+').firstMatch((e['sessions'] ?? '') as String)?.group(0) ?? '') ?? 0;
 
-  static String _segmentLabel(String? segment) =>
-      segment == null ? '' : segment == 'Student' ? 'Gems students' : segment == 'Outsider' ? 'Outsiders' : segment;
-
   Widget _buildCatalogTab() {
+    final t = SS.of(context);
     if (_entries == null || _entries!.isEmpty) {
       return EmptyState(
         icon: Icons.sell_outlined,
-        title: 'No prices yet',
-        subtitle: 'Prices come from the Sk. tab of the roster sheet. You can also add one here.',
-        actionLabel: 'Add price',
+        title: t.noPricesYet,
+        subtitle: t.pricesComeFromSheet,
+        actionLabel: t.addPrice,
         onAction: () => _showEntryForm(),
       );
     }
@@ -455,7 +456,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
     final groups = <String, List<Map<String, dynamic>>>{};
     for (final e in _entries!) {
       final branch = _selectedBranchId == null ? '${_branchName(e['branch_id'] as int)} \u2022 ' : '';
-      final segment = _segmentLabel(e['segment'] as String?);
+      final segment = t.segment(e['segment'] as String?);
       final key = '$branch${e['program_name']}${segment.isEmpty ? '' : ' \u2022 $segment'}';
       groups.putIfAbsent(key, () => []).add(e);
     }
@@ -508,12 +509,12 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                         children: [
                           Expanded(
                             child: Text(
-                              (entry['sessions'] as String?) ?? 'Monthly',
+                              (entry['sessions'] as String?) ?? t.monthly,
                               style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                             ),
                           ),
                           Text(
-                            '${formatNumber(double.tryParse(entry['price'] as String)?.round() ?? 0)} EGP',
+                            t.money(double.tryParse(entry['price'] as String)?.round() ?? 0),
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                           ),
                           const SizedBox(width: 4),
@@ -534,11 +535,12 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   // ── NEEDS A PRICE TAB ──
 
   Widget _buildMissingTab() {
+    final t = SS.of(context);
     if (_missing == null || _missing!.isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         icon: Icons.check_circle_outline_rounded,
-        title: 'Every swimmer has a price',
-        subtitle: 'Nothing to do here.',
+        title: t.everySwimmerHasPrice,
+        subtitle: t.nothingToDo,
       );
     }
 
@@ -562,8 +564,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '${formatNumber(swimmers)} swimmer${swimmers == 1 ? '' : 's'} can\'t be billed until '
-                    '${_missing!.length == 1 ? 'this price is' : 'these ${_missing!.length} prices are'} added.',
+                    t.swimmersNeedPrices(swimmers, _missing!.length),
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.warningDark, height: 1.35),
                   ),
                 ),
@@ -592,6 +593,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
   }
 
   Widget _missingRow(Map<String, dynamic> m) {
+    final t = SS.of(context);
     final programLabel = m['program_label'] as String;
     final athleteCount = m['athlete_count'] as int;
     final samples = (m['sample_athletes'] as List).cast<String>();
@@ -613,7 +615,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
         prefillSessions: sessions,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 12, 14),
         child: Row(
           children: [
             Container(
@@ -633,7 +635,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${samples.take(2).join(', ')}${athleteCount > 2 ? ' and ${athleteCount - 2} more' : ''}',
+                    '${samples.take(2).join(t.isArabic ? '، ' : ', ')}${athleteCount > 2 ? t.andMore(athleteCount - 2) : ''}',
                     style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -645,7 +647,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-              child: const Text('Add price', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
+              child: Text(t.addPrice, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white)),
             ),
           ],
         ),

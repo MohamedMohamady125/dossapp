@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -160,6 +161,21 @@ class AuthProvider extends ChangeNotifier {
   bool get isStaff => _role == 'admin' || _role == 'assistant';
 
   Future<void> init() async {
+    // Reading the keychain can fail right after the phone restarts (before
+    // the first unlock). That is not a logout: try again instead of showing
+    // the login screen to someone who is signed in.
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        await _restoreSession();
+        return;
+      } catch (e) {
+        debugPrint('Session restore failed (attempt ${attempt + 1}): $e');
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+  }
+
+  Future<void> _restoreSession() async {
     final hasToken = await ApiService.hasToken();
     if (hasToken) {
       final role = await _storage.read(key: 'role');

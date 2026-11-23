@@ -1,5 +1,6 @@
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/formatters.dart';
@@ -25,7 +26,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
   Map<String, dynamic>? _data;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   String _scope = 'branch';
   late AnimationController _animController;
 
@@ -50,11 +51,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       _error = null;
       if (!silent) _animController.forward(from: 0);
     } catch (e) {
-      if (!silent) _error = e.toString();
+      if (!silent) _error = e;
     }
     if (!mounted) return;
     setState(() => _loading = false);
   }
+
+  // Only read inside build (all the helpers below run during build)
+  SS get t => SS.of(context);
 
   Widget _animatedItem(int index, Widget child) {
     final delay = (index * 0.06).clamp(0.0, 0.6);
@@ -82,9 +86,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
               children: [
-                _scopeChip('Branch', 'branch'),
+                _scopeChip(t.thisBranch, 'branch'),
                 const SizedBox(width: 8),
-                _scopeChip('Academy-wide', 'academy'),
+                _scopeChip(t.allBranches, 'academy'),
               ],
             ),
           ),
@@ -136,21 +140,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     final isAcademy = _data!.containsKey('academy_totals');
 
     if (isAcademy) {
-      final t = _data!['academy_totals'];
+      final totals = _data!['academy_totals'];
       widgets.add(_heroCard(
-        title: 'Academy Overview',
+        title: t.allBranches,
         stats: [
-          _HeroStat('Athletes', formatNumber(t['total_athletes']), Icons.people),
-          _HeroStat('Collected', formatMoney(t['total_collected']), Icons.payments),
-          _HeroStat('Paid', formatNumber(t['paid_count']), Icons.check_circle),
+          _HeroStat(t.swimmersWord, formatNumber(totals['total_athletes']), Icons.people),
+          _HeroStat(t.collected, t.money(totals['total_collected']), Icons.payments),
+          _HeroStat(t.paid, formatNumber(totals['paid_count']), Icons.check_circle),
         ],
       ));
       final branches = _data!['branches'] as Map<String, dynamic>? ?? {};
       widgets.add(_branchComparisonCard(branches));
       widgets.add(const SizedBox(height: 8));
-      widgets.add(const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('All Branches Combined', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+      widgets.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(t.allBranchesTogether, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
       ));
       widgets.add(_aggregatedAnalytics(branches));
       return widgets;
@@ -163,11 +167,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
       // Hero stats
       widgets.add(_heroCard(
-        title: b['name'] ?? 'Branch',
+        title: b['name'] ?? t.branch,
         stats: [
-          _HeroStat('Enrolled', formatNumber(c['total_enrolled'] ?? b['total_athletes']), Icons.people),
-          _HeroStat('Collected', formatMoney(c['total_collected'] ?? 0), Icons.payments),
-          _HeroStat('Paid', formatNumber(c['paid_count'] ?? 0), Icons.check_circle),
+          _HeroStat(t.swimmersWord, formatNumber(c['total_enrolled'] ?? b['total_athletes']), Icons.people),
+          _HeroStat(t.collected, t.money(c['total_collected'] ?? 0), Icons.payments),
+          _HeroStat(t.paid, formatNumber(c['paid_count'] ?? 0), Icons.check_circle),
         ],
       ));
 
@@ -183,26 +187,27 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       // Day demand
       final dayDemand = b['day_demand'] as Map<String, dynamic>? ?? {};
       if (dayDemand.isNotEmpty) {
-        widgets.add(_barCard('Day Demand', dayDemand,
-          subtitle: 'Number of swimmers enrolled per day combination',
+        widgets.add(_barCard(t.daysTitle, dayDemand,
+          subtitle: t.daysHelp,
           icon: Icons.calendar_today));
       }
 
       // Product type
       final types = b['enrollment_by_type'] as Map<String, dynamic>? ?? {};
-      if (types.isNotEmpty) widgets.add(_barCard('Product Type', types,
-        subtitle: 'Number of swimmers in each class type (Class, Private, Semi-Private, etc.)',
+      if (types.isNotEmpty) widgets.add(_barCard(t.classType, types,
+        subtitle: t.classTypesHelp,
         icon: Icons.category));
 
       // Segment
       final segments = b['segment_mix'] as Map<String, dynamic>? ?? {};
-      if (segments.isNotEmpty) widgets.add(_barCard('Segment Mix', segments,
-        subtitle: 'Number of swimmers by enrollment source (GEMS school vs outside)',
+      if (segments.isNotEmpty) widgets.add(_barCard(t.membership, segments,
+        subtitle: t.membershipHelp,
+        label: t.segment,
         icon: Icons.school));
 
       // Revenue by segment
       final revBySeg = b['revenue_by_segment'] as Map<String, dynamic>? ?? {};
-      if (revBySeg.isNotEmpty) widgets.add(_revenueCard('Revenue by Segment', revBySeg));
+      if (revBySeg.isNotEmpty) widgets.add(_revenueCard(t.collectedByMembership, revBySeg));
 
       // Gender
       final gender = b['gender_split'] as Map<String, dynamic>? ?? {};
@@ -214,8 +219,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
 
       // Coach load
       final coaches = b['coach_load'] as Map<String, dynamic>? ?? {};
-      if (coaches.isNotEmpty) widgets.add(_barCard('Coach Load', coaches,
-        subtitle: 'Number of swimmers assigned to each coach',
+      if (coaches.isNotEmpty) widgets.add(_barCard(t.swimmersPerCoach, coaches,
+        subtitle: t.swimmersPerCoachHelp,
         icon: Icons.person));
 
       // Data quality
@@ -263,14 +268,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   // ── BRANCH COMPARISON ──
   Widget _branchComparisonCard(Map<String, dynamic> branches) {
     return _card(
-      icon: Icons.compare_arrows, title: 'Branch Comparison',
+      icon: Icons.compare_arrows, title: t.compareBranches,
       child: Column(
         children: [
-          const Row(children: [
-            Expanded(flex: 3, child: Text('Branch', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted))),
-            Expanded(flex: 2, child: Text('Athletes', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.right)),
-            Expanded(flex: 2, child: Text('Paid', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.right)),
-            Expanded(flex: 3, child: Text('Collected', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.right)),
+          Row(children: [
+            Expanded(flex: 3, child: Text(t.branch, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted))),
+            Expanded(flex: 2, child: Text(t.swimmersWord, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.end)),
+            Expanded(flex: 2, child: Text(t.paid, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.end)),
+            Expanded(flex: 3, child: Text(t.collected, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted), textAlign: TextAlign.end)),
           ]),
           const Divider(height: 16),
           for (final entry in branches.entries)
@@ -281,9 +286,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Row(children: [
                   Expanded(flex: 3, child: Text(b['name'] ?? '', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                  Expanded(flex: 2, child: Text(formatNumber(b['total_athletes']), style: const TextStyle(fontSize: 13), textAlign: TextAlign.right)),
-                  Expanded(flex: 2, child: Text(formatNumber(c['paid_count'] ?? 0), style: const TextStyle(fontSize: 13), textAlign: TextAlign.right)),
-                  Expanded(flex: 3, child: Text(formatMoney(c['total_collected'] ?? 0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+                  Expanded(flex: 2, child: Text(formatNumber(b['total_athletes']), style: const TextStyle(fontSize: 13), textAlign: TextAlign.end)),
+                  Expanded(flex: 2, child: Text(formatNumber(c['paid_count'] ?? 0), style: const TextStyle(fontSize: 13), textAlign: TextAlign.end)),
+                  Expanded(flex: 3, child: Text(t.money(c['total_collected'] ?? 0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), textAlign: TextAlign.end)),
                 ]),
               );
             }(),
@@ -304,19 +309,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
       _merge(allDays, bd['day_demand'] as Map<String, dynamic>? ?? {});
     }
     final widgets = <Widget>[];
-    if (allLevels.isNotEmpty) widgets.add(_barCard('Enrollment by Level', _toDyn(allLevels), icon: Icons.stairs));
+    if (allLevels.isNotEmpty) widgets.add(_barCard(t.levels, _toDyn(allLevels), icon: Icons.stairs));
     if (allAgeBuckets.isNotEmpty) widgets.add(_agePyramidCard(_toDyn(allAgeBuckets), {}));
-    if (allDays.isNotEmpty) widgets.add(_barCard('Day Demand', _toDyn(allDays), icon: Icons.calendar_today));
-    if (allTypes.isNotEmpty) widgets.add(_barCard('Product Type', _toDyn(allTypes), icon: Icons.category));
-    if (allSegments.isNotEmpty) widgets.add(_barCard('Segment Mix', _toDyn(allSegments), icon: Icons.school));
+    if (allDays.isNotEmpty) widgets.add(_barCard(t.daysTitle, _toDyn(allDays), icon: Icons.calendar_today));
+    if (allTypes.isNotEmpty) widgets.add(_barCard(t.classType, _toDyn(allTypes), icon: Icons.category));
+    if (allSegments.isNotEmpty) widgets.add(_barCard(t.membership, _toDyn(allSegments), icon: Icons.school, label: t.segment));
     if (allGender.isNotEmpty) widgets.add(_genderCard(_toDyn(allGender)));
     return Column(children: widgets);
   }
 
-  void _merge(Map<String, int> t, Map<String, dynamic> s) {
-    for (final e in s.entries) {
+  void _merge(Map<String, int> into, Map<String, dynamic> from) {
+    for (final e in from.entries) {
       final v = e.value;
-      t[e.key] = (t[e.key] ?? 0) + (v is int ? v : v is num ? v.toInt() : 0);
+      into[e.key] = (into[e.key] ?? 0) + (v is int ? v : v is num ? v.toInt() : 0);
     }
   }
   Map<String, dynamic> _toDyn(Map<String, int> m) => m.map((k, v) => MapEntry(k, v));
@@ -325,8 +330,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   Widget _funnelCard(List<dynamic> funnel) {
     final maxCount = funnel.isNotEmpty ? (funnel.first['count'] as int) : 1;
     return _card(
-      icon: Icons.filter_list, title: 'Swimmer Levels',
-      subtitle: 'Number of swimmers at each level \u2022 Sorted highest to lowest',
+      icon: Icons.filter_list, title: t.levels,
+      subtitle: t.levelsHelp,
       child: Column(
         children: [
           for (final f in funnel) ...[
@@ -354,9 +359,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                     ),
                   ),
                 ),
-                SizedBox(width: 40, child: Text(formatNumber(f['count']), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), textAlign: TextAlign.right)),
+                SizedBox(width: 40, child: Text(formatNumber(f['count']), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), textAlign: TextAlign.end)),
                 SizedBox(width: 45, child: Text('${f['pct_of_top'] ?? ''}%',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted), textAlign: TextAlign.right)),
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted), textAlign: TextAlign.end)),
               ]),
             ),
           ],
@@ -370,15 +375,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     final order = ['Under 5', '5-7', '8-10', '11-13', '14-17', '18+'];
     final maxVal = buckets.values.fold<int>(0, (m, v) { final val = v as int; return val > m ? val : m; });
     return _card(
-      icon: Icons.bar_chart, title: 'Age Distribution',
-      subtitle: 'Number of swimmers in each age group${stats['avg'] != null ? ' \u2022 Avg ${stats['avg']} yrs' : ''}${(stats['missing_dob'] ?? 0) > 0 ? ' \u2022 ${stats['missing_dob']} missing DOB' : ''}',
+      icon: Icons.bar_chart, title: t.ages,
+      subtitle: t.agesHelp(average: stats['avg'], missing: ((stats['missing_dob'] ?? 0) as num).toInt()),
       child: Column(
         children: [
           for (final age in order) ...[
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(children: [
-                SizedBox(width: 55, child: Text(age, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+                SizedBox(width: 68, child: Text(t.ageGroup(age), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
                 Expanded(child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: Stack(children: [
@@ -387,7 +392,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
                       child: Container(height: 20, decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(4)))),
                   ]),
                 )),
-                SizedBox(width: 40, child: Text(formatNumber(buckets[age] ?? 0), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), textAlign: TextAlign.right)),
+                SizedBox(width: 40, child: Text(formatNumber(buckets[age] ?? 0), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12), textAlign: TextAlign.end)),
               ]),
             ),
           ],
@@ -399,24 +404,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   // ── GENDER ──
   Widget _genderCard(Map<String, dynamic> g) {
     final m = (g['M'] ?? 0) as int, f = (g['F'] ?? 0) as int, u = (g['Unknown'] ?? 0) as int;
-    final t = m + f + u;
-    return _card(icon: Icons.wc, title: 'Gender Split', subtitle: 'Number of male vs female swimmers', child: Column(children: [
-      if (t > 0) ClipRRect(
+    final sum = m + f + u;
+    return _card(icon: Icons.wc, title: t.genderTitle, subtitle: t.genderHelp, child: Column(children: [
+      if (sum > 0) ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Row(children: [
           if (m > 0) Expanded(flex: m, child: Container(height: 32, color: AppColors.genderMale,
-            alignment: Alignment.center, child: Text('${(m * 100 / t).round()}% M', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
+            alignment: Alignment.center, child: Text('${(m * 100 / sum).round()}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
           if (f > 0) Expanded(flex: f, child: Container(height: 32, color: AppColors.genderFemale,
-            alignment: Alignment.center, child: Text('${(f * 100 / t).round()}% F', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
+            alignment: Alignment.center, child: Text('${(f * 100 / sum).round()}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
           if (u > 0) Expanded(flex: u, child: Container(height: 32, color: AppColors.textMuted,
-            alignment: Alignment.center, child: Text('${(u * 100 / t).round()}% ?', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
+            alignment: Alignment.center, child: Text('${(u * 100 / sum).round()}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)))),
         ]),
       ),
       const SizedBox(height: 10),
       Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-        _genderStat('Male', m, AppColors.genderMale),
-        _genderStat('Female', f, AppColors.genderFemale),
-        if (u > 0) _genderStat('Unknown', u, AppColors.textMuted),
+        _genderStat(t.maleMany, m, AppColors.genderMale),
+        _genderStat(t.femaleMany, f, AppColors.genderFemale),
+        if (u > 0) _genderStat(t.notSet, u, AppColors.textMuted),
       ]),
     ]));
   }
@@ -432,27 +437,27 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   Widget _genderByLevelCard(Map<String, dynamic> data) {
     final levels = ['P.p1','P.p2','St.1','St.2','St.3','St.4.1','St.5.1','St.6.1','St.7.1'].where((l) => data.containsKey(l)).toList();
     if (levels.isEmpty) return const SizedBox.shrink();
-    return _card(icon: Icons.stacked_bar_chart, title: 'Gender by Level', subtitle: 'Male vs female swimmers at each level \u2022 Shows which gender drops off faster', child: Column(children: [
+    return _card(icon: Icons.stacked_bar_chart, title: t.genderByLevel, subtitle: t.genderByLevelHelp, child: Column(children: [
       for (final lvl in levels) ...[
         () {
           final d = data[lvl] as Map<String, dynamic>;
-          final m = (d['M'] ?? 0) as int, f = (d['F'] ?? 0) as int, t = m + f;
+          final m = (d['M'] ?? 0) as int, f = (d['F'] ?? 0) as int, both = m + f;
           return Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
             SizedBox(width: 45, child: Text(lvl, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500))),
-            Expanded(child: t > 0 ? ClipRRect(borderRadius: BorderRadius.circular(3), child: Row(children: [
+            Expanded(child: both > 0 ? ClipRRect(borderRadius: BorderRadius.circular(3), child: Row(children: [
               if (m > 0) Expanded(flex: m, child: Container(height: 16, color: AppColors.genderMale.withValues(alpha: 0.7))),
               if (f > 0) Expanded(flex: f, child: Container(height: 16, color: AppColors.genderFemale.withValues(alpha: 0.5))),
             ])) : const SizedBox.shrink()),
-            SizedBox(width: 50, child: Text('$m / $f', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.right)),
+            SizedBox(width: 50, child: Text('$m / $f', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500), textAlign: TextAlign.end)),
           ]));
         }(),
       ],
       const SizedBox(height: 8),
       Row(children: [
         Container(width: 10, height: 10, decoration: BoxDecoration(color: AppColors.genderMale, borderRadius: BorderRadius.circular(2))),
-        const Text(' Male  ', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(' ${t.maleMany}  ', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         Container(width: 10, height: 10, decoration: BoxDecoration(color: AppColors.genderFemale, borderRadius: BorderRadius.circular(2))),
-        const Text(' Female', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(' ${t.femaleMany}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
       ]),
     ]));
   }
@@ -461,13 +466,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   Widget _revenueCard(String title, Map<String, dynamic> data) {
     final sorted = data.entries.toList()..sort((a, b) => ((b.value as num) - (a.value as num)).toInt());
     final total = sorted.fold<double>(0, (s, e) => s + (e.value as num).toDouble());
-    return _card(icon: Icons.monetization_on, iconColor: AppColors.success, title: title, subtitle: 'Amount collected in EGP per segment \u2022 Total: ${formatMoney(total)}', child: Column(
+    return _card(icon: Icons.monetization_on, iconColor: AppColors.success, title: title, subtitle: t.totalIs(t.money(total)), child: Column(
       children: [for (final e in sorted) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [
-        Expanded(flex: 2, child: Text(e.key, style: const TextStyle(fontSize: 13))),
+        Expanded(flex: 2, child: Text(t.segment(e.key), style: const TextStyle(fontSize: 13))),
         Expanded(flex: 3, child: ClipRRect(borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(value: total > 0 ? (e.value as num) / total : 0, backgroundColor: AppColors.surfaceVariant, color: AppColors.success, minHeight: 8))),
         const SizedBox(width: 8),
-        Text(formatMoney(e.value), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+        Text(t.money(e.value), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
       ]))],
     ));
   }
@@ -477,22 +482,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
     final total = (dq['total'] ?? 1) as int;
     final pct = dq['completeness_pct'] ?? 0;
     final fields = [
-      ('Missing Phone', dq['no_phone'] ?? 0),
-      ('Missing DOB', dq['no_dob'] ?? 0),
-      ('Missing Level', dq['no_level'] ?? 0),
-      ('Missing Type', dq['no_type'] ?? 0),
-      ('Missing Gender', dq['no_gender'] ?? 0),
-      ('Missing Days', dq['no_days'] ?? 0),
+      (t.noPhone, dq['no_phone'] ?? 0),
+      (t.noBirthDate, dq['no_dob'] ?? 0),
+      (t.noLevel, dq['no_level'] ?? 0),
+      (t.noClassType, dq['no_type'] ?? 0),
+      (t.noGender, dq['no_gender'] ?? 0),
+      (t.noDays, dq['no_days'] ?? 0),
     ];
     final scoreColor = (pct as num) > 80 ? AppColors.success : (pct as num) > 60 ? AppColors.warning : AppColors.error;
     return _card(
-      icon: Icons.health_and_safety, iconColor: scoreColor, title: 'Data Quality',
+      icon: Icons.health_and_safety, iconColor: scoreColor, title: t.missingInfo,
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(color: scoreColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
         child: Text('$pct%', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: scoreColor)),
       ),
-      subtitle: 'Number of swimmers with missing info in Excel \u2022 Higher = more data entry needed',
+      subtitle: t.missingInfoHelp,
       child: Column(children: [
         for (final (label, value) in fields)
           if ((value as int) > 0) Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
@@ -508,12 +513,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
   }
 
   // ── REUSABLE BAR CARD ──
-  Widget _barCard(String title, Map<String, dynamic> data, {String? subtitle, IconData? icon}) {
+  Widget _barCard(String title, Map<String, dynamic> data, {String? subtitle, IconData? icon, String Function(String?)? label}) {
     final sorted = data.entries.toList()..sort((a, b) => ((b.value as num) - (a.value as num)).toInt());
     final total = sorted.fold<int>(0, (s, e) => s + (e.value as int));
     return _card(icon: icon, title: title, subtitle: subtitle, child: Column(
       children: [for (final e in sorted) Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [
-        Expanded(flex: 2, child: Text(e.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+        Expanded(flex: 2, child: Text(label != null ? label(e.key) : e.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
         Expanded(flex: 3, child: ClipRRect(borderRadius: BorderRadius.circular(4),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: total > 0 ? (e.value as int) / total : 0),
@@ -552,7 +557,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               if (trailing != null) trailing,
             ]),
             if (subtitle != null) Padding(
-              padding: EdgeInsets.only(top: 2, left: icon != null ? 32.0 : 0),
+              padding: EdgeInsetsDirectional.only(top: 2, start: icon != null ? 32.0 : 0),
               child: Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
             ),
             const SizedBox(height: 14),

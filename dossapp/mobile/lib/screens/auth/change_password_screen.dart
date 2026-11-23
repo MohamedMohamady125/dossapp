@@ -1,6 +1,8 @@
+import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/language_toggle.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
@@ -100,7 +102,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
     try {
       await context.read<AuthProvider>().changePassword(_passwordController.text);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = AppError.messageFor(e));
     } finally {
       setState(() => _loading = false);
     }
@@ -188,7 +190,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                         const SizedBox(width: 4),
                         Image.asset('assets/images/logo.png', height: 36, width: 36),
                         const SizedBox(width: 10),
-                        Flexible(
+                        Expanded(
                           child: Text(
                             s.changePassword,
                             style: GoogleFonts.barlowCondensed(
@@ -200,6 +202,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        const LanguageToggle(),
                       ],
                     ),
                   ),
@@ -327,7 +331,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Use 6+ characters with uppercase, numbers & symbols',
+                                  s.passwordTip,
                                   style: GoogleFonts.barlow(
                                     fontSize: 11,
                                     color: AppColors.textMuted,

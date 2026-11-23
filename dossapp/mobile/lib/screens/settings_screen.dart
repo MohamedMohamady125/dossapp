@@ -1,3 +1,4 @@
+import '../utils/app_error.dart';
 import 'auth/profile_picker_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -143,7 +144,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.textMuted,
-        letterSpacing: 1,
+        // Spacing letters apart breaks joined Arabic script
+        letterSpacing: RegExp(r'[\u0600-\u06FF]').hasMatch(title) ? 0 : 1,
       ),
     );
   }
@@ -349,7 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             );
                           }
                         } catch (e) {
-                          setSheetState(() { loading = false; error = e.toString(); });
+                          setSheetState(() { loading = false; error = AppError.messageFor(e); });
                         }
                       },
                       style: FilledButton.styleFrom(
@@ -442,7 +444,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
         );
       }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) setState(() { _loading = false; _error = AppError.messageFor(e); });
     }
   }
 
@@ -661,7 +663,7 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
         messenger.showSnackBar(SnackBar(content: Text(widget.s.emailUpdated)));
       }
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e is ApiException ? e.message : e.toString(); });
+      if (mounted) setState(() { _loading = false; _error = e is ApiException ? e.message : AppError.messageFor(e); });
     }
   }
 

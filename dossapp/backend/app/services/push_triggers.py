@@ -73,7 +73,7 @@ def _t(lang: str, en: str, ar: str) -> str:
 # come from the class tabs.
 _DETAIL_LABELS = {
     "step": ("Level", "المستوى"),
-    "type": ("Class type", "نوع الحصة"),
+    "type": ("Class type", "نوع التمرين"),
     "days": ("Days", "الأيام"),
     "sessions": ("Sessions", "عدد الحصص"),
 }
@@ -109,7 +109,7 @@ def _details_hash(details: dict) -> str:
 def _slots_text(slots: list, lang: str) -> str:
     parts = []
     for day_pair, time_block, coach in slots:
-        part = day_pair or _t(lang, "Days TBD", "أيام غير محددة")
+        part = day_pair or _t(lang, "Days not set yet", "الأيام لسه ما اتحددتش")
         if time_block:
             part += f" {time_block}"
         if coach:
@@ -132,18 +132,18 @@ def _changes_body(name: str, old: dict, new: dict, lang: str) -> str:
             continue
         label = _t(lang, en, ar)
         if after and before:
-            lines.append(_t(lang, f"{label} is now {after} (was {before})", f"{label} الآن {after} (كان {before})"))
+            lines.append(_t(lang, f"{label} is now {after} (was {before})", f"{label} بقى {after} (كان {before})"))
         elif after:
-            lines.append(_t(lang, f"{label} is now {after}", f"{label} الآن {after}"))
+            lines.append(_t(lang, f"{label} is now {after}", f"{label} بقى {after}"))
         else:
-            lines.append(_t(lang, f"{label} was removed", f"تم حذف {label}"))
+            lines.append(_t(lang, f"{label} was removed", f"{label} اتشال"))
     if slots_changed:
         if new.get("slots"):
-            lines.append(_t(lang, "Schedule: ", "الجدول: ") + _slots_text(new["slots"], lang))
+            lines.append(_t(lang, "Times: ", "المواعيد: ") + _slots_text(new["slots"], lang))
         else:
-            lines.append(_t(lang, "Schedule was removed", "تم حذف الجدول"))
+            lines.append(_t(lang, "Class times were removed", "مواعيد التمرين اتشالت"))
     if not lines:
-        return _t(lang, f"{name}'s class details were updated.", f"تم تحديث بيانات حصة {name}.")
+        return _t(lang, f"{name}'s class details changed.", f"بيانات تمرين {name} اتغيّرت.")
     return (f"{name}: " + _t(lang, ". ", "، ").join(lines))[:1000]
 
 
@@ -226,8 +226,8 @@ async def check_schedule_changes(roster: BranchRoster, db: AsyncSession) -> int:
         lang = account.language or "en"
         is_new = not any(old_details.get(f) for f in (*_DETAIL_LABELS, "slots"))
         title = _t(lang,
-                   "Class added" if is_new else "Class details updated",
-                   "تمت إضافة الحصة" if is_new else "تم تحديث بيانات الحصة")
+                   "Class added" if is_new else "Class changed",
+                   "التمرين اتضاف" if is_new else "في تغيير في التمرين")
         ok = await send_push_to_account(
             db, account.id, "schedule_change",
             title,
@@ -289,14 +289,14 @@ async def check_missed_sessions(roster: BranchRoster, db: AsyncSession) -> int:
             continue
 
         lang = account.language or "en"
-        title = _t(lang, "We miss you! 🏊", "اشتقنالك! 🏊")
+        title = _t(lang, "We miss you", "وحشتنا")
         body = _t(
             lang,
-            f"Hi! {athlete.name} has missed {streak} consecutive sessions. "
-            f"We hope everything is okay — your spot is reserved and your coach "
-            f"is looking forward to seeing you back in the pool!",
-            f"أهلاً! {athlete.name} غاب عن {streak} حصص متتالية. "
-            f"نتمنى إن كل حاجة تمام — مكانك محجوز ومدربك مستنيك ترجع!",
+            f"{athlete.name} missed the last {streak} sessions. "
+            f"We hope all is well. The spot is still yours and the coach "
+            f"is waiting to see you back in the pool.",
+            f"{athlete.name} غاب آخر {streak} حصص. "
+            f"يا رب تكونوا بخير. المكان لسه محجوز، والكابتن مستنيكم ترجعوا.",
         )
 
         ok = await send_push_to_account(
@@ -348,24 +348,24 @@ async def send_payment_reminders(db: AsyncSession, rosters: dict[int, BranchRost
                 continue
 
             lang = account.language or "en"
-            title = _t(lang, "Payment Reminder 💳", "تذكير بالدفع 💳")
+            title = _t(lang, "Time to pay", "ميعاد الدفع")
 
             if day <= 1:
                 # Urgent: last day before spot is lost
                 body = _t(
                     lang,
-                    f"⚠️ {athlete.name}'s {month_en} fee is still unpaid. "
-                    f"Pay today to keep your spot — tomorrow your enrollment will be suspended.",
-                    f"⚠️ اشتراك {athlete.name} لشهر {month_ar} لم يتم دفعه بعد. "
-                    f"ادفع النهاردة عشان تحافظ على مكانك — بكرة هيتم إيقاف تسجيلك.",
+                    f"Last day: {athlete.name}'s {month_en} fee is not paid yet. "
+                    f"Pay today to keep the spot. Tomorrow the spot goes on hold.",
+                    f"آخر يوم: اشتراك {athlete.name} لشهر {month_ar} لسه ما اتدفعش. "
+                    f"ادفع النهارده عشان تحافظ على المكان. من بكرة المكان هيتوقف.",
                 )
             else:
                 body = _t(
                     lang,
-                    f"{athlete.name}'s {month_en} fee is unpaid. "
-                    f"Please pay before the end of the month to keep your spot in the class.",
-                    f"اشتراك {athlete.name} لشهر {month_ar} لم يتم دفعه. "
-                    f"يرجى الدفع قبل نهاية الشهر للحفاظ على مكانك في الحصة.",
+                    f"{athlete.name}'s {month_en} fee is not paid yet. "
+                    f"Please pay before the month ends to keep the spot in the class.",
+                    f"اشتراك {athlete.name} لشهر {month_ar} لسه ما اتدفعش. "
+                    f"ادفع قبل آخر الشهر عشان تحافظ على مكانه في التمرين.",
                 )
 
             ok = await send_push_to_account(
@@ -439,13 +439,13 @@ async def send_spot_lost_notifications(db: AsyncSession, rosters: dict[int, Bran
             await db.flush()
 
             lang = account.language or "en"
-            title = _t(lang, "You Lost Your Spot 😔", "فقدت مكانك 😔")
+            title = _t(lang, "Your spot is on hold", "مكانك اتوقف")
             body = _t(
                 lang,
-                f"{athlete.name} has lost their spot in the class because {month_en}'s fee was not paid. "
-                f"Open the app to request reinstatement and get back to training.",
-                f"{athlete.name} فقد مكانه في الحصة لأن اشتراك شهر {month_ar} لم يتم دفعه. "
-                f"افتح التطبيق لطلب إعادة التسجيل والعودة للتمرين.",
+                f"{athlete.name}'s spot in the class is on hold because the {month_en} fee was not paid. "
+                f"Open the app to ask for the spot back.",
+                f"مكان {athlete.name} في التمرين اتوقف عشان اشتراك شهر {month_ar} ما اتدفعش. "
+                f"افتح التطبيق واطلب المكان تاني.",
             )
 
             ok = await send_push_to_account(

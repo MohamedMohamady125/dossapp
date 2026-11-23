@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/language_toggle.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
@@ -23,10 +24,11 @@ class _ProfilePickerScreenState extends State<ProfilePickerScreen> {
     setState(() => _opening = p.accountId);
     final auth = context.read<AuthProvider>();
     final messenger = ScaffoldMessenger.of(context);
+    final fallback = S.read(context).somethingWentWrong;
     try {
       await auth.chooseProfile(p.accountId);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e is ApiException ? e.message : 'Something went wrong. Please try again.')));
+      messenger.showSnackBar(SnackBar(content: Text(e is ApiException ? e.message : fallback)));
       if (mounted) setState(() => _opening = null);
     }
   }
@@ -52,13 +54,19 @@ class _ProfilePickerScreenState extends State<ProfilePickerScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 52, height: 52,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.family_restroom_rounded, color: Colors.white, size: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          width: 52, height: 52,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(Icons.family_restroom_rounded, color: Colors.white, size: 28),
+                        ),
+                        const LanguageToggle(),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -201,7 +209,7 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
   int? _opening;
 
   Future<void> _open(SwimmerProfile p) async {
-    final s = S.of(context);
+    final s = S.read(context);
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     if (p.isCurrent) {
@@ -218,7 +226,7 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
         duration: const Duration(seconds: 2),
       ));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e is ApiException ? e.message : 'Something went wrong. Please try again.')));
+      messenger.showSnackBar(SnackBar(content: Text(e is ApiException ? e.message : s.somethingWentWrong)));
       if (mounted) setState(() => _opening = null);
     }
   }
@@ -368,7 +376,7 @@ class _AddSwimmerSheetState extends State<_AddSwimmerSheet> {
   }
 
   Future<void> _submit() async {
-    final s = S.of(context);
+    final s = S.read(context);
     if (_code.text.trim().isEmpty || _password.text.isEmpty) {
       setState(() => _error = s.fillCodeAndPassword);
       return;
@@ -385,7 +393,7 @@ class _AddSwimmerSheetState extends State<_AddSwimmerSheet> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e is ApiException ? e.message : 'Something went wrong. Please try again.';
+        _error = e is ApiException ? e.message : s.somethingWentWrong;
       });
     }
   }

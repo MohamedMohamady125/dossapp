@@ -1,7 +1,10 @@
+import '../../utils/app_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../widgets/language_toggle.dart';
+import '../../utils/translations.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 
@@ -64,7 +67,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _startResendTimer();
       if (mounted) setState(() => _step = 1);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -78,7 +81,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _startResendTimer();
       _codeController.clear();
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -87,7 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Future<void> _verifyCode() async {
     final code = _codeController.text.trim();
     if (code.length != 6) {
-      setState(() => _error = 'Please enter the 6-digit code');
+      setState(() => _error = S.read(context).enterSixDigitCode);
       return;
     }
     setState(() { _loading = true; _error = null; });
@@ -96,7 +99,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _verifiedCode = code;
       if (mounted) setState(() => _step = 2);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -111,7 +114,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       );
       if (mounted) setState(() => _success = true);
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = AppError.messageFor(e));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -141,11 +144,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   String get _strengthLabel {
     return switch (_passwordStrength) {
-      1 => 'Weak',
-      2 => 'Fair',
-      3 => 'Good',
-      4 => 'Strong',
-      5 => 'Very Strong',
+      1 => S.of(context).weak,
+      2 => S.of(context).fair,
+      3 => S.of(context).good,
+      4 => S.of(context).strong,
+      5 => S.of(context).veryStrong,
       _ => '',
     };
   }
@@ -191,7 +194,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildHeader() {
-    final titles = ['Reset Password', 'Verify Email', 'New Password'];
+    final s = S.of(context);
+    final titles = [s.forgotPasswordTitle, s.checkEmailTitle, s.newPassword];
     final screenH = MediaQuery.of(context).size.height;
     final headerH = (screenH * 0.22).clamp(150.0, 200.0);
     return ClipPath(
@@ -218,7 +222,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(width: 4),
                 Image.asset('assets/images/logo.png', height: 36, width: 36),
                 const SizedBox(width: 10),
-                Flexible(
+                Expanded(
                   child: Text(
                     titles[_step],
                     style: GoogleFonts.barlowCondensed(
@@ -228,6 +232,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: 8),
+                const LanguageToggle(),
               ],
             ),
           ),
@@ -242,7 +248,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         final isActive = i <= _step;
         return Expanded(
           child: Container(
-            margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
+            margin: EdgeInsetsDirectional.only(end: i < 2 ? 6 : 0),
             height: 4,
             decoration: BoxDecoration(
               color: isActive ? AppColors.primary : AppColors.border,
@@ -270,7 +276,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Enter the email address linked to your account. We\'ll send a verification code.',
+          S.of(context).forgotEmailIntro,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -280,14 +286,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           keyboardType: TextInputType.emailAddress,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            labelText: 'Email Address',
-            prefixIcon: Icon(Icons.email_outlined, size: 20),
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            labelText: S.of(context).email,
+            prefixIcon: const Icon(Icons.email_outlined, size: 20),
             hintText: 'you@example.com',
           ),
           validator: (v) {
-            if (v == null || v.trim().isEmpty) return 'Email is required';
-            if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(v.trim())) return 'Enter a valid email';
+            if (v == null || v.trim().isEmpty) return S.read(context).emailRequired;
+            if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(v.trim())) return S.read(context).invalidEmail;
             return null;
           },
           onFieldSubmitted: (_) => _sendCode(),
@@ -312,7 +319,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Enter the 6-digit code sent to',
+          S.of(context).enterCodeSentTo,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -346,13 +353,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Center(
           child: _resendSeconds > 0
               ? Text(
-                  'Resend code in ${_resendSeconds}s',
+                  S.of(context).resendCodeIn(_resendSeconds),
                   style: GoogleFonts.barlow(fontSize: 13, color: AppColors.textMuted),
                 )
               : TextButton(
                   onPressed: _loading ? null : _resendCode,
                   child: Text(
-                    'Resend Code',
+                    S.of(context).resendCode,
                     style: GoogleFonts.barlow(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary),
                   ),
                 ),
@@ -378,7 +385,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Create your new password.',
+          S.of(context).chooseNewPasswordIntro,
           textAlign: TextAlign.center,
           style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary),
         ),
@@ -389,7 +396,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           autofocus: true,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'New Password',
+            labelText: S.of(context).newPassword,
             prefixIcon: const Icon(Icons.lock_outline, size: 20),
             suffixIcon: IconButton(
               icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
@@ -397,7 +404,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
           validator: (v) {
-            if (v == null || v.length < 6) return 'Password must be at least 6 characters';
+            if (v == null || v.length < 6) return S.read(context).passwordTooShort;
             return null;
           },
         ),
@@ -426,7 +433,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           controller: _confirmController,
           obscureText: _obscureConfirm,
           decoration: InputDecoration(
-            labelText: 'Confirm Password',
+            labelText: S.of(context).confirmPassword,
             prefixIcon: const Icon(Icons.lock_outline, size: 20),
             suffixIcon: IconButton(
               icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
@@ -434,7 +441,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             ),
           ),
           validator: (v) {
-            if (v != _passwordController.text) return 'Passwords do not match';
+            if (v != _passwordController.text) return S.read(context).passwordsMustMatch;
             return null;
           },
         ),
@@ -468,7 +475,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     // Skip button on verify step (auto-verify on 6 digits)
     if (_step == 1) return const SizedBox.shrink();
 
-    final labels = ['Send Verification Code', '', 'Reset Password'];
+    final labels = [S.of(context).sendCode, '', S.of(context).setPassword];
     final actions = [_sendCode, _verifyCode, _resetPassword];
 
     return GestureDetector(
@@ -513,12 +520,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Password Reset!',
+                S.of(context).passwordChanged,
                 style: GoogleFonts.barlowCondensed(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 8),
               Text(
-                'Your password has been updated successfully. You can now log in with your new password.',
+                S.of(context).passwordResetMsg,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.barlow(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
               ),
@@ -533,7 +540,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: Text('Back to Login', style: GoogleFonts.barlow(fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: Text(S.of(context).backToLogin, style: GoogleFonts.barlow(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               ),
             ],

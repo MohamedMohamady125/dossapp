@@ -245,7 +245,7 @@ async def _save_report(
             sender = out.created_by_name
             if account.language == "ar":
                 title = f"تقرير شهر {period}"
-                body = note or f"الكابتن {sender} أرسل تقريرك الشهري. افتحه من التطبيق."
+                body = note or f"كابتن {sender} بعتلك تقرير الشهر. افتحه من التطبيق."
             else:
                 title = f"Your {period} report"
                 body = note or f"Coach {sender} sent your monthly report. Open the app to view it."

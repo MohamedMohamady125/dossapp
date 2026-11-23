@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/report.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/animated_list_item.dart';
 import '../../widgets/empty_state.dart';
@@ -26,7 +26,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
   String? _currentPeriod;
   List<ReportSwimmer>? _swimmers;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   String _search = '';
 
   @override
@@ -46,7 +46,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
       _currentPeriod = data['current_period'];
       _swimmers = (data['swimmers'] as List).map((x) => ReportSwimmer.fromJson(x)).toList();
     } catch (e) {
-      _error = e.toString();
+      _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -95,7 +95,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _currentPeriod != null ? formatPeriod(_currentPeriod!) : '',
+                          _currentPeriod != null ? SS.of(context).period(_currentPeriod!) : '',
                           style: GoogleFonts.barlowCondensed(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
@@ -133,7 +133,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: TextField(
             decoration: InputDecoration(
-              hintText: '${s.swimmers}...',
+              hintText: SS.of(context).searchByNameOrNumber,
               prefixIcon: const Icon(Icons.search),
               isDense: true,
             ),

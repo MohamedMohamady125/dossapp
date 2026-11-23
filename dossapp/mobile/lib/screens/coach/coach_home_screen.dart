@@ -1,5 +1,6 @@
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
@@ -23,7 +24,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
 
   Map<String, dynamic>? _schedule;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -49,7 +50,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
     } catch (e) {
       if (mounted) {
         setState(() {
-          if (isInitial) _error = e.toString();
+          if (isInitial) _error = e;
           _loading = false;
         });
       }
@@ -125,11 +126,11 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
       return Column(
         children: [
           _buildHeader(coachName, branchName, 0, 0),
-          const Expanded(
+          Expanded(
             child: EmptyState(
               icon: Icons.event_busy_rounded,
-              title: 'No sessions found',
-              subtitle: 'Your schedule will appear here once sessions are assigned in the Excel sheet.',
+              title: SS.of(context).noClassesYet,
+              subtitle: SS.of(context).classesShowAfterSheet,
             ),
           ),
         ],
@@ -189,7 +190,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      coachName != null ? 'Coach $coachName' : 'Coach',
+                      coachName != null ? SS.of(context).coachNamed(coachName) : SS.of(context).coach,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -214,9 +215,9 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
           const SizedBox(height: 16),
           Row(
             children: [
-              _headerStat(Icons.event_rounded, '$sessionCount', 'Sessions'),
+              _headerStat(Icons.event_rounded, '$sessionCount', SS.of(context).classes),
               const SizedBox(width: 24),
-              _headerStat(Icons.people_rounded, '$totalSwimmers', 'Swimmers'),
+              _headerStat(Icons.people_rounded, '$totalSwimmers', SS.of(context).swimmersWord),
             ],
           ),
         ],
@@ -246,6 +247,7 @@ class _SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -256,16 +258,16 @@ class _SessionCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Left accent bar ──
+          // ── Accent bar on the leading edge (right side in Arabic) ──
           Container(
             width: 4,
             height: null,
             constraints: const BoxConstraints(minHeight: 80),
             decoration: const BoxDecoration(
               gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(16),
-                bottomLeft: Radius.circular(16),
+              borderRadius: BorderRadiusDirectional.only(
+                topStart: Radius.circular(16),
+                bottomStart: Radius.circular(16),
               ),
             ),
           ),
@@ -283,12 +285,12 @@ class _SessionCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          [dayPair ?? 'Unscheduled days', if (timeBlock != null) timeBlock!].join(' \u2022 '),
+                          [dayPair ?? t.daysNotSet, if (timeBlock != null) timeBlock!].join(' \u2022 '),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                         ),
                       ),
                       Text(
-                        '${swimmers.length} swimmer${swimmers.length == 1 ? '' : 's'}',
+                        t.swimmersCount(swimmers.length),
                         style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                     ],

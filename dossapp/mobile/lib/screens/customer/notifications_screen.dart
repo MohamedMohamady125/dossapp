@@ -1,3 +1,5 @@
+import '../../utils/formatters.dart';
+import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -28,7 +30,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
 
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -56,7 +58,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        if (!silent) _error = e.toString();
+        if (!silent) _error = e;
         _loading = false;
       });
     }
@@ -95,7 +97,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
           }
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(AppError.messageFor(e))),
         );
       }
     }
@@ -133,9 +135,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
       final dt = DateTime.parse(iso).toLocal();
       final now = DateTime.now();
       if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
-        return DateFormat('h:mm a').format(dt);
+        return westernDigits(DateFormat('h:mm a').format(dt));
       }
-      return DateFormat('d MMM').format(dt);
+      return westernDigits(DateFormat('d MMM').format(dt));
     } catch (_) {
       return '';
     }
@@ -250,7 +252,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
                     ),
                     if (!isRead)
                       Container(
-                        margin: const EdgeInsets.only(left: 8, top: 4),
+                        margin: const EdgeInsetsDirectional.only(start: 8, top: 4),
                         width: 8,
                         height: 8,
                         decoration: const BoxDecoration(

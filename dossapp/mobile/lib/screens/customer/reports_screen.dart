@@ -18,7 +18,7 @@ class CustomerReportsScreen extends StatefulWidget {
 class _CustomerReportsScreenState extends State<CustomerReportsScreen> {
   List<MonthlyReport>? _reports;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -36,7 +36,7 @@ class _CustomerReportsScreenState extends State<CustomerReportsScreen> {
     try {
       _reports = await ApiService.getMyReports();
     } catch (e) {
-      _error = e.toString();
+      _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }

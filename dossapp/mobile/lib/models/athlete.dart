@@ -98,6 +98,9 @@ class AthleteDetail extends AthleteProfile {
   final String? tempPassword;
   final String? credentialsMessage;
   final String? whatsappPhone;
+  final DateTime? invitedAt;
+  final DateTime? lastLoginAt;
+  final bool hasPush;
 
   AthleteDetail({
     required super.branch,
@@ -127,6 +130,9 @@ class AthleteDetail extends AthleteProfile {
     this.tempPassword,
     this.credentialsMessage,
     this.whatsappPhone,
+    this.invitedAt,
+    this.lastLoginAt,
+    this.hasPush = false,
   });
 
   factory AthleteDetail.fromJson(Map<String, dynamic> json) {
@@ -157,6 +163,9 @@ class AthleteDetail extends AthleteProfile {
       tempPassword: json['temp_password'],
       credentialsMessage: json['credentials_message'],
       whatsappPhone: json['whatsapp_phone'],
+      invitedAt: DateTime.tryParse(json['invited_at'] ?? ''),
+      lastLoginAt: DateTime.tryParse(json['last_login_at'] ?? ''),
+      hasPush: json['has_push'] ?? false,
       schedule: (json['schedule'] as List?)
               ?.map((s) => ScheduleSlot.fromJson(s))
               .toList() ??

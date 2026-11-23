@@ -1,4 +1,6 @@
+import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
@@ -18,7 +20,7 @@ class BranchManagementScreen extends StatefulWidget {
 class _BranchManagementScreenState extends State<BranchManagementScreen> {
   List<Map<String, dynamic>>? _branches;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -35,7 +37,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
       final branches = await ApiService.getManageBranches();
       if (mounted) setState(() { _branches = branches; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = e; _loading = false; });
     }
   }
 
@@ -61,6 +63,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            final t = SS.of(ctx);
             return Container(
               decoration: const BoxDecoration(
                 color: AppColors.surface,
@@ -84,7 +87,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            isEdit ? 'Edit Branch' : 'Add Branch',
+                            isEdit ? t.editBranch : t.addBranch,
                             style: GoogleFonts.barlowCondensed(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
@@ -109,14 +112,14 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                           if (!isEdit) ...[
                             TextFormField(
                               controller: nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Branch Name (slug)',
-                                hintText: 'e.g. main_branch',
+                              decoration: InputDecoration(
+                                labelText: t.shortName,
+                                hintText: t.shortNameHint,
                               ),
                               validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Required';
+                                if (v == null || v.trim().isEmpty) return t.required;
                                 if (!RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(v.trim())) {
-                                  return 'Lowercase letters, numbers, underscores only';
+                                  return t.shortNameRule;
                                 }
                                 return null;
                               },
@@ -125,19 +128,21 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                           ],
                           TextFormField(
                             controller: displayNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Display Name',
-                              hintText: 'e.g. Main Branch',
+                            decoration: InputDecoration(
+                              labelText: t.nameInApp,
+                              hintText: t.nameInAppHint,
                             ),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                            validator: (v) => (v == null || v.trim().isEmpty) ? t.required : null,
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: driveFileIdController,
-                            decoration: const InputDecoration(
-                              labelText: 'Google Drive File ID',
-                              hintText: 'e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms',
-                              helperText: 'Find this in the Google Sheets URL after /d/',
+                            // An ID is always left to right, also in Arabic
+                            textDirection: TextDirection.ltr,
+                            decoration: InputDecoration(
+                              labelText: t.sheetId,
+                              hintText: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms',
+                              helperText: t.sheetIdHelp,
                               helperMaxLines: 2,
                             ),
                           ),
@@ -171,7 +176,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                       setSheetState(() => saving = false);
                                       if (ctx.mounted) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
-                                          SnackBar(content: Text(e.toString())),
+                                          SnackBar(content: Text(AppError.messageFor(e))),
                                         );
                                       }
                                     }
@@ -185,7 +190,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : Text(isEdit ? 'Save Changes' : 'Create Branch'),
+                                : Text(isEdit ? t.save : t.addBranch),
                           ),
                         ],
                       ),
@@ -201,20 +206,21 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
   }
 
   Future<void> _confirmDelete(Map<String, dynamic> branch) async {
+    final t = SS.read(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Branch'),
-        content: Text('Are you sure you want to delete "${branch['display_name'] ?? branch['name']}"? This action cannot be undone.'),
+        title: Text(t.deleteBranchTitle),
+        content: Text(t.deleteBranchQuestion('${branch['display_name'] ?? branch['name']}')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(t.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
+            child: Text(t.delete),
           ),
         ],
       ),
@@ -226,13 +232,13 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
         widget.onBranchesChanged?.call();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Branch deleted')),
+            SnackBar(content: Text(t.branchDeleted)),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString())),
+            SnackBar(content: Text(AppError.messageFor(e))),
           );
         }
       }
@@ -246,12 +252,13 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          const SliverAppBar(
+          SliverAppBar(
             pinned: true,
-            title: Text('Branches'),
+            title: Text(t.branches),
           ),
           if (_loading)
             const SliverFillRemaining(
@@ -265,9 +272,9 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
             SliverFillRemaining(
               child: EmptyState(
                 icon: Icons.account_tree_outlined,
-                title: 'No branches yet',
-                subtitle: 'Create your first branch to get started.',
-                actionLabel: 'Add Branch',
+                title: t.noBranchesYet,
+                subtitle: t.addFirstBranch,
+                actionLabel: t.addBranch,
                 onAction: _showAddBranchSheet,
               ),
             )
@@ -338,6 +345,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                             Expanded(
                                               child: Text(
                                                 _truncate(driveId, 20),
+                                                textDirection: TextDirection.ltr,
                                                 style: const TextStyle(
                                                   fontSize: 12,
                                                   color: AppColors.textMuted,
@@ -356,14 +364,14 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.edit_outlined,
                                       size: 20, color: AppColors.textSecondary),
-                                  tooltip: 'Edit',
+                                  tooltip: t.edit,
                                   onPressed: () => _showEditBranchSheet(branch),
                                 ),
                                 // Delete button
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline,
                                       size: 20, color: AppColors.error),
-                                  tooltip: 'Delete',
+                                  tooltip: t.delete,
                                   onPressed: () => _confirmDelete(branch),
                                 ),
                               ],
@@ -384,7 +392,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
               onPressed: _showAddBranchSheet,
               icon: const Icon(Icons.add, color: Colors.white),
               label: Text(
-                'Add Branch',
+                t.addBranch,
                 style: GoogleFonts.barlow(
                   fontWeight: FontWeight.w600,
                   color: Colors.white,

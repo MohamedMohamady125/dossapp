@@ -10,14 +10,32 @@ String formatNumber(dynamic value) {
     n = num.tryParse(value.toString().replaceAll(',', '')) ?? 0;
   }
   if (n == n.toInt()) {
-    return NumberFormat('#,##0').format(n.toInt());
+    return NumberFormat('#,##0', 'en').format(n.toInt());
   }
-  return NumberFormat('#,##0.##').format(n);
+  return NumberFormat('#,##0.##', 'en').format(n);
 }
 
-/// Format money: 1012405.0 → "1,012,405 EGP"
+/// The app's language follows `Intl.defaultLocale`, which main.dart keeps in
+/// step with the language switch. Formatters have no BuildContext, so this
+/// is how they know which words to use.
+/// Arabic date formats come out with Arabic-Indic digits (٢٠٢٦). Egyptian
+/// apps show 2026, and money is already in Western digits, so every date in
+/// the app goes through this to keep one digit style on screen.
+String westernDigits(String text) {
+  const eastern = '٠١٢٣٤٥٦٧٨٩';
+  final out = StringBuffer();
+  for (final ch in text.split('')) {
+    final i = eastern.indexOf(ch);
+    out.write(i >= 0 ? '$i' : ch);
+  }
+  return out.toString();
+}
+
+bool get _arabic => (Intl.defaultLocale ?? 'en').startsWith('ar');
+
+/// Format money: 1012405.0 → "1,012,405 EGP", or "1,012,405 جنيه" in Arabic
 String formatMoney(dynamic value) {
-  return '${formatNumber(value)} EGP';
+  return '${formatNumber(value)} ${_arabic ? 'جنيه' : 'EGP'}';
 }
 
 /// Format period: "2026-06" → "June 2026"
@@ -25,7 +43,7 @@ String formatPeriod(String period) {
   try {
     final parts = period.split('-');
     final dt = DateTime(int.parse(parts[0]), int.parse(parts[1]));
-    return DateFormat('MMMM yyyy').format(dt);
+    return westernDigits(DateFormat('MMMM yyyy').format(dt));
   } catch (_) {
     return period;
   }
@@ -48,10 +66,16 @@ String formatWhen(dynamic value) {
   t = t.toLocal();
   final now = DateTime.now();
   final diff = now.difference(t);
-  if (!diff.isNegative && diff.inMinutes < 1) return 'Just now';
+  if (!diff.isNegative && diff.inMinutes < 1) return _arabic ? 'دلوقتي' : 'Just now';
   if (!diff.isNegative && diff.inMinutes < 60) {
-    return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
+    final m = diff.inMinutes;
+    if (_arabic) {
+      return m == 1 ? 'من دقيقة' : m == 2 ? 'من دقيقتين' : m <= 10 ? 'من $m دقايق' : 'من $m دقيقة';
+    }
+    return '$m minute${m == 1 ? '' : 's'} ago';
   }
   final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
-  return sameDay ? 'Today ${DateFormat('HH:mm').format(t)}' : DateFormat('d MMM, HH:mm').format(t);
+  final clock = westernDigits(DateFormat('HH:mm').format(t));
+  if (sameDay) return _arabic ? 'النهارده $clock' : 'Today $clock';
+  return westernDigits(DateFormat('d MMM, HH:mm').format(t));
 }

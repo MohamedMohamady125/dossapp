@@ -1,11 +1,12 @@
+import '../../utils/app_error.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/report.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/report_widgets.dart';
@@ -33,7 +34,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
   List<MonthlyReport>? _history;
   bool _loading = true;
   bool _saving = false;
-  String? _error;
+  Object? _error;
 
   late String _period;
   late List<String> _periodOptions;
@@ -73,7 +74,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
       _history = fresh;
       if (isInitial) _applyExisting();
     } catch (e) {
-      if (isInitial) _error = e.toString();
+      if (isInitial) _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -113,7 +114,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
       }
       if (mounted) setState(() => _pdf = file);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: AppColors.error));
+      messenger.showSnackBar(SnackBar(content: Text(AppError.messageFor(e)), backgroundColor: AppColors.error));
     }
   }
 
@@ -149,7 +150,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
       }
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: AppColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e)), backgroundColor: AppColors.error));
       }
     }
     if (mounted) setState(() => _saving = false);
@@ -161,7 +162,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s.delete, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-        content: Text('${formatPeriod(report.period)} — ${widget.athleteName}'),
+        content: Text('${SS.read(context).period(report.period)}\n${widget.athleteName}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(s.close)),
           FilledButton(
@@ -178,7 +179,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
       await _load();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: AppColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e)), backgroundColor: AppColors.error));
       }
     }
   }
@@ -275,7 +276,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
                     children: [
                       const Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primary),
                       const SizedBox(width: 10),
-                      Text(formatPeriod(p), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      Text(SS.of(context).period(p), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                       const Spacer(),
                       if (hasReport)
                         const Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
@@ -411,10 +412,10 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
                     const SizedBox(height: 2),
                     Text(
                       file != null
-                          ? '${(file.size / 1024 / 1024).toStringAsFixed(1)} MB'
+                          ? SS.of(context).megabytes((file.size / 1024 / 1024).toStringAsFixed(1))
                           : sentName != null
                               ? '${s.alreadySent}: $sentName'
-                              : 'PDF, 10 MB max',
+                              : SS.of(context).pdfUpTo10Mb,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),

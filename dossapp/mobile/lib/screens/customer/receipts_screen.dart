@@ -32,7 +32,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
 
   List<Receipt>? _receipts;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -48,13 +48,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
       _receipts = receipts;
       _error = null;
     } catch (e) {
-      if (!silent) _error = e.toString();
+      if (!silent) _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _downloadPdf(Receipt receipt) async {
     final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
+    final failed = S.read(context).pdfFailed;
     try {
       final pdfBytes = await ApiService.downloadReceiptPdf(receipt.id);
       if (!mounted) return;
@@ -67,7 +68,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to download PDF: $e')),
+          SnackBar(content: Text(failed)),
         );
       }
     }
@@ -158,13 +159,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
                   color: AppColors.successLight,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
-                  'PAID',
+                child: Text(
+                  S.of(context).paid,
                   style: TextStyle(
                     color: AppColors.success,
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
-                    letterSpacing: 0.5,
+                    // Spacing letters apart breaks joined Arabic script
+                    letterSpacing: S.of(context).isArabic ? 0 : 0.5,
                   ),
                 ),
               ),
@@ -210,7 +212,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
 
           // Date
           Text(
-            DateFormat('dd MMM yyyy, hh:mm a').format(receipt.issuedAt.toLocal()),
+            westernDigits(DateFormat('dd MMM yyyy, hh:mm a').format(receipt.issuedAt.toLocal())),
             style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
           const SizedBox(height: 14),
@@ -227,39 +229,37 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
               if (receipt.pdfAvailable)
                 _actionButton(
                   icon: Icons.download_rounded,
-                  label: 'Open PDF',
+                  label: S.of(context).openPdf,
                   onPressed: () => _downloadPdf(receipt),
                 ),
               // Without a PDF, sharing the details as text is the fallback
               if (!receipt.pdfAvailable)
                 _actionButton(
                 icon: Icons.share_rounded,
-                label: 'Share',
+                label: S.of(context).share,
                 onPressed: () {
                   SharePlus.instance.share(
-                    ShareParams(sharePositionOrigin: shareOrigin(context), text: 'Aquathletic Swimming Academy\n'
-                        'Receipt: ${receipt.receiptNumber}\n'
-                        'Amount: ${formatMoney(receipt.amountPaid)}\n'
-                        'Period: ${formatPeriod(receipt.period)}\n'
-                        'Status: PAID ✓'),
+                    ShareParams(sharePositionOrigin: shareOrigin(context), text: S.read(context).receiptShareText(receipt.receiptNumber, formatMoney(receipt.amountPaid), formatPeriod(receipt.period))),
                   );
                 },
               ),
               _actionButton(
                 icon: Icons.send_rounded,
-                label: 'Email me a copy',
+                label: S.of(context).emailMeCopy,
                 onPressed: () async {
+                  final sent = S.read(context).sentToEmail;
+                  final failedSend = S.read(context).somethingWentWrong;
                   try {
                     await ApiService.resendReceipt(receipt.id);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sent to your email')),
+                        SnackBar(content: Text(sent)),
                       );
                     }
                   } catch (e) {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')),
+                        SnackBar(content: Text(e is ApiException ? e.message : failedSend)),
                       );
                     }
                   }

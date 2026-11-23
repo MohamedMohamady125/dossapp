@@ -3,8 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'utils/app_error.dart';
+import 'widgets/error_views.dart';
 import 'services/auth_provider.dart';
 import 'services/locale_provider.dart';
 import 'services/notification_service.dart';
@@ -33,6 +37,9 @@ Future<void> main() async {
     statusBarBrightness: Brightness.light,
   ));
 
+  // Arabic month and day names for dates shown in the app
+  await initializeDateFormatting('ar');
+
   await NotificationService.init();
 
   // Firebase Crashlytics — catch Flutter errors + async errors
@@ -44,6 +51,9 @@ Future<void> main() async {
       return true;
     };
   }
+
+  // One broken card shows a small note instead of a grey or red screen
+  installFriendlyErrorWidget();
 
   runApp(
     MultiProvider(
@@ -62,8 +72,15 @@ class AquathleticApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>().locale;
+    // Dates and money are formatted outside the widget tree (utils/formatters),
+    // so they follow this instead of a BuildContext. 'ar' keeps Western digits.
+    Intl.defaultLocale = locale.languageCode;
 
+    // Errors raised outside widgets (the network layer) use this language
+    AppLang.isArabic = locale.languageCode == 'ar';
     return MaterialApp(
+      // A strip across the top of every screen while the phone is offline
+      builder: (context, child) => OfflineBanner(child: child ?? const SizedBox.shrink()),
       title: 'Aquathletic',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),

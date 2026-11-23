@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     # Parents open the app about once a month, to pay. A short refresh
     # window signs them out between visits.
-    jwt_refresh_token_expire_days: int = 90
+    jwt_refresh_token_expire_days: int = 365
 
     # Google Drive
     google_drive_credentials_json: str = ""

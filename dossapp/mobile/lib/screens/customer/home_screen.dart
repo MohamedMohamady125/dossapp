@@ -1,3 +1,4 @@
+import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -146,7 +147,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
   List<MonthlyReport> _reports = [];
   ReinstatementStatus? _reinstatement;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   bool _submittingReinstatement = false;
 
   @override
@@ -177,7 +178,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
       }
     } catch (e, stack) {
       debugPrint('Home load error: $e\n$stack');
-      if (isInitial) _error = e.toString();
+      if (isInitial) _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -189,7 +190,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
       await _load();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
     if (mounted) setState(() => _submittingReinstatement = false);
@@ -264,7 +265,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
           title: _swimmerTitle(p),
           actions: [
             IconButton(
-              tooltip: 'Settings',
+              tooltip: S.of(context).settings,
               icon: const Icon(Icons.settings_outlined, color: Colors.white),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
             ),
@@ -302,13 +303,13 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
 
             // ── Class & practice ──
             const SizedBox(height: 20),
-            AnimatedListItem(index: 1, child: const SectionTitle('Class')),
+            AnimatedListItem(index: 1, child: SectionTitle(S.of(context).classInfo)),
             AnimatedListItem(index: 2, child: _classCard(p)),
 
             // ── Attendance ──
             if (p.attendance.isNotEmpty) ...[
               const SizedBox(height: 20),
-              AnimatedListItem(index: 3, child: const SectionTitle('Attendance')),
+              AnimatedListItem(index: 3, child: SectionTitle(S.of(context).attendance)),
               AnimatedListItem(index: 4, child: _attendanceCard(p.attendance)),
             ],
 
@@ -322,7 +323,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
             // ── About the swimmer ──
             if (p.age != null || p.dateOfBirth != null || p.gender != null) ...[
               const SizedBox(height: 20),
-              AnimatedListItem(index: 7, child: const SectionTitle('About')),
+              AnimatedListItem(index: 7, child: SectionTitle(S.of(context).athleteDetails)),
               AnimatedListItem(index: 8, child: _detailsCard(p)),
             ],
 
@@ -441,7 +442,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Enrollment Paused',
+                                S.of(context).enrollmentPaused,
                                 style: GoogleFonts.barlowCondensed(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w700,
@@ -501,17 +502,15 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                     child: const Icon(Icons.warning_amber_rounded, size: 40, color: AppColors.error),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Enrollment Window Closed',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  Text(
+                    S.of(context).enrollmentWindowClosed,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'The enrollment period for this month has ended. '
-                    'Spots are limited and are assigned to confirmed members who completed their payment on time.\n\n'
-                    'If you\'d like to check for available spots, you can submit a request below.',
-                    style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
+                  Text(
+                    S.of(context).spotLostExplain,
+                    style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -530,8 +529,8 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                 iconColor: AppColors.warning,
                 bgColor: AppColors.warningLight,
                 borderColor: AppColors.warning.withValues(alpha: 0.3),
-                title: 'Checking Availability',
-                subtitle: 'Your request has been submitted. The system is checking for available spots in your class. You\'ll be notified once confirmed.',
+                title: S.of(context).checkingAvailability,
+                subtitle: S.of(context).checkingAvailabilityMsg,
               ),
             ] else if (r.isApproved) ...[
               _reinstatementStatusCard(
@@ -539,8 +538,8 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                 iconColor: AppColors.success,
                 bgColor: AppColors.success.withValues(alpha: 0.06),
                 borderColor: AppColors.success.withValues(alpha: 0.3),
-                title: 'Spot Confirmed',
-                subtitle: r.adminNote ?? 'Your spot has been confirmed. Please complete your payment to resume training.',
+                title: S.of(context).spotConfirmed,
+                subtitle: r.adminNote ?? S.of(context).spotConfirmedMsg,
               ),
             ] else if (r.isDeclined) ...[
               _reinstatementStatusCard(
@@ -548,8 +547,8 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                 iconColor: AppColors.error,
                 bgColor: AppColors.error.withValues(alpha: 0.06),
                 borderColor: AppColors.error.withValues(alpha: 0.2),
-                title: 'No Spots Available',
-                subtitle: r.adminNote ?? 'Unfortunately, all spots in your class have been filled for this period. The system was unable to hold your spot as the enrollment window has passed.',
+                title: S.of(context).noSpotsAvailable,
+                subtitle: r.adminNote ?? S.of(context).noSpotsMsg,
               ),
               const SizedBox(height: 12),
               // Allow resubmission after decline
@@ -575,15 +574,14 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
         children: [
           const Icon(Icons.event_available_rounded, size: 36, color: AppColors.primary),
           const SizedBox(height: 12),
-          const Text(
-            'Check Spot Availability',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          Text(
+            S.of(context).checkSpotAvailability,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Submit a request to check if a spot is still available in your class. '
-            'You\'ll be notified once the system confirms availability.',
-            style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+          Text(
+            S.of(context).askSpotHelp,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -599,7 +597,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
               ),
               child: _submittingReinstatement
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                  : const Text('Request Available Spot', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  : Text(S.of(context).requestAvailableSpot, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -657,12 +655,13 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     final hasBill = b.amountOwed != null;
     final due = !isPaid && hasBill;
 
-    final title = isPaid ? 'Paid' : hasBill ? 'Payment due' : 'Bill not set yet';
+    final s = S.of(context);
+    final title = isPaid ? s.paid : hasBill ? s.paymentDue : s.billPending;
     final subtitle = isPaid
         ? formatPeriod(b.period)
         : hasBill
             ? formatPeriod(b.period)
-            : 'Your branch will add the amount soon';
+            : s.billSoon;
 
     final tone = isPaid ? AppColors.success : AppColors.warning;
     final fg = due ? Colors.white : AppColors.textPrimary;
@@ -712,7 +711,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Pay now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                  child: Text(s.payNow, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.accent)),
                 ),
             ],
           ),
@@ -733,11 +732,11 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     final rate = total > 0 ? (present * 100 / total).round() : 0;
     return Row(
       children: [
-        Expanded(child: StatTile(icon: Icons.pool_rounded, color: AppColors.primary, value: '$present', label: 'Attended')),
+        Expanded(child: StatTile(icon: Icons.pool_rounded, color: AppColors.primary, value: '$present', label: S.of(context).present)),
         const SizedBox(width: 10),
-        Expanded(child: StatTile(icon: Icons.event_busy_rounded, color: missed > 0 ? AppColors.error : AppColors.textMuted, value: '$missed', label: 'Missed')),
+        Expanded(child: StatTile(icon: Icons.event_busy_rounded, color: missed > 0 ? AppColors.error : AppColors.textMuted, value: '$missed', label: S.of(context).absent)),
         const SizedBox(width: 10),
-        Expanded(child: StatTile(icon: Icons.insights_rounded, color: AppColors.primary, value: '$rate%', label: 'Attendance')),
+        Expanded(child: StatTile(icon: Icons.insights_rounded, color: AppColors.primary, value: '$rate%', label: S.of(context).attendance)),
       ],
     );
   }
@@ -757,12 +756,12 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     ].join(' \u2022 ');
 
     if (title.isEmpty && meta.isEmpty && p.schedule.isEmpty) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'Class details will appear once your branch assigns them.',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            S.of(context).classNotSetMsg,
+            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
           ),
         ),
       );
@@ -783,7 +782,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        title.isEmpty ? 'Class not assigned yet' : title,
+                        title.isEmpty ? S.of(context).classNotSet : title,
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                       ),
                       if (meta.isNotEmpty) ...[
@@ -811,9 +810,9 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     // One line: a parent knows their child, this only confirms the record
     // is the right one (Cognitive Load: three rows said what one can).
     final parts = <String>[
-      if (p.age != null) '${p.age!.toStringAsFixed(1)} years',
-      if (p.gender != null) p.gender == 'M' ? 'Male' : p.gender == 'F' ? 'Female' : p.gender!,
-      if (p.dateOfBirth != null) 'Born ${p.dateOfBirth!}',
+      if (p.age != null) S.of(context).yearsOld(p.age!.toStringAsFixed(1)),
+      if (p.gender != null) p.gender == 'M' ? S.of(context).male : p.gender == 'F' ? S.of(context).female : p.gender!,
+      if (p.dateOfBirth != null) S.of(context).bornOn(p.dateOfBirth!),
     ];
     return Card(
       child: Padding(
@@ -889,14 +888,14 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
         color: AppColors.surfaceVariant,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.info_outline, size: 40, color: AppColors.textMuted),
-          SizedBox(height: 12),
-          Text('No Active Enrollment', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-          SizedBox(height: 4),
-          Text('You are not enrolled for the current period.\nContact your branch for more information.',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          const Icon(Icons.info_outline, size: 40, color: AppColors.textMuted),
+          const SizedBox(height: 12),
+          Text(S.of(context).noActiveEnrollment, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          Text(S.of(context).noActiveEnrollmentMsg,
+            textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
         ],
       ),
     );
@@ -920,12 +919,12 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
           children: [
             Row(
               children: [
-                Text('$present of $total sessions', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                Text(S.of(context).sessionsOf(present, total), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                 const Spacer(),
                 if (absent > 0)
-                  StatusPill('$absent missed', AppColors.error)
+                  StatusPill(S.of(context).missedCount(absent), AppColors.error)
                 else
-                  const StatusPill('No misses', AppColors.primary),
+                  StatusPill(S.of(context).noMisses, AppColors.primary),
               ],
             ),
             const SizedBox(height: 10),
@@ -945,7 +944,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
               children: sortedDates.map((date) {
                 final isPresent = attendance[date] == 'P';
                 final parsed = DateTime.tryParse(date);
-                final label = parsed != null ? DateFormat('E d').format(parsed) : date;
+                final label = parsed != null ? westernDigits(DateFormat('E d').format(parsed)) : date;
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(

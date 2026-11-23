@@ -1,9 +1,10 @@
+import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
-import '../../utils/translations.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/press_feedback.dart';
@@ -19,7 +20,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
   List<Map<String, dynamic>>? _admins;
   List<Map<String, dynamic>>? _branches;
   bool _loading = true;
-  String? _error;
+  Object? _error;
 
   @override
   void initState() {
@@ -37,7 +38,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
       _admins = List<Map<String, dynamic>>.from(results[0]);
       _branches = List<Map<String, dynamic>>.from(results[1]);
     } catch (e) {
-      _error = e.toString();
+      _error = e;
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -45,12 +46,12 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final s = S.of(context);
+    final t = SS.of(context);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Branch Admins',
+          t.branchAdminsTitle,
           style: GoogleFonts.barlowCondensed(
             fontSize: 22, fontWeight: FontWeight.w700,
             color: AppColors.textPrimary, letterSpacing: -0.3,
@@ -59,6 +60,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
+            tooltip: t.refresh,
             onPressed: _load,
           ),
         ],
@@ -69,15 +71,15 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add),
         label: Text(
-          'New Branch Admin',
+          t.addBranchAdmin,
           style: GoogleFonts.barlow(fontWeight: FontWeight.w600),
         ),
       ),
-      body: _buildBody(s),
+      body: _buildBody(t),
     );
   }
 
-  Widget _buildBody(S s) {
+  Widget _buildBody(SS t) {
     if (_loading) {
       return const SkeletonList(count: 4, hasAvatar: true);
     }
@@ -87,8 +89,8 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
     if (_admins == null || _admins!.isEmpty) {
       return EmptyState(
         icon: Icons.admin_panel_settings_outlined,
-        title: 'No Branch Admins',
-        subtitle: 'Tap the button below to create a branch admin.',
+        title: t.noBranchAdminsYet,
+        subtitle: t.tapBelowToAdd,
       );
     }
 
@@ -103,6 +105,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
   }
 
   Widget _adminCard(Map<String, dynamic> admin) {
+    final t = SS.of(context);
     final isActive = admin['is_active'] == true;
     final mustChange = admin['must_change_password'] == true;
     final lastLogin = admin['last_login_at'] as String?;
@@ -159,7 +162,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                     color: AppColors.errorLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text('Inactive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.error)),
+                  child: Text(t.turnedOff, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.error)),
                 )
               else if (mustChange)
                 Container(
@@ -168,7 +171,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                     color: AppColors.warningLight,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Text('Pending', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warningDark)),
+                  child: Text(t.waitingOne, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.warningDark)),
                 ),
             ],
           ),
@@ -178,7 +181,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
               const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textMuted),
               const SizedBox(width: 4),
               Text(
-                admin['branch_name'] ?? 'Branch ${admin['branch_id']}',
+                admin['branch_name'] ?? t.branchNumber(admin['branch_id']),
                 style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               const Spacer(),
@@ -186,11 +189,11 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                 const Icon(Icons.login, size: 14, color: AppColors.textMuted),
                 const SizedBox(width: 4),
                 Text(
-                  _formatDate(lastLogin),
+                  t.date(lastLogin),
                   style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ] else
-                const Text('Never logged in', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                Text(t.hasNotLoggedIn, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
             ],
           ),
           const SizedBox(height: 12),
@@ -200,13 +203,13 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
             children: [
               _actionButton(
                 icon: Icons.lock_reset,
-                label: 'Reset Password',
+                label: t.newPassword,
                 onTap: () => _resetPassword(admin),
               ),
               const SizedBox(width: 12),
               _actionButton(
                 icon: isActive ? Icons.block : Icons.check_circle_outline,
-                label: isActive ? 'Deactivate' : 'Activate',
+                label: isActive ? t.turnOff : t.turnOn,
                 color: isActive ? AppColors.error : AppColors.success,
                 onTap: () => _toggleActive(admin),
               ),
@@ -244,19 +247,10 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
     );
   }
 
-  String _formatDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
-      return iso;
-    }
-  }
-
   void _showCreateDialog() {
     if (_branches == null || _branches!.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No branches available')),
+        SnackBar(content: Text(SS.read(context).addBranchFirst)),
       );
       return;
     }
@@ -270,6 +264,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
+          final t = SS.of(ctx);
           return AlertDialog(
             title: Row(
               children: [
@@ -282,7 +277,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                   child: const Icon(Icons.person_add, size: 22, color: AppColors.primary),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(child: Text('New Branch Admin')),
+                Expanded(child: Text(t.addBranchAdmin)),
               ],
             ),
             content: Form(
@@ -292,9 +287,9 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                 children: [
                   // Branch selection
                   DropdownButtonFormField<int>(
-                    decoration: const InputDecoration(
-                      labelText: 'Branch',
-                      prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+                    decoration: InputDecoration(
+                      labelText: t.branch,
+                      prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
                     ),
                     initialValue: selectedBranchId,
                     items: _branches!.map((b) => DropdownMenuItem<int>(
@@ -302,20 +297,22 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                       child: Text(b['name'] as String),
                     )).toList(),
                     onChanged: (v) => setDialogState(() => selectedBranchId = v),
-                    validator: (v) => v == null ? 'Select a branch' : null,
+                    validator: (v) => v == null ? t.chooseBranch : null,
                   ),
                   const SizedBox(height: 16),
                   // Email
                   TextFormField(
                     controller: emailCtrl,
                     keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined, size: 20),
+                    // An email is always left to right, also in Arabic
+                    textDirection: TextDirection.ltr,
+                    decoration: InputDecoration(
+                      labelText: t.email,
+                      prefixIcon: const Icon(Icons.email_outlined, size: 20),
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
-                      if (!v.contains('@') || !v.contains('.')) return 'Invalid email';
+                      if (v == null || v.isEmpty) return t.required;
+                      if (!v.contains('@') || !v.contains('.')) return t.emailNotCorrect;
                       return null;
                     },
                   ),
@@ -325,7 +322,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
             actions: [
               TextButton(
                 onPressed: loading ? null : () => Navigator.pop(ctx),
-                child: Text(S.of(context).cancel),
+                child: Text(t.cancel),
               ),
               FilledButton(
                 onPressed: loading ? null : () async {
@@ -345,14 +342,14 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                     if (ctx.mounted) {
                       setDialogState(() => loading = false);
                       ScaffoldMessenger.of(ctx).showSnackBar(
-                        SnackBar(content: Text(e.toString())),
+                        SnackBar(content: Text(AppError.messageFor(e))),
                       );
                     }
                   }
                 },
                 child: loading
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Generate'),
+                    : Text(t.create),
               ),
             ],
           );
@@ -365,6 +362,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
     final username = data['username'] as String;
     final password = data['temp_password'] as String;
     final branchName = data['branch_name'] as String?;
+    final t = SS.read(context);
 
     showDialog(
       context: context,
@@ -381,7 +379,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
               child: const Icon(Icons.check_circle, size: 22, color: AppColors.success),
             ),
             const SizedBox(width: 12),
-            const Expanded(child: Text('Branch Admin Created')),
+            Expanded(child: Text(t.branchAdminAdded)),
           ],
         ),
         content: Column(
@@ -391,13 +389,13 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
-                  'Branch: $branchName',
+                  t.branchIs(branchName),
                   style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                 ),
               ),
-            _credentialRow('Username', username),
+            _credentialRow(t.username, username),
             const SizedBox(height: 12),
-            _credentialRow('Password', password),
+            _credentialRow(t.password, password),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -411,8 +409,8 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Share these credentials with the branch admin. They will be prompted to set a new password on first login.',
-                      style: TextStyle(fontSize: 12, color: AppColors.warningDark),
+                      t.giveLoginDetails,
+                      style: const TextStyle(fontSize: 12, color: AppColors.warningDark),
                     ),
                   ),
                 ],
@@ -423,24 +421,24 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
         actions: [
           FilledButton(
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: 'Username: $username\nPassword: $password'));
+              Clipboard.setData(ClipboardData(text: t.loginDetailsText(username, password)));
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Credentials copied to clipboard')),
+                SnackBar(content: Text(t.loginDetailsCopied)),
               );
             },
             style: FilledButton.styleFrom(backgroundColor: AppColors.secondary),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.copy, size: 18),
-                SizedBox(width: 6),
-                Text('Copy'),
+                const Icon(Icons.copy, size: 18),
+                const SizedBox(width: 6),
+                Text(t.copy),
               ],
             ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(S.of(context).done),
+            child: Text(t.done),
           ),
         ],
       ),
@@ -470,6 +468,8 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
           Expanded(
             child: Text(
               value,
+              // Usernames and passwords read left to right in Arabic too
+              textDirection: TextDirection.ltr,
               style: GoogleFonts.barlow(
                 fontSize: 16, fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary, letterSpacing: 0.5,
@@ -481,7 +481,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: value));
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$label copied')),
+                SnackBar(content: Text(SS.read(context).copied(label))),
               );
             },
             padding: EdgeInsets.zero,
@@ -493,14 +493,15 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
   }
 
   Future<void> _resetPassword(Map<String, dynamic> admin) async {
+    final t = SS.read(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reset Password'),
-        content: Text('Reset password for ${admin['username']}? A new temporary password will be generated.'),
+        title: Text(t.newPassword),
+        content: Text(t.newPasswordQuestion('${admin['username']}')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of(context).cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.of(context).confirm)),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t.confirm)),
         ],
       ),
     );
@@ -518,25 +519,26 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
   }
 
   Future<void> _toggleActive(Map<String, dynamic> admin) async {
     final isActive = admin['is_active'] == true;
-    final action = isActive ? 'deactivate' : 'activate';
+    final t = SS.read(context);
+    final name = '${admin['username']}';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('${action[0].toUpperCase()}${action.substring(1)} Admin'),
-        content: Text('Are you sure you want to $action ${admin['username']}?'),
+        title: Text(isActive ? t.turnOffAdminTitle : t.turnOnAdminTitle),
+        content: Text(isActive ? t.cannotLogIn(name) : t.canLogInAgain(name)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.of(context).cancel)),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.cancel)),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: isActive ? FilledButton.styleFrom(backgroundColor: AppColors.error) : null,
-            child: Text(action[0].toUpperCase() + action.substring(1)),
+            child: Text(isActive ? t.turnOff : t.turnOn),
           ),
         ],
       ),
@@ -548,7 +550,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
       _load();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
   }

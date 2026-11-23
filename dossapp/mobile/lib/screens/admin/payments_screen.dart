@@ -2,11 +2,11 @@ import '../../services/app_refresh.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/ui_kit.dart';
@@ -25,7 +25,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
   List<Map<String, dynamic>>? _payments;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   String _statusFilter = 'paid';
   String _search = '';
   Timer? _searchDebounce;
@@ -63,7 +63,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       _error = null;
       if (!silent) _animController.forward(from: 0);
     } catch (e) {
-      if (!silent) _error = e.toString();
+      if (!silent) _error = e;
     }
     if (!mounted) return;
     setState(() => _loading = false);
@@ -82,6 +82,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     final list = _filtered;
 
     // Compute summary
@@ -123,14 +124,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Collected in ${formatPeriod(_period ?? '')}',
+                        t.collectedIn(t.period(_period ?? '')),
                         style: const TextStyle(color: Colors.white70, fontSize: 13),
                       ),
                       const SizedBox(height: 2),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: AlignmentDirectional.centerStart,
-                        child: Text(formatMoney(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
+                        child: Text(t.money(totalCollected), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
                       ),
                     ],
                   ),
@@ -138,7 +139,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-                  child: Text('${formatNumber(paidCount)} paid', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                  child: Text(t.paidCount(paidCount), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
@@ -151,9 +152,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             children: [
               Expanded(
                 child: TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Search by name or number',
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    hintText: t.searchByNameOrNumber,
+                    prefixIcon: const Icon(Icons.search),
                     isDense: true,
                   ),
                   onChanged: (v) {
@@ -174,13 +175,13 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                 ),
                 child: PopupMenuButton<String>(
                   icon: Icon(Icons.filter_list, size: 22, color: _statusFilter.isEmpty ? AppColors.textSecondary : AppColors.primary),
-                  tooltip: 'Filter status',
+                  tooltip: t.filter,
                   position: PopupMenuPosition.under,
                   onSelected: (v) { _statusFilter = v; _load(); },
                   itemBuilder: (ctx) => [
-                    _filterItem('', 'All', Icons.list),
-                    _filterItem('paid', 'Paid', Icons.check_circle_outline),
-                    _filterItem('pending', 'Pending', Icons.pending_outlined),
+                    _filterItem('', t.all, Icons.list),
+                    _filterItem('paid', t.paid, Icons.check_circle_outline),
+                    _filterItem('pending', t.notFinished, Icons.pending_outlined),
                   ],
                 ),
               ),
@@ -197,8 +198,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
           Expanded(
             child: EmptyState(
               icon: Icons.search_off_rounded,
-              title: _search.isNotEmpty ? 'No results for "$_search"' : 'No payments for this period',
-              subtitle: _search.isNotEmpty ? 'Try a different search term' : 'Payments will appear once athletes are marked as paid',
+              title: _search.isNotEmpty ? t.nothingFoundFor(_search) : t.noPaymentsThisMonth,
+              subtitle: _search.isNotEmpty ? t.tryAnotherSearch : t.paymentsShowAfterPay,
             ),
           )
         else
@@ -244,6 +245,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   }
 
   Future<void> _downloadReceipt(int receiptId, String receiptNumber) async {
+    final t = SS.read(context);
     final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
     try {
       final pdfBytes = await ApiService.adminDownloadReceiptPdf(receiptId);
@@ -255,7 +257,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to download: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.receiptDownloadFailed)));
       }
     }
   }
@@ -264,8 +266,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
   // lines beneath. "Paid" is the normal state here so it gets no badge; only
   // a payment that is not yet paid is flagged (Von Restorff).
   Widget _paymentCard(Map<String, dynamic> p) {
+    final t = SS.of(context);
     final isPaid = p['status'] == 'paid';
-    final name = p['athlete_name'] ?? 'Athlete #${p['athlete_number']}';
+    final name = p['athlete_name'] ?? t.swimmerNumber(p['athlete_number']);
     final level = (p['level'] ?? '') as String;
     final type = (p['athlete_type'] ?? '') as String;
     final coach = p['coach'] as String?;
@@ -277,12 +280,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     final classLine = [
       if (level.isNotEmpty) level,
       if (type.isNotEmpty && type != level) type,
-      if (coach != null) 'Coach $coach',
+      if (coach != null) t.coachNamed(coach),
       if (trainingTime != null) trainingTime,
     ].join(' \u2022 ');
     final paymentLine = [
-      if (channel != null) channel,
-      if (receiptNumber != null) 'Receipt $receiptNumber',
+      if (channel != null) t.channel(channel),
+      if (receiptNumber != null) t.receiptNo(receiptNumber),
     ].join(' \u2022 ');
 
     return Padding(
@@ -305,9 +308,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
                       margin: const EdgeInsetsDirectional.only(end: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(6)),
-                      child: const Text('Pending', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warningDark)),
+                      child: Text(t.notFinished, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.warningDark)),
                     ),
-                  Text(formatMoney(p['amount_paid']), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
+                  Text(t.money(p['amount_paid']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.textPrimary)),
                 ],
               ),
               if (classLine.isNotEmpty) ...[
@@ -326,7 +329,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
               onPressed: () => _downloadReceipt(receiptId, receiptNumber ?? '$receiptId'),
               icon: const Icon(Icons.download_rounded, size: 22),
               color: AppColors.primary,
-              tooltip: 'Download receipt',
+              tooltip: t.downloadReceipt,
             )
           else
             const SizedBox(width: 12),

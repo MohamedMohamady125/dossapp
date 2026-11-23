@@ -15,6 +15,7 @@ import 'ui_kit.dart';
 Future<void> openReportPdf(BuildContext context, MonthlyReport report, {required bool staff}) async {
   final messenger = ScaffoldMessenger.of(context);
   final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
+  final failed = S.read(context).pdfFailed;
   try {
     final bytes = await ApiService.downloadReportPdf(report.id, staff: staff);
     final dir = await getTemporaryDirectory();
@@ -27,7 +28,7 @@ Future<void> openReportPdf(BuildContext context, MonthlyReport report, {required
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Could not open the PDF: $e')));
+    messenger.showSnackBar(SnackBar(content: Text(failed)));
   }
 }
 

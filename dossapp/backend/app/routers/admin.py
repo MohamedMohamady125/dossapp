@@ -511,10 +511,22 @@ async def list_athletes(
 
     # Get existing accounts for this branch (with onboarding status)
     result = await db.execute(
-        select(Account.athlete_number, Account.must_change_password, Account.login_code, Account.temp_password)
-        .where(Account.branch_id == branch_id)
+        select(
+            Account.athlete_number, Account.must_change_password, Account.login_code, Account.temp_password,
+            Account.created_at, Account.last_login_at, Account.id,
+        ).where(Account.branch_id == branch_id)
     )
     account_rows = result.all()
+    account_dates = {row[0]: (row[4], row[5]) for row in account_rows}
+    from app.models.push import DeviceToken
+    push_result = await db.execute(
+        select(DeviceToken.account_id).where(DeviceToken.is_active == True).distinct()  # noqa: E712
+    )
+    push_account_ids = {row[0] for row in push_result.all()}
+    has_push_numbers = {row[0] for row in account_rows if row[6] in push_account_ids}
+
+    def _iso(value):
+        return value.isoformat() if value else None
     provisioned = {row[0] for row in account_rows}
     completed_onboarding = {row[0] for row in account_rows if not row[1]}
     # Login details staff can still hand out: signup not finished yet
@@ -586,6 +598,9 @@ async def list_athletes(
             credentials_message=credentials_message(
                 a.name, *pending_logins.get(a.athlete_number, (None, None)), branch=roster.branch_name),
             whatsapp_phone=whatsapp_number(a.phone1, a.phone2) if a.athlete_number in pending_logins else None,
+            invited_at=_iso(account_dates.get(a.athlete_number, (None, None))[0]),
+            last_login_at=_iso(account_dates.get(a.athlete_number, (None, None))[1]),
+            has_push=a.athlete_number in has_push_numbers,
             is_paid=excel_paid or a.athlete_number in db_paid_set,
             schedule=[
                 ScheduleSlot(coach=s.coach, time_block=s.time_block, day_pair=s.day_pair)

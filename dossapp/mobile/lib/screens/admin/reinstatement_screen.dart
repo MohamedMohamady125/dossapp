@@ -1,5 +1,7 @@
+import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
+import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
@@ -23,7 +25,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
 
   List<Map<String, dynamic>>? _requests;
   bool _loading = true;
-  String? _error;
+  Object? _error;
   String _filter = 'pending';
 
   @override
@@ -39,55 +41,57 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
       _requests = await ApiService.getReinstatementRequests(statusFilter: _filter);
       _error = null;
     } catch (e) {
-      if (!silent) _error = e.toString();
+      if (!silent) _error = e;
     }
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _approve(int requestId) async {
+    final t = SS.read(context);
     try {
       await ApiService.approveReinstatement(requestId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reinstatement approved'), backgroundColor: AppColors.success),
+          SnackBar(content: Text(t.requestAccepted), backgroundColor: AppColors.success),
         );
       }
       _load();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
   }
 
   Future<void> _decline(int requestId) async {
+    final t = SS.read(context);
     final noteController = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Decline Request'),
+        title: Text(t.rejectRequestTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('This will inform the athlete that their spot has been taken.'),
+            Text(t.parentWillBeTold),
             const SizedBox(height: 12),
             TextField(
               controller: noteController,
-              decoration: const InputDecoration(
-                labelText: 'Note to athlete (optional)',
-                hintText: 'e.g., Your spot was given to another swimmer',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: t.noteToParentOptional,
+                hintText: t.noteToParentHint,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 2,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
-            child: const Text('Decline'),
+            child: Text(t.reject),
           ),
         ],
       ),
@@ -99,23 +103,24 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
       await ApiService.declineReinstatement(requestId, adminNote: noteController.text.isNotEmpty ? noteController.text : null);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Request declined')),
+          SnackBar(content: Text(t.requestRejected)),
         );
       }
       _load();
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = SS.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Reinstatement Requests',
+          t.requestsToReturn,
           style: GoogleFonts.barlowCondensed(
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -130,11 +135,11 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Row(
               children: [
-                _filterChip('Pending', 'pending'),
+                _filterChip(t.statusWaiting, 'pending'),
                 const SizedBox(width: 8),
-                _filterChip('Approved', 'approved'),
+                _filterChip(t.statusAccepted, 'approved'),
                 const SizedBox(width: 8),
-                _filterChip('Declined', 'declined'),
+                _filterChip(t.statusRejected, 'declined'),
               ],
             ),
           ),
@@ -146,8 +151,8 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
                     : _requests == null || _requests!.isEmpty
                         ? EmptyState(
                             icon: Icons.check_circle_outline,
-                            title: 'No $_filter requests',
-                            subtitle: 'There are no $_filter reinstatement requests at the moment.',
+                            title: t.noRequests(_filter),
+                            subtitle: _filter == 'pending' ? t.newRequestsShowHere : '',
                           )
                         : RefreshIndicator(
                             onRefresh: _load,
@@ -180,8 +185,9 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
   }
 
   Widget _requestCard(Map<String, dynamic> req) {
+    final t = SS.of(context);
     final id = req['id'] as int;
-    final athleteName = req['athlete_name'] as String? ?? 'Unknown';
+    final athleteName = req['athlete_name'] as String? ?? t.swimmer;
     final athleteNumber = req['athlete_number'] as int? ?? 0;
     final branchName = req['branch_name'] as String? ?? '';
     final status = req['status'] as String? ?? 'pending';
@@ -251,19 +257,19 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
           // Stats row
           Row(
             children: [
-              _statChip(Icons.event_available, '$present/$total', 'Attendance', rate >= 50 ? AppColors.success : AppColors.error),
+              _statChip(Icons.event_available, '$present/$total', t.attendance, rate >= 50 ? AppColors.success : AppColors.error),
               const SizedBox(width: 8),
-              _statChip(Icons.percent, '$rate%', 'Rate', rate >= 50 ? AppColors.success : AppColors.error),
+              _statChip(Icons.percent, '$rate%', t.percent, rate >= 50 ? AppColors.success : AppColors.error),
               const SizedBox(width: 8),
               _statChip(
                 paymentStatus == 'paid' ? Icons.check_circle : Icons.cancel,
-                paymentStatus == 'paid' ? 'Paid' : 'Unpaid',
-                'Payment',
+                paymentStatus == 'paid' ? t.paid : t.notPaid,
+                t.payment,
                 paymentStatus == 'paid' ? AppColors.success : AppColors.error,
               ),
               if (sessions != null) ...[
                 const SizedBox(width: 8),
-                _statChip(Icons.repeat, sessions, 'Sessions', AppColors.secondary),
+                _statChip(Icons.repeat, sessions, t.sessionsShort, AppColors.secondary),
               ],
             ],
           ),
@@ -294,7 +300,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
           if (createdAt != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Submitted: ${_formatDate(createdAt)}',
+              t.sentOn(t.dateTime(createdAt)),
               style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ],
@@ -308,7 +314,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
                   child: OutlinedButton.icon(
                     onPressed: () => _decline(id),
                     icon: const Icon(Icons.close, size: 18),
-                    label: const Text('Decline'),
+                    label: Text(t.reject),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.error,
                       side: const BorderSide(color: AppColors.error),
@@ -322,7 +328,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
                   child: ElevatedButton.icon(
                     onPressed: () => _approve(id),
                     icon: const Icon(Icons.check, size: 18),
-                    label: const Text('Approve'),
+                    label: Text(t.accept),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.success,
                       foregroundColor: Colors.white,
@@ -340,21 +346,12 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
   }
 
   Widget _statusBadge(String status) {
-    final Color color;
-    final String label;
-    switch (status) {
-      case 'approved':
-        color = AppColors.success;
-        label = 'Approved';
-        break;
-      case 'declined':
-        color = AppColors.error;
-        label = 'Declined';
-        break;
-      default:
-        color = AppColors.warning;
-        label = 'Pending';
-    }
+    final label = SS.of(context).requestStatus(status);
+    final color = switch (status) {
+      'approved' => AppColors.success,
+      'declined' => AppColors.error,
+      _ => AppColors.warning,
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -383,14 +380,5 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
         ),
       ),
     );
-  }
-
-  String _formatDate(String iso) {
-    try {
-      final dt = DateTime.parse(iso);
-      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return iso;
-    }
   }
 }

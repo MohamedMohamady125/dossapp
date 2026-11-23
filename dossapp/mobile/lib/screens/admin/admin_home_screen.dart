@@ -1,3 +1,5 @@
+import '../../utils/translations_staff.dart';
+import 'accounts_screen.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -87,7 +89,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final s = S.of(context);
-    if (_currentIndex > 3) _currentIndex = 0;
+    final t = SS.of(context);
+    if (_currentIndex > 4) _currentIndex = 0;
 
     if (_loadingBranches) {
       return Scaffold(
@@ -121,7 +124,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
             icon: _pendingReinstatements > 0
                 ? Badge(label: Text('$_pendingReinstatements'), child: const Icon(Icons.person_add_alt_1_rounded, size: 22))
                 : const Icon(Icons.person_add_alt_1_rounded, size: 22),
-            tooltip: s.reinstatementRequests,
+            tooltip: t.requestsToReturn,
             onPressed: () async {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const ReinstatementScreen()));
               _loadPendingCount();
@@ -159,7 +162,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
                   children: [
                     const Icon(Icons.refresh_rounded, size: 20, color: AppColors.textSecondary),
                     const SizedBox(width: 12),
-                    Text(s.refresh),
+                    Text(t.menuRefresh),
                   ],
                 ),
               ),
@@ -169,7 +172,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
                   children: [
                     const Icon(Icons.monitor_heart_outlined, size: 20, color: AppColors.textSecondary),
                     const SizedBox(width: 12),
-                    Text(s.health),
+                    Text(t.menuSheetCheck),
                   ],
                 ),
               ),
@@ -180,7 +183,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
                     children: [
                       const Icon(Icons.account_tree_outlined, size: 20, color: AppColors.textSecondary),
                       const SizedBox(width: 12),
-                      Text(s.branches),
+                      Text(t.menuBranches),
                     ],
                   ),
                 ),
@@ -191,7 +194,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
                     children: [
                       const Icon(Icons.admin_panel_settings_outlined, size: 20, color: AppColors.textSecondary),
                       const SizedBox(width: 12),
-                      Text(s.branchAdmins),
+                      Text(t.menuBranchAdmins),
                     ],
                   ),
                 ),
@@ -201,7 +204,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
                   children: [
                     const Icon(Icons.settings_outlined, size: 20, color: AppColors.textSecondary),
                     const SizedBox(width: 12),
-                    Text(s.settings),
+                    Text(t.menuSettings),
                   ],
                 ),
               ),
@@ -216,15 +219,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
         ),
         child: NavigationBar(
           selectedIndex: _currentIndex,
-          onDestinationSelected: (i) => setState(() {
-            _currentIndex = i;
-            _visitedTabs.add(i);
-          }),
+          onDestinationSelected: (i) {
+            setState(() {
+              _currentIndex = i;
+              _visitedTabs.add(i);
+            });
+            // Opening a tab brings anything older than a few seconds up to date
+            AppRefresh.nudge();
+          },
           destinations: [
-            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people), label: s.athletes),
-            NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: s.payments),
-            NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: s.analytics),
-            NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: s.pricing),
+            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people), label: t.tabSwimmers),
+            NavigationDestination(
+              icon: const Icon(Icons.phone_iphone_outlined),
+              selectedIcon: const Icon(Icons.phone_iphone),
+              label: t.tabAccounts,
+            ),
+            NavigationDestination(icon: const Icon(Icons.payments_outlined), selectedIcon: const Icon(Icons.payments), label: t.tabPayments),
+            NavigationDestination(icon: const Icon(Icons.insights_outlined), selectedIcon: const Icon(Icons.insights), label: t.tabAnalytics),
+            NavigationDestination(icon: const Icon(Icons.sell_outlined), selectedIcon: const Icon(Icons.sell), label: t.tabPrices),
           ],
         ),
       ),
@@ -268,20 +280,21 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
   }
 
   Widget _buildCurrentTab(AuthProvider auth) {
-    if (_selectedBranchId == null && _currentIndex <= 2) {
-      return Center(child: Text(S.of(context).noData));
+    if (_selectedBranchId == null && _currentIndex <= 3) {
+      return Center(child: Text(SS.of(context).noDataYet));
     }
     // Lazy IndexedStack: each tab is built the first time it's opened and
     // then kept alive, so lists resume exactly where the user left off.
     return IndexedStack(
       index: _currentIndex,
-      children: List.generate(4, (i) {
+      children: List.generate(5, (i) {
         if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
         switch (i) {
           case 0: return AthletesScreen(branchId: _selectedBranchId!, key: ValueKey('ath-$_selectedBranchId-$_refreshKey'));
-          case 1: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
-          case 2: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
-          case 3: return PriceCatalogScreen(branchId: _selectedBranchId, key: ValueKey('pricing-$_selectedBranchId-$_refreshKey'));
+          case 1: return AccountsScreen(branchId: _selectedBranchId!, key: ValueKey('acc-$_selectedBranchId-$_refreshKey'));
+          case 2: return PaymentsScreen(branchId: _selectedBranchId!, key: ValueKey('pay-$_selectedBranchId-$_refreshKey'));
+          case 3: return AnalyticsScreen(branchId: _selectedBranchId!, isAdmin: auth.isAdmin, key: ValueKey('ana-$_selectedBranchId-$_refreshKey'));
+          case 4: return PriceCatalogScreen(branchId: _selectedBranchId, key: ValueKey('pricing-$_selectedBranchId-$_refreshKey'));
           default: return const SizedBox.shrink();
         }
       }),

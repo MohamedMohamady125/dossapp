@@ -1,8 +1,9 @@
+import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/language_toggle.dart';
 import '../../services/auth_provider.dart';
-import '../../services/locale_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
 import '../../widgets/press_feedback.dart';
@@ -115,8 +116,8 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString();
-        final s = S.of(context);
+        final msg = AppError.messageFor(e);
+        final s = S.read(context);
         // Translate known backend error messages
         final lower = msg.toLowerCase();
         final translated = lower.contains('invalid credentials')
@@ -146,7 +147,6 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final locale = context.watch<LocaleProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -255,28 +255,10 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                         ),
                         // Language toggle on top so it's still tappable
-                        Positioned(
-                          top: 4,
-                          right: 16,
-                          child: GestureDetector(
-                            onTap: () => locale.toggleLanguage(),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                              ),
-                              child: Text(
-                                locale.isArabic ? 'EN' : 'ع',
-                                style: GoogleFonts.barlow(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
+                        const PositionedDirectional(
+                          top: 0,
+                          end: 8,
+                          child: LanguageToggle(),
                         ),
                       ],
                     ),
@@ -329,6 +311,8 @@ class _LoginScreenState extends State<LoginScreen>
                           position: _field1Slide,
                           child: TextFormField(
                             controller: _codeController,
+                            // Codes and emails read left to right in both languages
+                            textDirection: TextDirection.ltr,
                             autovalidateMode: AutovalidateMode.onUserInteraction,
                             // Postel's Law: take the code or the email, any case
                             keyboardType: _isAdmin ? TextInputType.text : TextInputType.emailAddress,

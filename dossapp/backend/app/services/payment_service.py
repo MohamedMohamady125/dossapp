@@ -418,11 +418,11 @@ async def _push_payment_received(db: AsyncSession, branch_id: int, receipt: Rece
         account = result.scalars().first()
         if account:
             if account.language == "ar":
-                title = "تم استلام الدفع ✓"
-                body = (f"تم دفع {amount} جنيه لاشتراك {receipt.athlete_name} عن شهر {month_ar}. "
-                        f"إيصال رقم {receipt.receipt_number} موجود في التطبيق.")
+                title = "الدفع وصل"
+                body = (f"اتدفع {amount} جنيه اشتراك {receipt.athlete_name} عن شهر {month_ar}. "
+                        f"الإيصال رقم {receipt.receipt_number} موجود في التطبيق.")
             else:
-                title = "Payment received ✓"
+                title = "Payment received"
                 body = (f"{amount} EGP paid for {receipt.athlete_name}'s {month_en} fee. "
                         f"Receipt {receipt.receipt_number} is in the app.")
             await send_push_to_account(
