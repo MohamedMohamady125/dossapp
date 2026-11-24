@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../widgets/ui_kit.dart';
 import 'package:flutter/services.dart';
 import '../../utils/translations_staff.dart';
@@ -221,6 +222,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
         child: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) {
+            if (i != _currentIndex) HapticFeedback.selectionClick();
             setState(() {
               _currentIndex = i;
               _visitedTabs.add(i);
@@ -400,7 +402,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
     }
     // Lazy IndexedStack: each tab is built the first time it's opened and
     // then kept alive, so lists resume exactly where the user left off.
-    return IndexedStack(
+    return TabSwitcher(
       index: _currentIndex,
       children: List.generate(5, (i) {
         if (!_visitedTabs.contains(i)) return const SizedBox.shrink();

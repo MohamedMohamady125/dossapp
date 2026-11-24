@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import 'package:flutter/material.dart';
 import '../../utils/translations_staff.dart';
 import '../../services/api_service.dart';
@@ -35,8 +36,16 @@ class _ExcelHealthScreenState extends State<ExcelHealthScreen> {
     setState(() => _loading = false);
   }
 
+  // Loading, error and content replace each other with a soft fade
   @override
   Widget build(BuildContext context) {
+    return FadeThrough(
+      stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final t = SS.of(context);
     if (_loading) return const SkeletonList(count: 4);
     if (_error != null) {

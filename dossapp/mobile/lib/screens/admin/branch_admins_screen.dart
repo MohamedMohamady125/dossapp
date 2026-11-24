@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
 import '../../utils/translations_staff.dart';
@@ -75,7 +76,12 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
           style: GoogleFonts.barlow(fontWeight: FontWeight.w600),
         ),
       ),
-      body: _buildBody(t),
+      body: SizedBox.expand(
+        child: FadeThrough(
+          stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+          child: _buildBody(t),
+        ),
+      ),
     );
   }
 

@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import '../../utils/translations_staff.dart';
@@ -92,18 +93,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               ],
             ),
           ),
-        if (_loading)
-          const Expanded(child: Column(
+        // Loading, error, empty and the list replace each other with a soft fade
+        Expanded(
+          child: FadeThrough(
+            stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+            child: _loading
+                ? const Column(
             children: [
               SkeletonHero(),
               Expanded(child: SkeletonList(count: 3)),
             ],
-          ))
-        else if (_error != null)
-          Expanded(child: ErrorState(message: _error!, onRetry: _load))
-        else
-          Expanded(
-            child: RefreshIndicator(
+          )
+                : _error != null
+                ? ErrorState(message: _error!, onRetry: _load)
+                : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -111,6 +114,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProv
               ),
             ),
           ),
+        ),
       ],
     );
   }

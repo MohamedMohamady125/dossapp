@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'dart:async';
@@ -191,21 +192,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
         ),
 
         // ── List ──
-        if (_loading)
-          const Expanded(child: SkeletonList(count: 5, hasAvatar: true))
-        else if (_error != null)
-          Expanded(child: ErrorState(message: _error!, onRetry: _load))
-        else if (list.isEmpty)
-          Expanded(
-            child: EmptyState(
+        // Loading, error, empty and the list replace each other with a soft fade
+        Expanded(
+          child: FadeThrough(
+            stateKey: _loading ? 'loading' : _error != null ? 'error' : list.isEmpty ? 'empty' : 'list',
+            child: _loading
+                ? const SkeletonList(count: 5, hasAvatar: true)
+                : _error != null
+                ? ErrorState(message: _error!, onRetry: _load)
+                : list.isEmpty
+                ? EmptyState(
               icon: Icons.search_off_rounded,
               title: _search.isNotEmpty ? t.nothingFoundFor(_search) : t.noPaymentsThisMonth,
               subtitle: _search.isNotEmpty ? t.tryAnotherSearch : t.paymentsShowAfterPay,
-            ),
-          )
-        else
-          Expanded(
-            child: RefreshIndicator(
+            )
+                : RefreshIndicator(
               onRefresh: _load,
               child: ListView.separated(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -230,6 +231,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
               ),
             ),
           ),
+        ),
       ],
     );
   }

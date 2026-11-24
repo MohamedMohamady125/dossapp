@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
 import '../../utils/translations_staff.dart';
@@ -407,7 +408,9 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
             ),
           ),
           Expanded(
-            child: _loading
+            child: FadeThrough(
+              stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+              child: _loading
                 ? const SkeletonList(count: 5, padding: EdgeInsets.all(16))
                 : _error != null
                     ? ErrorState(message: _error!, onRetry: _loadData)
@@ -418,6 +421,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                           _buildMissingTab(),
                         ],
                       ),
+            ),
           ),
         ],
       ),

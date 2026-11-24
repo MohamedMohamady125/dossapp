@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'dart:async';
@@ -100,8 +101,16 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
     });
   }
 
+  // Loading, error and content replace each other with a soft fade
   @override
   Widget build(BuildContext context) {
+    return FadeThrough(
+      stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     context.watch<LocaleProvider>(); // rebuild when the language changes
     if (_loading) return const SkeletonList(count: 6, hasAvatar: true);
     if (_error != null) {

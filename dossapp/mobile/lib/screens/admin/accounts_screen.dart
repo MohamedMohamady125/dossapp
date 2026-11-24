@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -124,8 +125,16 @@ class _AccountsScreenState extends State<AccountsScreen> with AutoRefresh {
     }
   }
 
+  // Loading, error and content replace each other with a soft fade
   @override
   Widget build(BuildContext context) {
+    return FadeThrough(
+      stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+      child: _content(context),
+    );
+  }
+
+  Widget _content(BuildContext context) {
     context.watch<LocaleProvider>(); // rebuild when the language changes
     if (_loading) return const SkeletonList(count: 6, hasAvatar: true);
     if (_error != null) return ErrorState(message: _error!, onRetry: _load);

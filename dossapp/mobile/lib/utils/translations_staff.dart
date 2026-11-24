@@ -481,10 +481,12 @@ class SS {
         'Accepted. The swimmer can use the app again.',
         'اتقبل. السبّاح يقدر يستخدم الأبلكيشن تاني.',
       );
-  String get rejectRequestTitle => _t('Reject request', 'رفض الطلب');
-  String get parentWillBeTold => _t('The parent will be told the place is taken.', 'ولي الأمر هيتبلّغ إن المكان اتاخد.');
-  String get noteToParentOptional => _t('Note to the parent (optional)', 'رسالة لولي الأمر (اختياري)');
-  String get noteToParentHint => _t('Example: The place went to another swimmer', 'مثال: المكان راح لسبّاح تاني');
+  String get answeredAlready => _t('Someone already answered this request.', 'حد رد على الطلب ده قبل كده.');
+  String get keepRequest => _t('Keep it', 'سيبه');
+  String get rejectRequestTitle => _t('Reject this request?', 'ترفض الطلب ده؟');
+  String get parentWillBeTold => _t('The parent will be told there is no free spot right now.', 'ولي الأمر هيتبلّغ إن مفيش مكان فاضي دلوقتي.');
+  String get noteToParentOptional => _t('Note for staff (optional)', 'ملاحظة لفريق العمل (اختياري)');
+  String get noteToParentHint => _t('Example: the class is full', 'مثال: التمرين كامل');
   String get requestRejected => _t('Request rejected', 'الطلب اترفض');
   String get reject => _t('Reject', 'ارفض');
   String get accept => _t('Accept', 'اقبل');

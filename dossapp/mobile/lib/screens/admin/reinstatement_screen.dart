@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'package:flutter/services.dart';
+import '../../widgets/animated_list_item.dart';
+import '../../widgets/motion.dart';
 import '../../utils/formatters.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
@@ -35,84 +39,193 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
     _load();
   }
 
+  // Which request is being answered right now, and how ('approve' or
+  // 'decline'). Its buttons show a spinner and cannot be pressed twice.
+  final Map<int, String> _busy = {};
+  // Requests that were just answered and are folding away
+  final Set<int> _leaving = {};
+  // Only the newest load may write to the screen. A slow answer for a
+  // filter the person has already left is dropped.
+  int _loadSeq = 0;
+
+  static const _patience = Duration(seconds: 20);
+
   Future<void> _load({bool silent = false}) async {
     silent = silent && _requests != null;
+    final seq = ++_loadSeq;
+    final filter = _filter;
     if (!silent) setState(() { _loading = true; _error = null; });
     try {
-      _requests = await ApiService.getReinstatementRequests(statusFilter: _filter);
-      _error = null;
+      // Never wait forever: after 20 seconds this becomes an error with
+      // a Try again button
+      final list = await ApiService.getReinstatementRequests(statusFilter: filter).timeout(_patience);
+      if (!mounted || seq != _loadSeq) return;
+      setState(() {
+        _requests = list;
+        _leaving.clear();
+        _error = null;
+        _loading = false;
+      });
     } catch (e) {
-      if (!silent) _error = e;
+      if (!mounted || seq != _loadSeq) return;
+      setState(() {
+        if (!silent) _error = e;
+        _loading = false;
+      });
     }
-    if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _approve(int requestId) async {
+  // One path for both answers. The card shows a spinner on the pressed
+  // button, then folds away as soon as the server says yes (Doherty
+  // Threshold: no full reload, no blank screen). The list is refreshed
+  // quietly behind it. Whatever goes wrong, the buttons come back.
+  Future<void> _answer(int requestId, {required bool approve, String? note}) async {
+    if (_busy.containsKey(requestId)) return;
     final t = SS.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy[requestId] = approve ? 'approve' : 'decline');
     try {
-      await ApiService.approveReinstatement(requestId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t.requestAccepted), backgroundColor: AppColors.success),
-        );
+      if (approve) {
+        await ApiService.approveReinstatement(requestId).timeout(_patience);
+      } else {
+        await ApiService.declineReinstatement(requestId, adminNote: note).timeout(_patience);
       }
-      _load();
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
-      }
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() { _busy.remove(requestId); _leaving.add(requestId); });
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        content: Text(approve ? t.requestAccepted : t.requestRejected),
+        backgroundColor: approve ? AppColors.success : null,
+        duration: const Duration(seconds: 2),
+      ));
+      // Let the card finish folding, then drop it and sync with the server
+      await Future.delayed(Motion.slow);
+      if (!mounted) return;
+      setState(() {
+        _requests?.removeWhere((r) => r['id'] == requestId);
+        _leaving.remove(requestId);
+      });
+      _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy.remove(requestId));
+      // Another staff member got there first: not an error, just refresh
+      final taken = e is ApiException && (e.statusCode == 409 || e.statusCode == 404);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text(taken ? t.answeredAlready : AppError.messageFor(e))));
+      if (taken) _load(silent: true);
     }
   }
 
+  Future<void> _approve(int requestId) => _answer(requestId, approve: true);
+
+  // Rejecting asks once, in a sheet within reach of the thumb. Keeping the
+  // request is the quiet answer; rejecting is the red one.
   Future<void> _decline(int requestId) async {
+    if (_busy.containsKey(requestId)) return;
     final t = SS.read(context);
     final noteController = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(t.rejectRequestTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(t.parentWillBeTold),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              decoration: InputDecoration(
-                labelText: t.noteToParentOptional,
-                hintText: t.noteToParentHint,
-                border: const OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t.cancel)),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
-            child: Text(t.reject),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-        ],
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    t.rejectRequestTitle,
+                    style: GoogleFonts.barlow(fontSize: 22, height: 1.2, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    t.parentWillBeTold,
+                    style: GoogleFonts.barlow(fontSize: 15, height: 1.4, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: noteController,
+                    maxLines: 2,
+                    maxLength: 300,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: t.noteToParentOptional,
+                      hintText: t.noteToParentHint,
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(t.reject),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 52,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        textStyle: GoogleFonts.barlow(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      child: Text(t.keepRequest),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+    final note = noteController.text.trim();
+    await _answer(requestId, approve: false, note: note.isEmpty ? null : note);
+  }
 
-    try {
-      await ApiService.declineReinstatement(requestId, adminNote: noteController.text.isNotEmpty ? noteController.text : null);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(t.requestRejected)),
-        );
-      }
-      _load();
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
-      }
-    }
+  // An answered card fades and folds shut, and the ones below slide up
+  Widget _folding(int id, Widget card) {
+    final leaving = _leaving.contains(id);
+    return AnimatedSize(
+      key: ValueKey<String>('req-$id'),
+      duration: Motion.slow,
+      curve: Motion.enter,
+      alignment: Alignment.topCenter,
+      child: AnimatedOpacity(
+        duration: Motion.fast,
+        opacity: leaving ? 0 : 1,
+        child: leaving ? const SizedBox(width: double.infinity) : card,
+      ),
+    );
   }
 
   @override
@@ -120,14 +233,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
     final t = SS.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          t.requestsToReturn,
-          style: GoogleFonts.barlow(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
+        title: Text(t.requestsToReturn),
       ),
       body: Column(
         children: [
@@ -145,24 +251,40 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
             ),
           ),
           Expanded(
-            child: _loading
-                ? const Center(child: SkeletonList(count: 3))
-                : _error != null
-                    ? ErrorState(message: _error!, onRetry: _load)
-                    : _requests == null || _requests!.isEmpty
-                        ? EmptyState(
-                            icon: Icons.check_circle_outline,
-                            title: t.noRequests(_filter),
-                            subtitle: _filter == 'pending' ? t.newRequestsShowHere : '',
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _load,
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _requests!.length,
-                              itemBuilder: (ctx, i) => _requestCard(_requests![i]),
+            // Loading, empty and the list replace each other with a soft fade
+            child: FadeThrough(
+              stateKey: '$_filter|${_loading ? 'loading' : _error != null ? 'error' : (_requests == null || _requests!.isEmpty) ? 'empty' : 'list'}',
+              child: _loading
+                  ? const SkeletonList(count: 3)
+                  : _error != null
+                      ? ErrorState(message: _error!, onRetry: _load)
+                      : _requests == null || _requests!.isEmpty
+                          ? EmptyState(
+                              icon: Icons.check_circle_outline,
+                              title: t.noRequests(_filter),
+                              subtitle: _filter == 'pending' ? t.newRequestsShowHere : '',
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () => _load(silent: true),
+                              child: ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _requests!.length,
+                                // Cards are tracked by request, not by row,
+                                // so when one leaves the others slide up
+                                // without replaying their entrance
+                                findChildIndexCallback: (key) {
+                                  if (key is! ValueKey<String>) return null;
+                                  final i = _requests!.indexWhere((r) => 'req-${r['id']}' == key.value);
+                                  return i < 0 ? null : i;
+                                },
+                                itemBuilder: (ctx, i) => _folding(
+                                  _requests![i]['id'] as int,
+                                  AnimatedListItem(index: i, child: _requestCard(_requests![i])),
+                                ),
+                              ),
                             ),
-                          ),
+            ),
           ),
         ],
       ),
@@ -175,8 +297,9 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
       label: Text(label),
       selected: selected,
       onSelected: (s) {
-        if (s) {
-          setState(() => _filter = value);
+        if (s && _filter != value) {
+          HapticFeedback.selectionClick();
+          setState(() { _filter = value; _requests = null; });
           _load();
         }
       },
@@ -306,35 +429,46 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
             ),
           ],
 
-          // Action buttons (only for pending)
+          // The two answers, only while the request is waiting. Full
+          // height targets (Fitts's Law); the pressed one shows a spinner
+          // and both are locked until the server answers.
           if (status == 'pending') ...[
             const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _decline(id),
-                    icon: const Icon(Icons.close, size: 18),
-                    label: Text(t.reject),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: const BorderSide(color: AppColors.error),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: SizedBox(
+                    height: 48,
+                    child: OutlinedButton(
+                      onPressed: _busy.containsKey(id) ? null : () => _decline(id),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: AppColors.error),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _busy[id] == 'decline'
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error))
+                          : Text(t.reject),
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _approve(id),
-                    icon: const Icon(Icons.check, size: 18),
-                    label: Text(t.accept),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: SizedBox(
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: _busy.containsKey(id) ? null : () => _approve(id),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        disabledBackgroundColor: AppColors.success.withValues(alpha: _busy[id] == 'approve' ? 1 : 0.4),
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white,
+                        minimumSize: const Size(0, 48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _busy[id] == 'approve'
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text(t.accept),
                     ),
                   ),
                 ),

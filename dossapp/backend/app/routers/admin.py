@@ -1632,25 +1632,37 @@ async def list_reinstatement_requests(
     requests = result.scalars().all()
 
     source = _get_roster_source()
+    from app.models.payment import Payment
+
+    # Each branch's sheet is read once, however many requests it has
+    rosters: dict = {}
+    for branch_id in {r.branch_id for r in requests}:
+        rosters[branch_id] = await source.get_branch_roster(branch_id)
+
+    # Who has paid, for all the requests in one query
+    paid: set = set()
+    if requests:
+        periods = {
+            b: ((ro.period if ro and ro.period else None) or current_billing_period())
+            for b, ro in rosters.items()
+        }
+        paid_result = await db.execute(
+            select(Payment.branch_id, Payment.athlete_number, Payment.period).where(
+                Payment.status == "paid",
+                Payment.branch_id.in_(list(rosters.keys())),
+                Payment.athlete_number.in_({r.athlete_number for r in requests}),
+                Payment.period.in_(set(periods.values())),
+            )
+        )
+        paid = {(b, n) for b, n, per in paid_result.all() if periods.get(b) == per}
+
     items = []
     for req in requests:
-        roster = await source.get_branch_roster(req.branch_id)
+        roster = rosters.get(req.branch_id)
         athlete = None
         if roster:
             athlete = next((a for a in roster.athletes if a.athlete_number == req.athlete_number), None)
-
-        # Check payment status
-        from app.models.payment import Payment
-        period = (roster.period if roster and roster.period else None) or current_billing_period()
-        paid_result = await db.execute(
-            select(Payment.id).where(
-                Payment.branch_id == req.branch_id,
-                Payment.athlete_number == req.athlete_number,
-                Payment.period == period,
-                Payment.status == "paid",
-            )
-        )
-        is_paid = paid_result.first() is not None
+        is_paid = (req.branch_id, req.athlete_number) in paid
 
         items.append({
             "id": req.id,
@@ -1672,22 +1684,48 @@ async def list_reinstatement_requests(
     return items
 
 
+async def _push_in_background(account_id: int, ntype: str, title: str, body: str, data: dict):
+    """Send a push after the answer has gone back to staff.
+
+    Runs on its own database session, and never raises: a slow or failing
+    push must not hold up, or undo, the decision staff just made.
+    """
+    from app.database import async_session
+    from app.services.push_service import send_push_to_account
+    try:
+        async with async_session() as session:
+            await send_push_to_account(session, account_id, ntype, title, body, data=data)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Background push failed (account {account_id}, {ntype}): {e}")
+
+
+async def _locked_request(db: AsyncSession, request_id: int):
+    """The request, locked for this transaction, so two staff members who
+    answer at the same moment cannot both win."""
+    from app.models.reinstatement_request import ReinstatementRequest
+    result = await db.execute(
+        select(ReinstatementRequest).where(ReinstatementRequest.id == request_id).with_for_update()
+    )
+    return result.scalar_one_or_none()
+
+
 @router.post("/admin/reinstatement-requests/{request_id}/approve")
 async def approve_reinstatement(
     request_id: int,
+    background_tasks: BackgroundTasks,
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.reinstatement_request import ReinstatementRequest
-
-    result = await db.execute(select(ReinstatementRequest).where(ReinstatementRequest.id == request_id))
-    req = result.scalar_one_or_none()
+    req = await _locked_request(db, request_id)
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
     enforce_branch_scope(admin, req.branch_id)
 
+    # Tapping twice, or trying again after a lost connection, is not an error
+    if req.status == "approved":
+        return {"message": "Reinstatement approved", "already": True}
     if req.status != "pending":
-        raise HTTPException(status_code=400, detail=f"Request already {req.status}")
+        raise HTTPException(status_code=409, detail=f"Request already {req.status}")
 
     req.status = "approved"
     req.reviewed_by = admin.id
@@ -1703,18 +1741,17 @@ async def approve_reinstatement(
     db.add(req)
     await db.commit()
 
-    # Notify user
+    # Tell the parent, worded as the system's result, in their language.
+    # Sent after the reply so staff never wait on it.
     if account:
-        from app.services.push_service import send_push_to_account
-        # Worded as the system's result, in the parent's language
         ar = (account.language or "en") == "ar"
-        await send_push_to_account(
-            db, account.id, "reinstatement_approved",
+        background_tasks.add_task(
+            _push_in_background, account.id, "reinstatement_approved",
             "مكانك جاهز" if ar else "Your spot is ready",
             ("السيستم لقى مكان فاضي في التمرين. افتح التطبيق وادفع عشان ترجع التمرين."
              if ar else
              "The system found a free spot in the class. Open the app and pay to start training again."),
-            data={"screen": "home"},
+            {"screen": "home"},
         )
 
     return {"message": "Reinstatement approved"}
@@ -1724,40 +1761,39 @@ async def approve_reinstatement(
 async def decline_reinstatement(
     request_id: int,
     body: DeclineBody,
+    background_tasks: BackgroundTasks,
     admin: AdminUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.reinstatement_request import ReinstatementRequest
-
-    result = await db.execute(select(ReinstatementRequest).where(ReinstatementRequest.id == request_id))
-    req = result.scalar_one_or_none()
+    req = await _locked_request(db, request_id)
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
     enforce_branch_scope(admin, req.branch_id)
 
+    if req.status == "declined":
+        return {"message": "Reinstatement declined", "already": True}
     if req.status != "pending":
-        raise HTTPException(status_code=400, detail=f"Request already {req.status}")
+        raise HTTPException(status_code=409, detail=f"Request already {req.status}")
 
     req.status = "declined"
     # The note is for the staff record; the parent is told in their own language
-    req.admin_note = body.admin_note or None
+    req.admin_note = (body.admin_note or "").strip()[:500] or None
     req.reviewed_by = admin.id
     req.reviewed_at = datetime.now()
     db.add(req)
     await db.commit()
 
-    # Notify user
     acc_result = await db.execute(select(Account).where(Account.id == req.account_id))
     account = acc_result.scalar_one_or_none()
     if account:
-        from app.services.push_service import send_push_to_account
-        await send_push_to_account(
-            db, account.id, "reinstatement_declined",
-            "مفيش مكان فاضي دلوقتي" if (account.language or "en") == "ar" else "No free spot right now",
+        ar = (account.language or "en") == "ar"
+        background_tasks.add_task(
+            _push_in_background, account.id, "reinstatement_declined",
+            "مفيش مكان فاضي دلوقتي" if ar else "No free spot right now",
             ("السيستم شاف، وكل الأماكن في التمرين محجوزة الشهر ده. تقدر تشوف تاني بعدين من التطبيق."
-             if (account.language or "en") == "ar" else
+             if ar else
              "The system checked, and every spot in the class is taken for this month. You can check again later in the app."),
-            data={"screen": "home"},
+            {"screen": "home"},
         )
 
     return {"message": "Reinstatement declined"}
