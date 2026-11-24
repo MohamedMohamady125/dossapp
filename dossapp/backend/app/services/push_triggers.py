@@ -443,9 +443,9 @@ async def send_spot_lost_notifications(db: AsyncSession, rosters: dict[int, Bran
             body = _t(
                 lang,
                 f"{athlete.name}'s spot in the class is on hold because the {month_en} fee was not paid. "
-                f"Open the app to ask for the spot back.",
+                f"Open the app to check for a free spot.",
                 f"مكان {athlete.name} في التمرين اتوقف عشان اشتراك شهر {month_ar} ما اتدفعش. "
-                f"افتح التطبيق واطلب المكان تاني.",
+                f"افتح التطبيق وشوف لو في مكان فاضي.",
             )
 
             ok = await send_push_to_account(

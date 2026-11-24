@@ -1116,6 +1116,49 @@ async def admin_resend_receipt(
     return {"message": "Receipt resend queued"}
 
 
+@router.post("/admin/receipts/{receipt_id}/email")
+async def admin_email_receipt(
+    receipt_id: int,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Staff sends a paid swimmer their receipt by email, with the PDF.
+
+    It goes to the email the parent proved on the swimmer's account, never to
+    one typed here, so a receipt cannot be sent to the wrong person.
+    """
+    result = await db.execute(select(Receipt).options(undefer(Receipt.pdf_data)).where(Receipt.id == receipt_id))
+    receipt = result.scalar_one_or_none()
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+
+    payment_result = await db.execute(select(Payment).where(Payment.id == receipt.payment_id))
+    payment = payment_result.scalar_one_or_none()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    enforce_branch_scope(admin, payment.branch_id)
+
+    acc_result = await db.execute(
+        select(Account).where(
+            Account.branch_id == payment.branch_id,
+            Account.athlete_number == payment.athlete_number,
+            Account.email.isnot(None),
+        ).limit(1)
+    )
+    account = acc_result.scalar_one_or_none()
+    email = (account.email or "").strip() if account else ""
+    if not email:
+        raise HTTPException(status_code=400, detail="This swimmer has no email on their account yet")
+
+    from app.services.payment_service import _send_receipt_notifications
+    await _send_receipt_notifications(receipt, receipt.pdf_data, None, email)
+
+    # Show staff where it went without printing the whole address
+    name, _, domain = email.partition("@")
+    masked = f"{name[:2]}{'*' * max(len(name) - 2, 1)}@{domain}"
+    return {"message": "Receipt emailed", "email": masked}
+
+
 @router.get("/admin/analytics")
 async def get_analytics(
     scope: str = Query("branch"),
@@ -1663,10 +1706,14 @@ async def approve_reinstatement(
     # Notify user
     if account:
         from app.services.push_service import send_push_to_account
+        # Worded as the system's result, in the parent's language
+        ar = (account.language or "en") == "ar"
         await send_push_to_account(
             db, account.id, "reinstatement_approved",
-            "Spot Confirmed",
-            "A spot has been confirmed for you! You can now complete your payment and resume training.",
+            "مكانك جاهز" if ar else "Your spot is ready",
+            ("السيستم لقى مكان فاضي في التمرين. افتح التطبيق وادفع عشان ترجع التمرين."
+             if ar else
+             "The system found a free spot in the class. Open the app and pay to start training again."),
             data={"screen": "home"},
         )
 
@@ -1692,7 +1739,8 @@ async def decline_reinstatement(
         raise HTTPException(status_code=400, detail=f"Request already {req.status}")
 
     req.status = "declined"
-    req.admin_note = body.admin_note or "Unfortunately, all spots in your class have been filled for this period. The system was unable to hold your spot as the enrollment window has passed."
+    # The note is for the staff record; the parent is told in their own language
+    req.admin_note = body.admin_note or None
     req.reviewed_by = admin.id
     req.reviewed_at = datetime.now()
     db.add(req)
@@ -1705,8 +1753,10 @@ async def decline_reinstatement(
         from app.services.push_service import send_push_to_account
         await send_push_to_account(
             db, account.id, "reinstatement_declined",
-            "No Spots Available",
-            req.admin_note,
+            "مفيش مكان فاضي دلوقتي" if (account.language or "en") == "ar" else "No free spot right now",
+            ("السيستم شاف، وكل الأماكن في التمرين محجوزة الشهر ده. تقدر تشوف تاني بعدين من التطبيق."
+             if (account.language or "en") == "ar" else
+             "The system checked, and every spot in the class is taken for this month. You can check again later in the app."),
             data={"screen": "home"},
         )
 

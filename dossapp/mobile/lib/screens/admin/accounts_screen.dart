@@ -330,7 +330,7 @@ class _AccountsScreenState extends State<AccountsScreen> with AutoRefresh {
       leading: InitialsAvatar(a.name),
       title: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
       subtitle: Text(
-        '#${a.athleteNumber} • $line',
+        '${swimmerId(a.athleteNumber)} • $line',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(fontSize: 13, color: lineColor),

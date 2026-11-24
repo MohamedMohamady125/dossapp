@@ -351,6 +351,11 @@ async def resend_receipt(receipt_id: int, account: Account = Depends(get_current
         await enqueue_notification("sms", receipt.phone, f"Receipt {receipt.receipt_number}: {receipt.amount_paid} EGP PAID", receipt_id=receipt.id)
         await enqueue_notification("whatsapp", receipt.phone, f"Receipt {receipt.receipt_number}: {receipt.amount_paid} EGP PAID", attachment=receipt.pdf_data, receipt_id=receipt.id)
 
+    # The button in the app says "Email me a copy", so email it too
+    if account.email:
+        from app.services.payment_service import _send_receipt_notifications
+        await _send_receipt_notifications(receipt, receipt.pdf_data, None, account.email)
+
     return {"message": "Receipt resend queued"}
 
 
@@ -551,6 +556,22 @@ async def get_reinstatement_status(
     req = result.scalar_one_or_none()
     if not req:
         return {"status": "none"}
+
+    # An old answer must not be shown as today's answer. Approving a request
+    # takes the swimmer off hold, so a swimmer who is on hold now with an
+    # "approved" request was put on hold again in a later month: that
+    # approval is used up. The same goes for a "no" from an earlier month.
+    # Both mean "nothing asked yet" for this hold, so they can ask again.
+    if account.status == "suspended" and req.status in ("approved", "declined"):
+        from app.services.push_triggers import local_now
+        now = local_now()
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        answered = req.reviewed_at or req.created_at
+        if answered is not None and answered.tzinfo is None:
+            month_start = month_start.replace(tzinfo=None)
+        if req.status == "approved" or answered is None or answered < month_start:
+            return {"status": "none"}
+
     return {
         "status": req.status,
         "created_at": req.created_at.isoformat() if req.created_at else None,

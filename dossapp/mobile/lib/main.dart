@@ -1,3 +1,4 @@
+import 'widgets/motion.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -115,26 +116,13 @@ class AquathleticApp extends StatelessWidget {
             screen = CustomerHomeScreen(key: ValueKey('home-${auth.sessionKey}'));
           }
 
-          return AnimatedSwitcher(
-            duration: AppAnimation.slowDuration,
-            switchInCurve: AppAnimation.enterCurve,
-            switchOutCurve: AppAnimation.exitCurve,
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 0.03),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: KeyedSubtree(
-              key: ValueKey(screen.runtimeType.toString() + auth.role),
-              child: screen,
-            ),
+          // Login, swimmer picker and home replace each other: the old
+          // one fades out, the new one settles in
+          return FadeThrough(
+            stateKey: screen.runtimeType.toString() + auth.role + (screen.key?.toString() ?? ''),
+            duration: Motion.slow,
+            alignment: Alignment.center,
+            child: screen,
           );
         },
       ),

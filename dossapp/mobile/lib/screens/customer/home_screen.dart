@@ -1,3 +1,6 @@
+import '../../services/notification_service.dart';
+import 'package:flutter/services.dart';
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +50,54 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> with AutoRefres
   void initState() {
     super.initState();
     _loadUnread();
+    // A push that was tapped (even the one that opened the app) lands here
+    NotificationService.opened.addListener(_onPushTapped);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onPushTapped());
+  }
+
+  @override
+  void dispose() {
+    NotificationService.opened.removeListener(_onPushTapped);
+    super.dispose();
+  }
+
+  void _onPushTapped() {
+    final data = NotificationService.opened.value;
+    if (data == null || !mounted) return;
+    NotificationService.opened.value = null;
+    _openAlert(data, '');
+  }
+
+  // Where an alert leads. The server names the page in `screen`; older
+  // alerts only have a type, so both are understood.
+  void _openAlert(Map<String, dynamic> data, String type) {
+    final target = '${data['screen'] ?? data['type'] ?? type}';
+    switch (target) {
+      case 'pay':
+      case 'payment_reminder':
+        _showTab(1);
+      case 'receipts':
+      case 'payment_received':
+        _showTab(2);
+      case 'monthly_report':
+      case 'reports':
+        _showTab(0);
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const CustomerReportsScreen()));
+      default:
+        // Class changes, missed sessions, spot on hold: all shown on Home
+        _showTab(0);
+    }
+  }
+
+  void _showTab(int i) {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    setState(() {
+      _currentIndex = i;
+      _visitedTabs.add(i);
+    });
+    AppRefresh.nudge();
+    _loadUnread();
   }
 
   Future<void> _loadUnread() async {
@@ -83,6 +134,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> with AutoRefres
         child: NavigationBar(
           selectedIndex: _currentIndex,
           onDestinationSelected: (i) {
+            if (i != _currentIndex) HapticFeedback.selectionClick();
             setState(() {
               _currentIndex = i;
               _visitedTabs.add(i);
@@ -109,7 +161,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> with AutoRefres
   Widget _buildCurrentTab() {
     // Lazy IndexedStack: build each tab on first visit, keep it alive after
     // so scroll position & loaded data survive tab switches.
-    return IndexedStack(
+    return TabSwitcher(
       index: _currentIndex,
       children: List.generate(4, (i) {
         if (!_visitedTabs.contains(i)) return const SizedBox.shrink();
@@ -117,7 +169,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> with AutoRefres
           case 0: return _HomeTab(key: ValueKey('home-$_refreshKey'), onRefresh: () => setState(() => _refreshKey++), onGoToPay: _goToPayTab);
           case 1: return BillScreen(key: ValueKey('bill-$_refreshKey'));
           case 2: return ReceiptsScreen(key: ValueKey('rec-$_refreshKey'));
-          case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread);
+          case 3: return NotificationsScreen(key: ValueKey('notif-$_refreshKey'), onUnreadChanged: _loadUnread, onOpen: _openAlert);
           default: return const SizedBox.shrink();
         }
       }),
@@ -196,8 +248,18 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     if (mounted) setState(() => _submittingReinstatement = false);
   }
 
+  // Loading, error and content replace each other with a soft fade, so the
+  // page never snaps from grey boxes to data
   @override
   Widget build(BuildContext context) {
+    return FadeThrough(
+      stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+      alignment: Alignment.center,
+      child: _buildState(context),
+    );
+  }
+
+  Widget _buildState(BuildContext context) {
     if (_loading) {
       return Scaffold(
         body: CustomScrollView(
@@ -261,7 +323,6 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,
-          flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppColors.primaryGradient)),
           title: _swimmerTitle(p),
           actions: [
             IconButton(
@@ -273,27 +334,42 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
           ],
         ),
 
+        // The payment card comes first under the header, so the first thing
+        // read is "is it paid" (Serial Position)
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The header ends in a soft curve; the card starts clear of it
+              Container(
+                height: 18,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: b == null
+                    ? const SizedBox.shrink()
+                    : b.noEnrollment
+                        ? _noEnrollmentCard()
+                        : PressFeedback(
+                            onTap: widget.onGoToPay,
+                            child: _billStatusCard(b),
+                          ),
+              ),
+            ],
+          ),
+        ),
+
         SliverPadding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           sliver: SliverList(delegate: SliverChildListDelegate([
 
             // Order follows what a parent opens the app for (Pareto):
             // is it paid, when is practice, did they attend. Each fact
             // appears once (Cognitive Load).
-
-            // ── Payment ──
-            if (b != null && !b.noEnrollment)
-              AnimatedListItem(
-                index: 0,
-                child: PressFeedback(
-                  onTap: widget.onGoToPay,
-                  child: _billStatusCard(b),
-                ),
-              ),
-
-            // ── No enrollment state ──
-            if (b != null && b.noEnrollment)
-              AnimatedListItem(index: 0, child: _noEnrollmentCard()),
 
             // ── The month at a glance (Chunking: three numbers) ──
             if (p.attendance.isNotEmpty) ...[
@@ -375,15 +451,15 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
                 children: [
                   Flexible(
                     child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.barlowCondensed(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
+                      style: GoogleFonts.barlow(fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white)),
                   ),
                   if (several) const Icon(Icons.expand_more_rounded, color: Colors.white, size: 24),
                 ],
               ),
               Text(
                 several
-                    ? '${p.branch} \u2022 #${p.athleteNumber} \u2022 ${S.of(context).switchSwimmer}'
-                    : '${p.branch} \u2022 #${p.athleteNumber}',
+                    ? '${p.branch} \u2022 ${swimmerId(p.athleteNumber)} \u2022 ${S.of(context).switchSwimmer}'
+                    : '${p.branch} \u2022 ${swimmerId(p.athleteNumber)}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.barlow(fontSize: 13, fontWeight: FontWeight.w400, color: Colors.white70),
@@ -403,155 +479,115 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
   }
 
   // ── SUSPENDED CONTENT ──
+  // The same compact navy header as the normal home, so the parent still
+  // knows where they are (Jakob's Law). Red is kept for the one card that
+  // says what is wrong (Von Restorff), and the next step sits right under it.
   Widget _buildSuspendedContent(AthleteProfile p) {
     final r = _reinstatement;
+    final s = S.of(context);
 
     return CustomScrollView(
       slivers: [
         SliverAppBar(
-          expandedHeight: 200,
           pinned: true,
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFB71C1C), Color(0xFFD32F2F)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+          toolbarHeight: 76,
+          titleSpacing: 16,
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          title: _swimmerTitle(p),
+          actions: [
+            IconButton(
+              tooltip: s.settings,
+              icon: const Icon(Icons.settings_outlined, color: Colors.white),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
+
+        // What happened, first under the header
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The header ends in a soft curve; the card starts clear of it
+              Container(
+                height: 18,
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.vertical(bottom: Radius.circular(18)),
                 ),
               ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 56, height: 56,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Center(child: Icon(Icons.schedule_rounded, size: 28, color: Colors.white)),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                S.of(context).enrollmentPaused,
-                                style: GoogleFonts.barlowCondensed(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(p.name, style: const TextStyle(color: Colors.white60, fontSize: 13)),
-                            ],
-                          )),
-                        ],
+                      StatusPill(s.enrollmentPaused, AppColors.error, icon: Icons.pause_circle_outline_rounded),
+                      const SizedBox(height: 14),
+                      Text(
+                        s.enrollmentWindowClosed,
+                        style: GoogleFonts.barlow(
+                          fontSize: 22,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          letterSpacing: s.isArabic ? 0 : -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        s.spotLostExplain,
+                        style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
+            ],
           ),
-          actions: [
-            if (context.watch<AuthProvider>().hasSeveralSwimmers)
-              IconButton(
-                tooltip: S.of(context).switchSwimmer,
-                icon: const Icon(Icons.swap_horiz_rounded),
-                onPressed: () => showSwimmerSwitcher(context),
-              ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded),
-              onPressed: () { _load(); widget.onRefresh(); },
-            ),
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-            ),
-          ],
         ),
+
         SliverPadding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           sliver: SliverList(delegate: SliverChildListDelegate([
-
-            // ── Suspension reason ──
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.warning_amber_rounded, size: 40, color: AppColors.error),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    S.of(context).enrollmentWindowClosed,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    S.of(context).spotLostExplain,
-                    style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Reinstatement status / action ──
+            // ── What to do next, or where the request stands ──
             if (r == null || r.isNone) ...[
-              // No request yet — show button
               _reinstatementActionCard(),
             ] else if (r.isPending) ...[
               _reinstatementStatusCard(
                 icon: Icons.hourglass_top_rounded,
-                iconColor: AppColors.warning,
-                bgColor: AppColors.warningLight,
-                borderColor: AppColors.warning.withValues(alpha: 0.3),
-                title: S.of(context).checkingAvailability,
-                subtitle: S.of(context).checkingAvailabilityMsg,
+                color: AppColors.warning,
+                title: s.checkingAvailability,
+                subtitle: s.checkingAvailabilityMsg,
               ),
             ] else if (r.isApproved) ...[
               _reinstatementStatusCard(
                 icon: Icons.check_circle_rounded,
-                iconColor: AppColors.success,
-                bgColor: AppColors.success.withValues(alpha: 0.06),
-                borderColor: AppColors.success.withValues(alpha: 0.3),
-                title: S.of(context).spotConfirmed,
-                subtitle: r.adminNote ?? S.of(context).spotConfirmedMsg,
+                color: AppColors.success,
+                title: s.spotConfirmed,
+                subtitle: s.spotConfirmedMsg,
+                actionLabel: s.payNow,
+                onAction: widget.onGoToPay,
               ),
             ] else if (r.isDeclined) ...[
               _reinstatementStatusCard(
                 icon: Icons.event_busy_rounded,
-                iconColor: AppColors.error,
-                bgColor: AppColors.error.withValues(alpha: 0.06),
-                borderColor: AppColors.error.withValues(alpha: 0.2),
-                title: S.of(context).noSpotsAvailable,
-                subtitle: r.adminNote ?? S.of(context).noSpotsMsg,
+                color: AppColors.error,
+                title: s.noSpotsAvailable,
+                subtitle: s.noSpotsMsg,
               ),
               const SizedBox(height: 12),
-              // Allow resubmission after decline
+              // They can ask again after a no
               _reinstatementActionCard(),
             ],
 
@@ -564,35 +600,47 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
 
   Widget _reinstatementActionCard() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Icon(Icons.event_available_rounded, size: 36, color: AppColors.primary),
-          const SizedBox(height: 12),
-          Text(
-            S.of(context).checkSpotAvailability,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            S.of(context).askSpotHelp,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
-            textAlign: TextAlign.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const IconBadge(Icons.event_available_rounded, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      S.of(context).checkSpotAvailability,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      S.of(context).askSpotHelp,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
+            height: 52,
+            child: FilledButton(
               onPressed: _submittingReinstatement ? null : _submitReinstatement,
-              style: ElevatedButton.styleFrom(
+              style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
+                disabledBackgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: _submittingReinstatement
@@ -605,43 +653,64 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
     );
   }
 
+  // Where the request stands: a tinted icon carries the status colour, the
+  // words stay dark, and a button appears only when there is a next step.
   Widget _reinstatementStatusCard({
     required IconData icon,
-    required Color iconColor,
-    required Color bgColor,
-    required Color borderColor,
+    required Color color,
     required String title,
     required String subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: bgColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconBadge(icon, color: color, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.45),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 52,
+              child: FilledButton(
+                onPressed: onAction,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(actionLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
             ),
-            child: Icon(icon, size: 32, color: iconColor),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
-            textAlign: TextAlign.center,
-          ),
+          ],
         ],
       ),
     );
@@ -704,7 +773,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
               if (hasBill)
                 Text(
                   formatMoney(b.amountOwed),
-                  style: GoogleFonts.barlowCondensed(fontSize: 24, fontWeight: FontWeight.w700, color: fg),
+                  style: GoogleFonts.barlow(fontSize: 24, fontWeight: FontWeight.w700, color: fg),
                 ),
               if (due)
                 Container(
@@ -736,7 +805,7 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
         const SizedBox(width: 10),
         Expanded(child: StatTile(icon: Icons.event_busy_rounded, color: missed > 0 ? AppColors.error : AppColors.textMuted, value: '$missed', label: S.of(context).absent)),
         const SizedBox(width: 10),
-        Expanded(child: StatTile(icon: Icons.insights_rounded, color: AppColors.primary, value: '$rate%', label: S.of(context).attendance)),
+        Expanded(child: StatTile(icon: Icons.insights_rounded, color: AppColors.secondary, value: '$rate%', label: S.of(context).attendance)),
       ],
     );
   }
@@ -928,14 +997,10 @@ class _HomeTabState extends State<_HomeTab> with AutoRefresh {
               ],
             ),
             const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: total > 0 ? present / total : 0,
-                minHeight: 8,
-                backgroundColor: AppColors.surfaceVariant,
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-              ),
+            FillBar(
+              value: total > 0 ? present / total : 0,
+              color: AppColors.primary,
+              track: AppColors.surfaceVariant,
             ),
             const SizedBox(height: 14),
             Wrap(

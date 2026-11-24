@@ -784,6 +784,15 @@ class ApiService {
     return (jsonDecode(resp.body) as List).cast<Map<String, dynamic>>();
   }
 
+  /// Emails the receipt to the swimmer's own account email. Returns that
+  /// address, partly hidden, so staff can see where it went.
+  static Future<String> adminEmailReceipt(int receiptId) async {
+    final resp = await _post('/admin/receipts/$receiptId/email', {});
+    if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));
+    final data = jsonDecode(resp.body);
+    return (data is Map ? data['email'] as String? : null) ?? '';
+  }
+
   static Future<void> adminResendReceipt(int receiptId) async {
     final resp = await _post('/admin/receipts/$receiptId/resend', {});
     if (resp.statusCode != 200) throw ApiException(resp.statusCode, _extractError(resp));

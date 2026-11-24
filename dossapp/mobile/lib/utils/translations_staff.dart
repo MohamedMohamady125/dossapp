@@ -156,7 +156,7 @@ class SS {
   String get somethingWentWrong => _t('Something went wrong. Please try again.', 'حصل مشكلة، جرّب تاني');
 
   String branchNumber(dynamic id) => _t('Branch $id', 'فرع $id');
-  String swimmerNumber(dynamic number) => _t('Swimmer #$number', 'سبّاح رقم $number');
+  String swimmerNumber(dynamic number) => _t('Swimmer ID $number', 'سبّاح رقم $number');
   String coachNamed(String name) => _t('Coach $name', 'كابتن $name');
   String receiptNo(dynamic number) => _t('Receipt $number', 'إيصال $number');
   String copied(String what) => _t('$what copied', 'اتنسخ: $what');
@@ -297,6 +297,8 @@ class SS {
         'المدفوعات هتظهر هنا أول ما سبّاح يدفع',
       );
   String get receiptDownloadFailed => _t('Could not download the receipt', 'معرفناش ننزّل الإيصال');
+  String get emailReceipt => _t('Email the receipt', 'ابعت الإيصال على الإيميل');
+  String receiptEmailedTo(String email) => _t('Receipt sent to $email', 'الإيصال اتبعت على $email');
   String get downloadReceipt => _t('Download receipt', 'نزّل الإيصال');
 
   // ─────────────────────────────── Statistics ──────────────────────────────

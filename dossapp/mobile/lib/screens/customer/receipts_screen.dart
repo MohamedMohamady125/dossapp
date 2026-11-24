@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../services/app_refresh.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -78,7 +79,12 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with AutoRefresh {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(S.of(context).receipts)),
-      body: _buildBody(),
+      body: SizedBox.expand(
+        child: FadeThrough(
+          stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+          child: _buildBody(),
+        ),
+      ),
     );
   }
 

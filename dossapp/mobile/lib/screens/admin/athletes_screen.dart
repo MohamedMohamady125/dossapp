@@ -226,7 +226,7 @@ class _AthletesScreenState extends State<AthletesScreen> with AutoRefresh {
       if (a.type != null && a.type != a.level) a.type!,
     ].join(' \u2022 ');
     final subtitle = [
-      '#${a.athleteNumber}',
+      swimmerId(a.athleteNumber),
       if (classLine.isNotEmpty) classLine,
       if (!_isEnrolled(a)) t.notInClassThisMonth,
     ].join(' \u2022 ');
@@ -465,7 +465,7 @@ class _AthleteDetailSheetState extends State<_AthleteDetailSheet> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '#${athlete.athleteNumber} \u2022 ${athlete.branch}',
+                      '${swimmerId(athlete.athleteNumber)} \u2022 ${athlete.branch}',
                       style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                     ),
                     if (athlete.accountCompleted || athlete.hasAccount) ...[

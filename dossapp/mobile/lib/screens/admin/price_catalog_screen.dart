@@ -160,7 +160,7 @@ class _PriceCatalogScreenState extends State<PriceCatalogScreen>
                         Expanded(
                           child: Text(
                             isEdit ? t.editPrice : t.addPrice,
-                            style: GoogleFonts.barlowCondensed(
+                            style: GoogleFonts.barlow(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,

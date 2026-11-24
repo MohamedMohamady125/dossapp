@@ -1,3 +1,4 @@
+import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'dart:async';
 import 'dart:io';
@@ -244,6 +245,28 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
     );
   }
 
+  // Receipts being emailed right now, and the ones already sent this visit
+  final Set<int> _emailing = {};
+  final Set<int> _emailed = {};
+
+  // One tap: the receipt goes to the email on the swimmer's own account
+  Future<void> _emailReceipt(int receiptId) async {
+    if (_emailing.contains(receiptId)) return;
+    final t = SS.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _emailing.add(receiptId));
+    try {
+      final email = await ApiService.adminEmailReceipt(receiptId);
+      if (!mounted) return;
+      setState(() { _emailing.remove(receiptId); _emailed.add(receiptId); });
+      messenger.showSnackBar(SnackBar(content: Text(t.receiptEmailedTo(email))));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _emailing.remove(receiptId));
+      messenger.showSnackBar(SnackBar(content: Text(AppError.messageFor(e))));
+    }
+  }
+
   Future<void> _downloadReceipt(int receiptId, String receiptNumber) async {
     final t = SS.read(context);
     final origin = shareOrigin(context); // iPad needs an anchor for the share sheet
@@ -324,6 +347,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> with SingleTickerProvid
             ],
           )),
           // 48px target (Fitts's Law); was 32px
+          if (isPaid && receiptId != null)
+            IconButton(
+              onPressed: _emailing.contains(receiptId) ? null : () => _emailReceipt(receiptId),
+              icon: _emailing.contains(receiptId)
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(
+                      _emailed.contains(receiptId) ? Icons.mark_email_read_rounded : Icons.forward_to_inbox_rounded,
+                      size: 22,
+                    ),
+              color: _emailed.contains(receiptId) ? AppColors.success : AppColors.primary,
+              tooltip: t.emailReceipt,
+            ),
           if (isPaid && receiptId != null)
             IconButton(
               onPressed: () => _downloadReceipt(receiptId, receiptNumber ?? '$receiptId'),

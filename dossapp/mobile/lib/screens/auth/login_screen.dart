@@ -1,14 +1,22 @@
+import '../../widgets/motion.dart';
 import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../widgets/language_toggle.dart';
+import '../../widgets/brand_page.dart';
+import '../../widgets/email_suggestion.dart';
+import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
-import '../../widgets/press_feedback.dart';
 import 'forgot_password_screen.dart';
 
+/// The first screen anyone sees.
+///
+/// Built like the sign-in of a bank or delivery app: a white page, the crest,
+/// one title, two labelled fields and one solid button. Nothing decorative,
+/// so the only thing that stands out is the button (Von Restorff Effect).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,90 +24,39 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
-    with TickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
+  static const _fieldBorder = Color(0xFFCBD5E1);
+
   final _formKey = GlobalKey<FormState>();
   final _codeController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
   bool _isAdmin = false;
   bool _loading = false;
   String? _error;
   bool _obscure = true;
-
-  late AnimationController _entranceController;
-  late AnimationController _logoController;
-  late Animation<double> _logoScale;
-  late Animation<double> _headerFade;
-  late Animation<double> _field1Fade;
-  late Animation<double> _field2Fade;
-  late Animation<double> _buttonFade;
-  late Animation<Offset> _headerSlide;
-  late Animation<Offset> _field1Slide;
-  late Animation<Offset> _field2Slide;
-  late Animation<Offset> _buttonSlide;
+  // Only complain about empty fields after a first attempt, not while typing
+  bool _triedOnce = false;
 
   int _logoTapCount = 0;
   DateTime? _lastLogoTap;
 
   @override
-  void initState() {
-    super.initState();
-
-    _logoController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    );
-    _logoScale = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _logoController, curve: AppAnimation.bounceCurve),
-    );
-
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
-
-    _headerFade = _buildFade(0.0, 0.3);
-    _headerSlide = _buildSlide(0.0, 0.3);
-    _field1Fade = _buildFade(0.15, 0.45);
-    _field1Slide = _buildSlide(0.15, 0.45);
-    _field2Fade = _buildFade(0.3, 0.6);
-    _field2Slide = _buildSlide(0.3, 0.6);
-    _buttonFade = _buildFade(0.45, 0.75);
-    _buttonSlide = _buildSlide(0.45, 0.75);
-
-    _logoController.forward();
-    _entranceController.forward();
-  }
-
-  Animation<double> _buildFade(double begin, double end) {
-    return Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _entranceController,
-        curve: Interval(begin, end, curve: AppAnimation.enterCurve),
-      ),
-    );
-  }
-
-  Animation<Offset> _buildSlide(double begin, double end) {
-    return Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
-        .animate(
-      CurvedAnimation(
-        parent: _entranceController,
-        curve: Interval(begin, end, curve: AppAnimation.enterCurve),
-      ),
-    );
-  }
-
-  @override
   void dispose() {
-    _entranceController.dispose();
-    _logoController.dispose();
     _codeController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _triedOnce = true);
+    // Postel's Law: drop stray spaces and a comma typed for a dot
+    if (!_isAdmin && EmailCheck.looksLikeEmail(_codeController.text)) {
+      final cleaned = EmailCheck.clean(_codeController.text);
+      if (cleaned != _codeController.text) _codeController.text = cleaned;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _loading = true;
@@ -114,21 +71,25 @@ class _LoginScreenState extends State<LoginScreen>
         await auth.customerLogin(
             _codeController.text.trim(), _passwordController.text);
       }
+      TextInput.finishAutofillContext();
     } catch (e) {
       if (mounted) {
-        final msg = AppError.messageFor(e);
         final s = S.read(context);
-        // Translate known backend error messages
-        final lower = msg.toLowerCase();
-        final translated = lower.contains('invalid credentials')
-            ? s.invalidCredentials
-            : lower.contains('too many')
-                ? s.tooManyAttempts
-                : lower.contains('no internet')
-                    ? s.noInternetConnection
-                    : lower.contains('server')
-                        ? s.serverError
-                        : msg;
+        final typed = _codeController.text.trim();
+        String translated;
+        if (e is ApiException && e.statusCode == 401) {
+          // Say which thing was wrong: staff name, email or login code
+          final fix = EmailCheck.suggestion(typed);
+          translated = _isAdmin
+              ? s.wrongStaffLogin
+              : !EmailCheck.looksLikeEmail(typed)
+                  ? s.wrongCodeOrPassword
+                  : fix != null
+                      ? s.wrongEmailMaybe(fix)
+                      : s.wrongEmailOrPassword;
+        } else {
+          translated = AppError.messageFor(e);
+        }
         setState(() => _error = translated);
       }
     } finally {
@@ -144,406 +105,341 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  // Five taps on the crest opens the staff login
+  void _onLogoTap() {
+    final now = DateTime.now();
+    if (_lastLogoTap != null && now.difference(_lastLogoTap!).inSeconds > 10) {
+      _logoTapCount = 0;
+    }
+    _lastLogoTap = now;
+    _logoTapCount++;
+    if (_logoTapCount >= 5) {
+      _logoTapCount = 0;
+      HapticFeedback.selectionClick();
+      setState(() {
+        _isAdmin = true;
+        _error = null;
+      });
+    }
+  }
+
+  InputDecoration _decoration({Widget? suffix}) {
+    OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c, width: w),
+        );
+    return InputDecoration(
+      filled: true,
+      fillColor: Colors.white,
+      hoverColor: Colors.transparent,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      enabledBorder: border(_fieldBorder),
+      focusedBorder: border(AppColors.primary, 1.5),
+      errorBorder: border(AppColors.error),
+      focusedErrorBorder: border(AppColors.error, 1.5),
+      errorStyle: GoogleFonts.barlow(fontSize: 13, color: AppColors.error),
+      errorMaxLines: 2,
+      suffixIcon: suffix,
+      suffixIconConstraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+    );
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          text,
+          style: GoogleFonts.barlow(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final sessionExpired = context.watch<AuthProvider>().sessionExpired;
+    final validateMode = _triedOnce
+        ? AutovalidateMode.onUserInteraction
+        : AutovalidateMode.disabled;
+    final inputStyle = GoogleFonts.barlow(
+      fontSize: 16,
+      fontWeight: FontWeight.w500,
+      color: AppColors.textPrimary,
+    );
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: true,
-      body: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        child: Column(
-          children: [
-            // Wave gradient header
-            LayoutBuilder(builder: (context, constraints) {
-              final screenH = MediaQuery.of(context).size.height;
-              final headerH = (screenH * 0.38).clamp(260.0, 360.0);
-              final logoSize = (headerH * 0.30).clamp(80.0, 110.0);
-              return ClipPath(
-                clipper: _WaveClipper(),
-                child: Container(
-                  height: headerH,
-                  width: double.infinity,
-                  decoration: const BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                  ),
-                  child: SafeArea(
-                    child: Stack(
-                      children: [
-                        // Logo + text centered
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 40),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ScaleTransition(
-                                  scale: _logoScale,
-                                  child: Container(
-                                    width: logoSize,
-                                    height: logoSize,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(logoSize * 0.27),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(logoSize * 0.27),
-                                      child: Padding(
-                                        padding: EdgeInsets.all(logoSize * 0.1),
-                                        child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: headerH * 0.04),
-                                FadeTransition(
-                                  opacity: _headerFade,
-                                  child: SlideTransition(
-                                    position: _headerSlide,
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        s.appName,
-                                        style: GoogleFonts.barlowCondensed(
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                          letterSpacing: -0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                FadeTransition(
-                                  opacity: _headerFade,
-                                  child: SlideTransition(
-                                    position: _headerSlide,
-                                    child: Text(
-                                      s.swimmingAcademy,
-                                      style: GoogleFonts.barlow(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w400,
-                                        color: Colors.white.withValues(alpha: 0.85),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                SizedBox(height: headerH * 0.06),
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Invisible tap layer covering entire header — 5 taps opens staff login
-                        Positioned.fill(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () {
-                              final now = DateTime.now();
-                              if (_lastLogoTap != null &&
-                                  now.difference(_lastLogoTap!).inSeconds > 10) {
-                                _logoTapCount = 0;
-                              }
-                              _lastLogoTap = now;
-                              _logoTapCount++;
-                              if (_logoTapCount >= 5) {
-                                _logoTapCount = 0;
-                                setState(() => _isAdmin = true);
-                              }
-                            },
-                          ),
-                        ),
-                        // Language toggle on top so it's still tappable
-                        const PositionedDirectional(
-                          top: 0,
-                          end: 8,
-                          child: LanguageToggle(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-
-            // Form
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 8),
-
-                      // Admin mode indicator
-                      if (_isAdmin)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () => setState(() => _isAdmin = false),
-                                child: const Icon(Icons.arrow_back_ios, size: 18, color: AppColors.textSecondary),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                s.staff,
-                                style: GoogleFonts.barlow(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
+    return BrandPage(
+      title: _isAdmin ? s.staffLogin : s.login,
+      subtitle: _isAdmin ? s.staffLoginSubtitle : s.loginSubtitle,
+      // Five taps on the crest opens the staff login
+      onCrestTap: _onLogoTap,
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+                              // Signed out by the server: say so once, quietly
+                              if (_error == null && sessionExpired)
+                                _Notice(
+                                  text: s.sessionExpired,
                                   color: AppColors.textSecondary,
+                                  background: AppColors.surfaceVariant,
+                                  icon: Icons.info_outline_rounded,
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
 
-                      const SizedBox(height: 16),
-
-                      // Code / Username field
-                      FadeTransition(
-                        opacity: _field1Fade,
-                        child: SlideTransition(
-                          position: _field1Slide,
-                          child: TextFormField(
-                            controller: _codeController,
-                            // Codes and emails read left to right in both languages
-                            textDirection: TextDirection.ltr,
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
-                            // Postel's Law: take the code or the email, any case
-                            keyboardType: _isAdmin ? TextInputType.text : TextInputType.emailAddress,
-                            autocorrect: false,
-                            decoration: InputDecoration(
-                              labelText:
-                                  _isAdmin ? s.username : s.loginCodeOrEmail,
-                              helperText: _isAdmin ? null : s.loginHelp,
-                              helperMaxLines: 2,
-                              prefixIcon: const Icon(Icons.person_outline,
-                                  size: 20),
-                            ),
-                            validator: (v) => v == null || v.trim().isEmpty
-                                ? s.required
-                                : null,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Password field
-                      FadeTransition(
-                        opacity: _field2Fade,
-                        child: SlideTransition(
-                          position: _field2Slide,
-                          child: TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscure,
-                            autovalidateMode: AutovalidateMode.onUserInteraction,
-                            decoration: InputDecoration(
-                              labelText: s.password,
-                              prefixIcon:
-                                  const Icon(Icons.lock_outline, size: 20),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    size: 20),
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
-                              ),
-                            ),
-                            validator: (v) =>
-                                v == null || v.isEmpty ? s.required : null,
-                            onFieldSubmitted: (_) => _login(),
-                          ),
-                        ),
-                      ),
-
-                      // Forgot password link
-                      FadeTransition(
-                        opacity: _field2Fade,
-                        child: Align(
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: TextButton(
-                            onPressed: _showForgotPassword,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              s.forgotPassword,
-                              style: GoogleFonts.barlow(
-                                fontSize: 13,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Signed out by the server: say so, once, where they are looking
-                      if (_error == null && context.watch<AuthProvider>().sessionExpired)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.textSecondary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  S.of(context).sessionExpired,
-                                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // Error display with slide-in
-                      AnimatedSize(
-                        duration: AppAnimation.normalDuration,
-                        curve: AppAnimation.enterCurve,
-                        alignment: Alignment.topCenter,
-                        child: _error != null
-                            ? AnimatedSwitcher(
-                                duration: AppAnimation.normalDuration,
-                                transitionBuilder: (child, animation) {
-                                  return SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, -0.3),
-                                      end: Offset.zero,
-                                    ).animate(CurvedAnimation(
-                                      parent: animation,
-                                      curve: AppAnimation.enterCurve,
-                                    )),
-                                    child: FadeTransition(
-                                        opacity: animation, child: child),
-                                  );
+                              // Labels sit above the fields so they stay
+                              // readable while typing (Working Memory)
+                              _label(_isAdmin ? s.username : s.loginCodeOrEmail),
+                              TextFormField(
+                                controller: _codeController,
+                                // Codes and emails read left to right in both languages
+                                textDirection: TextDirection.ltr,
+                                style: inputStyle,
+                                autovalidateMode: validateMode,
+                                // Postel's Law: take the code or the email, any case
+                                keyboardType: _isAdmin
+                                    ? TextInputType.text
+                                    : TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                autofillHints: const [AutofillHints.username],
+                                onFieldSubmitted: (_) =>
+                                    _passwordFocus.requestFocus(),
+                                decoration: _decoration(),
+                                onChanged: (_) {
+                                  if (_error != null) setState(() => _error = null);
                                 },
-                                child: Padding(
-                                  key: ValueKey(_error),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) return s.required;
+                                  if (!_isAdmin &&
+                                      EmailCheck.looksLikeEmail(v) &&
+                                      !EmailCheck.isValid(v)) {
+                                    return s.emailLooksWrong;
+                                  }
+                                  return null;
+                                },
+                              ),
+                              // "Did you mean name@gmail.com?" One tap fixes it
+                              if (!_isAdmin)
+                                EmailSuggestion(controller: _codeController),
+                              if (!_isAdmin)
+                                Padding(
                                   padding: const EdgeInsets.only(top: 8),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.errorLight,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: AppColors.error
-                                            .withValues(alpha: 0.3),
-                                      ),
+                                  child: Text(
+                                    s.loginHelp,
+                                    style: GoogleFonts.barlow(
+                                      fontSize: 13,
+                                      height: 1.35,
+                                      color: AppColors.textSecondary,
                                     ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.error_outline,
-                                            size: 18, color: AppColors.error),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            _error!,
-                                            style: GoogleFonts.barlow(
-                                              color: AppColors.error,
-                                              fontSize: 13,
-                                            ),
+                                  ),
+                                ),
+                              const SizedBox(height: 20),
+
+                              // Password label and the way out share one line
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(child: _label(s.password)),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: InkWell(
+                                      onTap: _showForgotPassword,
+                                      canRequestFocus: false,
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 2),
+                                        child: Text(
+                                          s.forgotPassword,
+                                          style: GoogleFonts.barlow(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.primary,
                                           ),
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Login button with gradient + press feedback
-                      FadeTransition(
-                        opacity: _buttonFade,
-                        child: SlideTransition(
-                          position: _buttonSlide,
-                          child: PressFeedback(
-                            onTap: _loading ? null : _login,
-                            scaleFactor: 0.96,
-                            child: Container(
-                              width: double.infinity,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                gradient: _loading
-                                    ? LinearGradient(colors: [
-                                        AppColors.primary
-                                            .withValues(alpha: 0.5),
-                                        AppColors.secondary
-                                            .withValues(alpha: 0.5),
-                                      ])
-                                    : AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(14),
+                                ],
                               ),
-                              child: Center(
-                                child: _loading
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
-                                    : Text(
-                                        s.login,
-                                        style: GoogleFonts.barlow(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
+                              TextFormField(
+                                controller: _passwordController,
+                                focusNode: _passwordFocus,
+                                obscureText: _obscure,
+                                style: inputStyle,
+                                autovalidateMode: validateMode,
+                                textInputAction: TextInputAction.done,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                autofillHints: const [AutofillHints.password],
+                                decoration: _decoration(
+                                  suffix: TextButton(
+                                    onPressed: () =>
+                                        setState(() => _obscure = !_obscure),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppColors.primary,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14),
+                                      minimumSize: const Size(44, 44),
+                                      textStyle: GoogleFonts.barlow(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    child: Text(_obscure
+                                        ? s.showPassword
+                                        : s.hidePassword),
+                                  ),
+                                ),
+                                validator: (v) =>
+                                    v == null || v.isEmpty ? s.required : null,
+                                onFieldSubmitted: (_) => _login(),
+                              ),
+
+                              AnimatedSize(
+                                duration: AppAnimation.normalDuration,
+                                curve: AppAnimation.enterCurve,
+                                alignment: Alignment.topCenter,
+                                child: _error == null
+                                    ? const SizedBox(width: double.infinity)
+                                    : Padding(
+                                        padding: const EdgeInsets.only(top: 16),
+                                        child: _Notice(
+                                          text: _error!,
+                                          color: AppColors.error,
+                                          background: AppColors.errorLight,
+                                          icon: Icons.error_outline_rounded,
+                                          bottomGap: 0,
                                         ),
                                       ),
                               ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: MediaQuery.of(context).viewInsets.bottom + 40),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+                              const SizedBox(height: 24),
+
+                              // The one solid thing on the page
+                              SizedBox(
+                                height: 54,
+                                child: FilledButton(
+                                  onPressed: _loading ? null : _login,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    disabledBackgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                    disabledForegroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    textStyle: GoogleFonts.barlow(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  child: AnimatedSwitcher(
+                                    duration: Motion.fast,
+                                    child: _loading
+                                        ? const SizedBox(
+                                            key: ValueKey('busy'),
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : Text(s.login, key: const ValueKey('label')),
+                                  ),
+                                ),
+                              ),
+
+                              if (_isAdmin)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: TextButton(
+                                    onPressed: () => setState(() {
+                                      _isAdmin = false;
+                                      _error = null;
+                                    }),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: AppColors.textSecondary,
+                                      minimumSize: const Size(0, 44),
+                                      textStyle: GoogleFonts.barlow(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    child: Text(s.backToParentLogin),
+                                  ),
+                                ),
+
+                              const Spacer(),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 32, bottom: 16),
+                                child: Text(
+                                  '${s.appName} ${s.swimmingAcademy}',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.barlow(
+                                    fontSize: 12,
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ),
+            ],
+          ),
         ),
       ),
     );
   }
-
 }
 
-/// Custom clipper that creates a wave shape at the bottom of the header.
-class _WaveClipper extends CustomClipper<Path> {
+/// One quiet line with an icon: a login error, or "you were logged out".
+class _Notice extends StatelessWidget {
+  final String text;
+  final Color color;
+  final Color background;
+  final IconData icon;
+  final double bottomGap;
+
+  const _Notice({
+    required this.text,
+    required this.color,
+    required this.background,
+    required this.icon,
+    this.bottomGap = 20,
+  });
+
   @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.lineTo(0, size.height - 28);
-
-    final firstControl = Offset(size.width * 0.25, size.height);
-    final firstEnd = Offset(size.width * 0.5, size.height - 14);
-    path.quadraticBezierTo(
-        firstControl.dx, firstControl.dy, firstEnd.dx, firstEnd.dy);
-
-    final secondControl = Offset(size.width * 0.75, size.height - 28);
-    final secondEnd = Offset(size.width, size.height - 10);
-    path.quadraticBezierTo(
-        secondControl.dx, secondControl.dy, secondEnd.dx, secondEnd.dy);
-
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: bottomGap),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: GoogleFonts.barlow(
+                fontSize: 14,
+                height: 1.3,
+                fontWeight: FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

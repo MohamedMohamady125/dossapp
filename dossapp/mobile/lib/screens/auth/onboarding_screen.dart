@@ -1,10 +1,12 @@
+import '../../widgets/motion.dart';
+import '../../widgets/email_suggestion.dart';
 import '../../utils/app_error.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../widgets/language_toggle.dart';
+import '../../widgets/brand_page.dart';
 import '../../utils/translations.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
@@ -163,17 +165,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: Form(
+    final s = S.of(context);
+    final titles = [s.setUpEmailTitle, s.checkEmailTitle, s.choosePasswordTitle];
+    // Same shell as the login; the step count shows how close the end is
+    // (Goal-Gradient Effect)
+    return BrandPage(
+      title: titles[_step],
+      subtitle: s.stepOf(_step + 1, 3),
+      onBack: () {
+        if (_step > 0) {
+          setState(() { _step--; _error = null; });
+        } else {
+          // Back on the first step logs out and returns to the login
+          context.read<AuthProvider>().logout();
+        }
+      },
+      child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -181,9 +188,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       const SizedBox(height: 24),
                       _buildStepIndicator(),
                       const SizedBox(height: 32),
-                      if (_step == 0) _buildEmailStep(),
-                      if (_step == 1) _buildVerifyStep(),
-                      if (_step == 2) _buildPasswordStep(),
+                      // The next step comes in from the side it is on
+                      StepSwitcher(
+                        step: _step,
+                        child: _step == 0
+                            ? _buildEmailStep()
+                            : _step == 1
+                                ? _buildVerifyStep()
+                                : _buildPasswordStep(),
+                      ),
                       _buildErrorWidget(),
                       const SizedBox(height: 24),
                       _buildActionButton(),
@@ -191,61 +204,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ],
                   ),
                 ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    final s = S.of(context);
-    final titles = [s.setUpEmailTitle, s.checkEmailTitle, s.choosePasswordTitle];
-    final screenH = MediaQuery.of(context).size.height;
-    final headerH = (screenH * 0.22).clamp(150.0, 200.0);
-    return ClipPath(
-      clipper: _WaveClipper(),
-      child: Container(
-        height: headerH,
-        width: double.infinity,
-        decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                  onPressed: () {
-                    if (_step > 0) {
-                      setState(() { _step--; _error = null; });
-                    } else {
-                      // Back on first step = log out and go back to login
-                      context.read<AuthProvider>().logout();
-                    }
-                  },
-                ),
-                const SizedBox(width: 4),
-                Image.asset('assets/images/logo.png', height: 36, width: 36),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    titles[_step],
-                    style: GoogleFonts.barlowCondensed(
-                      fontSize: 22, fontWeight: FontWeight.w700,
-                      color: Colors.white, letterSpacing: -0.3,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const LanguageToggle(),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -326,6 +284,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           },
           onFieldSubmitted: (_) => _sendCode(),
         ),
+        // "Did you mean name@gmail.com?" One tap fixes it
+        EmailSuggestion(controller: _emailController),
       ],
     );
   }
@@ -532,24 +492,4 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
-}
-
-class _WaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.lineTo(0, size.height - 30);
-    final firstControl = Offset(size.width * 0.25, size.height);
-    final firstEnd = Offset(size.width * 0.5, size.height - 15);
-    path.quadraticBezierTo(firstControl.dx, firstControl.dy, firstEnd.dx, firstEnd.dy);
-    final secondControl = Offset(size.width * 0.75, size.height - 30);
-    final secondEnd = Offset(size.width, size.height - 10);
-    path.quadraticBezierTo(secondControl.dx, secondControl.dy, secondEnd.dx, secondEnd.dy);
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

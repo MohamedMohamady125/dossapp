@@ -1,3 +1,4 @@
+import '../../utils/formatters.dart';
 import 'package:flutter/material.dart';
 import '../../utils/translations_staff.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -96,7 +97,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
                       children: [
                         Text(
                           _currentPeriod != null ? SS.of(context).period(_currentPeriod!) : '',
-                          style: GoogleFonts.barlowCondensed(
+                          style: GoogleFonts.barlow(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -188,7 +189,7 @@ class _StaffReportsScreenState extends State<StaffReportsScreen> {
                 ),
         ),
         title: Text(sw.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text('#${sw.athleteNumber}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        subtitle: Text(swimmerId(sw.athleteNumber), style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(

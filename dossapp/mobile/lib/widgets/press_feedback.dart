@@ -29,15 +29,16 @@ class _PressFeedbackState extends State<PressFeedback>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 100),
-      reverseDuration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 90),
+      reverseDuration: const Duration(milliseconds: 260),
     );
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: widget.scaleFactor,
     ).animate(CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeInCubic,
     ));
   }
 

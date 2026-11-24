@@ -98,7 +98,7 @@ class _ReportCardState extends State<ReportCard> {
                     children: [
                       Text(
                         formatPeriod(report.period),
-                        style: GoogleFonts.barlowCondensed(
+                        style: GoogleFonts.barlow(
                           fontSize: 21, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3,
                         ),
                       ),

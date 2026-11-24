@@ -52,7 +52,7 @@ class _BranchAdminsScreenState extends State<BranchAdminsScreen> {
       appBar: AppBar(
         title: Text(
           t.branchAdminsTitle,
-          style: GoogleFonts.barlowCondensed(
+          style: GoogleFonts.barlow(
             fontSize: 22, fontWeight: FontWeight.w700,
             color: AppColors.textPrimary, letterSpacing: -0.3,
           ),

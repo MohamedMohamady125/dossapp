@@ -76,7 +76,7 @@ class _CoachHomeScreenState extends State<CoachHomeScreen> with AutoRefresh {
             const SizedBox(width: 8),
             Text(
               S.of(context).mySchedule,
-              style: GoogleFonts.barlowCondensed(
+              style: GoogleFonts.barlow(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,

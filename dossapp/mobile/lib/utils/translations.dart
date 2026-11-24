@@ -29,12 +29,28 @@ class S {
   // ── Auth ──
   String get login => _t('Log in', 'تسجيل الدخول');
   String get logout => _t('Log out', 'تسجيل الخروج');
-  String get logoutConfirm => _t('Do you want to log out?', 'عايز تسجّل خروج؟');
+  String get logoutConfirm => _t('Log out?', 'تسجّل خروج؟');
+  String get logoutBody => _t('You will need your email and password to log in again.', 'هتحتاج الإيميل وكلمة السر عشان تدخل تاني.');
+  String get stayLoggedIn => _t('Stay logged in', 'خليني مسجّل');
   String get parentAthlete => _t('Parent or swimmer', 'ولي أمر أو سبّاح');
   String get staff => _t('Staff', 'فريق العمل');
   String get loginCode => _t('Login code', 'كود الدخول');
   String get loginCodeOrEmail => _t('Login code or email', 'كود الدخول أو الإيميل');
   String get loginHelp => _t('Use your email or your login code. The code looks like MAD-1091.', 'ادخل بالإيميل أو بكود الدخول. الكود شكله كده: MAD-1091');
+  String get loginSubtitle => _t('See your swimmer\'s classes, payments and reports.', 'تابع تمارين السبّاح وحسابه وتقاريره.');
+  String get staffLogin => _t('Staff log in', 'دخول فريق العمل');
+  String get staffLoginSubtitle => _t('For coaches and branch staff.', 'للمدربين وموظفين الفرع.');
+  String get backToParentLogin => _t('Parent log in', 'دخول أولياء الأمور');
+  String get didYouMean => _t('Did you mean', 'تقصد');
+  String get useThis => _t('Use it', 'استخدمه');
+  String get emailLooksWrong => _t('Check the email. It should look like name@gmail.com', 'راجع الإيميل. المفروض يبقى شكله كده: name@gmail.com');
+  String get wrongEmailOrPassword => _t('The email or password is not correct. Check the spelling of the email and try again.', 'الإيميل أو كلمة السر غلط. راجع كتابة الإيميل وجرّب تاني.');
+  String get wrongCodeOrPassword => _t('The login code or password is not correct. Check them and try again.', 'الكود أو كلمة السر غلط. راجعهم وجرّب تاني.');
+  String get wrongStaffLogin => _t('The username or password is not correct.', 'اسم المستخدم أو كلمة السر غلط.');
+  String wrongEmailMaybe(String fix) => _t('We could not log you in with this email. Did you mean $fix?', 'معرفناش ندخّلك بالإيميل ده. تقصد $fix؟');
+  String stepOf(int n, int total) => _t('Step $n of $total', 'خطوة $n من $total');
+  String get showPassword => _t('Show', 'إظهار');
+  String get hidePassword => _t('Hide', 'إخفاء');
   String get whoIsSwimming => _t('Choose a swimmer', 'اختار السبّاح');
   String get chooseSwimmerSubtitle => _t('Your email has more than one swimmer. Tap one to open it.', 'الإيميل بتاعك عليه أكتر من سبّاح. دوس على واحد عشان تفتحه.');
   String get switchAnytime => _t('To change swimmer later, tap the name at the top of the home screen.', 'تقدر تبدّل في أي وقت. دوس على الاسم اللي فوق في الصفحة الرئيسية.');
@@ -144,7 +160,7 @@ class S {
   String get billPending => _t('Bill not ready yet', 'الفاتورة لسه ما جهزتش');
   String get billPendingMsg => _t('Your branch has not set the amount yet.\nWe will tell you when it is ready.', 'الفرع لسه ما حدّدش المبلغ.\nهنبعتلك تنبيه أول ما تجهز.');
   String get enrollmentWindowClosed => _t('Payment time is over', 'ميعاد الدفع خلص');
-  String get enrollmentWindowClosedMsg => _t('The time to pay for this month is over.\nGo to Home to ask if a spot\nis still free in your class.', 'ميعاد الدفع للشهر ده خلص.\nروح للرئيسية واسأل لو لسه في\nمكان فاضي في تمرينك.');
+  String get enrollmentWindowClosedMsg => _t('The time to pay for this month is over. Go to Home to check if a spot is still free in your class.', 'ميعاد الدفع للشهر ده خلص. روح للرئيسية وشوف لو لسه في مكان فاضي في تمرينك.');
   String get noActiveEnrollment => _t('Not in a class this month', 'مفيش اشتراك الشهر ده');
   String get noActiveEnrollmentMsg => _t('You are not in a class this month.\nContact your branch to join one.', 'مش مشترك في تمرين الشهر ده.\nكلّم الفرع عشان تشترك.');
   String get processing => _t('Please wait...', 'لحظة واحدة...');
@@ -165,11 +181,11 @@ class S {
 
   // ── Suspended / Reinstatement ──
   String get enrollmentPaused => _t('Your spot is on hold', 'مكانك متوقف مؤقتًا');
-  String get checkSpotAvailability => _t('Ask for your spot back', 'اطلب مكانك تاني');
-  String get requestAvailableSpot => _t('Ask for a spot', 'اطلب مكان');
-  String get checkingAvailability => _t('We are checking', 'بنراجع طلبك');
-  String get checkingAvailabilityMsg => _t('We got your request and are checking for a free spot in your class. We will tell you the answer.', 'طلبك وصل، وبنشوف لو في مكان فاضي في تمرينك. هنبلّغك بالرد.');
-  String get noSpotsAvailable => _t('No free spots', 'مفيش أماكن فاضية');
+  String get checkSpotAvailability => _t('Check for a free spot', 'شوف لو في مكان فاضي');
+  String get requestAvailableSpot => _t('Check now', 'شوف دلوقتي');
+  String get checkingAvailability => _t('Checking for a free spot', 'السيستم بيدوّر على مكان فاضي');
+  String get checkingAvailabilityMsg => _t('The system is checking your class for a free spot. You will get an alert here as soon as the result is ready.', 'السيستم بيشوف لو في مكان فاضي في تمرينك. هيوصلك إشعار هنا أول ما النتيجة تطلع.');
+  String get noSpotsAvailable => _t('No free spot right now', 'مفيش مكان فاضي دلوقتي');
   String get spotConfirmed => _t('Your spot is ready', 'مكانك جاهز');
 
   // ── Admin ──
@@ -315,17 +331,17 @@ class S {
 
   // Spot on hold
   String get spotLostExplain => _t(
-      'The time to pay for this month is over. Spots are few, and they go to swimmers who paid on time.\n\nYou can ask below if a spot is still free.',
-      'ميعاد الدفع للشهر ده خلص. الأماكن محدودة وبتروح للي دفعوا في الميعاد.\n\nتقدر تطلب من تحت نشوفلك لو لسه في مكان فاضي.');
+      'The time to pay for this month is over. Spots are few, and they go to swimmers who paid on time.\n\nYou can check below if a spot is still free.',
+      'ميعاد الدفع للشهر ده خلص. الأماكن محدودة وبتروح للي دفعوا في الميعاد.\n\nتقدر تشوف من تحت لو لسه في مكان فاضي.');
   String get spotConfirmedMsg => _t(
-      'Your spot is ready. Pay now to start training again.',
-      'مكانك جاهز. ادفع دلوقتي عشان ترجع التمرين.');
+      'The system found a free spot in your class. Pay now to start training again.',
+      'السيستم لقى مكان فاضي في تمرينك. ادفع دلوقتي عشان ترجع التمرين.');
   String get noSpotsMsg => _t(
-      'Sorry, all spots in your class are taken for this month.',
-      'للأسف كل الأماكن في تمرينك اتحجزت الشهر ده.');
+      'The system checked, and every spot in your class is taken for this month. You can check again later.',
+      'السيستم شاف، وكل الأماكن في تمرينك محجوزة الشهر ده. تقدر تشوف تاني بعدين.');
   String get askSpotHelp => _t(
-      'Send a request and we will check if a spot is still free in your class. We will tell you the answer.',
-      'ابعت طلب وهنشوف لو لسه في مكان فاضي في تمرينك، وهنبلّغك بالرد.');
+      'The system will check if a spot is still free in your class and send you the result here.',
+      'السيستم هيشوف لو لسه في مكان فاضي في تمرينك ويبعتلك النتيجة هنا.');
 
   // Home
   String get classNotSet => _t('No class yet', 'لسه مفيش تمرين');

@@ -1,67 +1,14 @@
 import 'package:flutter/material.dart';
-import '../utils/theme.dart';
+import 'motion.dart';
 
-/// Wraps a child widget with a staggered slide-up + fade-in entrance animation.
-class AnimatedListItem extends StatefulWidget {
+/// A card or row that rises a few points and fades in the first time it is
+/// shown. [index] staggers a list so items arrive one after another.
+class AnimatedListItem extends StatelessWidget {
   final int index;
   final Widget child;
-  final Duration delay;
-  final Duration duration;
 
-  const AnimatedListItem({
-    super.key,
-    required this.index,
-    required this.child,
-    this.delay = AppAnimation.staggerDelay,
-    this.duration = AppAnimation.slowDuration,
-  });
+  const AnimatedListItem({super.key, required this.index, required this.child});
 
   @override
-  State<AnimatedListItem> createState() => _AnimatedListItemState();
-}
-
-class _AnimatedListItemState extends State<AnimatedListItem>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.duration);
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: AppAnimation.enterCurve,
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: AppAnimation.enterCurve,
-    ));
-
-    // Cap the stagger: row 50 must not wait 2.5 s to appear
-    Future.delayed(widget.delay * widget.index.clamp(0, 8), () {
-      if (mounted) _controller.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: widget.child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Appear(order: index, child: child);
 }

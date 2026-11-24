@@ -1,3 +1,4 @@
+import '../../utils/formatters.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
@@ -121,7 +122,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
       appBar: AppBar(
         title: Text(
           t.requestsToReturn,
-          style: GoogleFonts.barlowCondensed(
+          style: GoogleFonts.barlow(
             fontSize: 22,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
@@ -242,7 +243,7 @@ class _ReinstatementScreenState extends State<ReinstatementScreen> with AutoRefr
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(athleteName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                    Text('#$athleteNumber \u2022 $branchName', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    Text('${swimmerId(athleteNumber)} \u2022 $branchName', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
                   ],
                 ),
               ),

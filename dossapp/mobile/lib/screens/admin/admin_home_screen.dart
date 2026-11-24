@@ -1,3 +1,5 @@
+import '../../widgets/ui_kit.dart';
+import 'package:flutter/services.dart';
 import '../../utils/translations_staff.dart';
 import 'accounts_screen.dart';
 import '../../services/app_refresh.dart';
@@ -7,7 +9,6 @@ import '../../services/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
-import '../../utils/formatters.dart';
 import '../../widgets/shimmer_loading.dart';
 import '../settings_screen.dart';
 import 'athletes_screen.dart';
@@ -243,39 +244,153 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> with AutoRefresh {
     );
   }
 
+  // The title says which branch you are looking at and is how you switch
+  // (Jakob's Law: title as switcher). It looks tappable: the name sits in a
+  // soft chip with a chevron. The list opens as a sheet from the bottom,
+  // within reach of the thumb (Fitts's Law), with the current branch ticked.
   Widget _branchTitle(AuthProvider auth, Map<String, dynamic>? selectedBranch) {
     final name = (selectedBranch?['name'] as String?) ?? S.of(context).appName;
     final canSwitch = auth.isAdmin && _branches != null && _branches!.length > 1;
 
-    final label = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-        if (canSwitch) const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textSecondary),
-      ],
-    );
-    if (!canSwitch) return label;
+    if (!canSwitch) return Text(name, maxLines: 1, overflow: TextOverflow.ellipsis);
 
-    return PopupMenuButton<int>(
-      tooltip: S.of(context).branches,
-      position: PopupMenuPosition.under,
-      onSelected: (id) => setState(() { _selectedBranchId = id; _refreshKey++; }),
-      itemBuilder: (ctx) => _branches!.map((b) => PopupMenuItem(
-        value: b['id'] as int,
-        child: Row(
-          children: [
-            Icon(
-              _selectedBranchId == b['id'] ? Icons.check_rounded : null,
-              size: 18, color: AppColors.primary,
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: Material(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _showBranchSheet,
+          child: Padding(
+            // 44px tall target
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 9, 6, 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.location_on_outlined, size: 18, color: Colors.white),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.2),
+                  ),
+                ),
+                const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 24),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(b['name'] as String)),
-            Text(formatNumber(b['athlete_count']), style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-          ],
+          ),
         ),
-      )).toList(),
-      // 48px tall target (Fitts's Law)
-      child: SizedBox(height: 48, child: Align(alignment: AlignmentDirectional.centerStart, child: label)),
+      ),
+    );
+  }
+
+  void _showBranchSheet() {
+    final t = SS.read(context);
+    final branches = _branches ?? const [];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        // Never taller than most of the screen, however many branches
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.8),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Text(
+                  t.chooseBranch,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.3),
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  itemCount: branches.length,
+                  itemBuilder: (_, i) {
+                    final b = branches[i];
+                    final selected = _selectedBranchId == b['id'];
+                    final count = (b['athlete_count'] as num?)?.toInt() ?? 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Material(
+                        color: selected ? AppColors.primarySurface : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            if (selected) return;
+                            HapticFeedback.selectionClick();
+                            setState(() { _selectedBranchId = b['id'] as int; _refreshKey++; });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            child: Row(
+                              children: [
+                                IconBadge(
+                                  Icons.pool_rounded,
+                                  size: 44,
+                                  color: selected ? AppColors.primary : AppColors.secondary,
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        b['name'] as String,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        t.swimmersCount(count),
+                                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (selected)
+                                  const Icon(Icons.check_circle_rounded, color: AppColors.primary),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../utils/formatters.dart';
 import '../../utils/app_error.dart';
 import '../../services/app_refresh.dart';
@@ -12,7 +13,11 @@ import '../../widgets/empty_state.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final VoidCallback? onUnreadChanged;
-  const NotificationsScreen({super.key, this.onUnreadChanged});
+
+  /// Called with the alert's data and type when one is tapped, so the home
+  /// screen can open the page the alert is about.
+  final void Function(Map<String, dynamic> data, String type)? onOpen;
+  const NotificationsScreen({super.key, this.onUnreadChanged, this.onOpen});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -154,6 +159,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
           if (hasUnread)
             TextButton(
               onPressed: _markAllRead,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
               child: Text(s.markAllRead),
             ),
           IconButton(
@@ -162,7 +168,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
           ),
         ],
       ),
-      body: _buildBody(),
+      body: SizedBox.expand(
+        child: FadeThrough(
+          stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+          child: _buildBody(),
+        ),
+      ),
     );
   }
 
@@ -197,15 +208,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> with AutoRefr
           return AnimatedListItem(
             index: i,
             child: InkWell(
-              onTap: () => _markRead(item),
+              // Tapping an alert takes you to what it is about (Jakob's Law)
+              onTap: () {
+                _markRead(item);
+                final data = item['data'];
+                widget.onOpen?.call(
+                  data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+                  type,
+                );
+              },
               borderRadius: BorderRadius.circular(14),
-              child: Container(
+              child: AnimatedContainer(
+                duration: Motion.base,
+                curve: Motion.enter,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: isRead ? Colors.white : AppColors.primary.withValues(alpha: 0.04),
+                  color: isRead ? Colors.white : AppColors.primarySurface,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isRead ? AppColors.border : AppColors.primary.withValues(alpha: 0.25),
+                    color: isRead ? AppColors.border : AppColors.primarySurface,
                   ),
                 ),
                 child: Row(

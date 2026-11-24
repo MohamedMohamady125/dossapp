@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -24,6 +25,14 @@ class NotificationService {
       : ApiService.registerDevice(token, _platform(), language: _language);
 
   static final _localNotifications = FlutterLocalNotificationsPlugin();
+
+  /// The data of a notification the person tapped, waiting for the home
+  /// screen to open the right page. Null once handled.
+  static final ValueNotifier<Map<String, dynamic>?> opened = ValueNotifier(null);
+
+  static void _tapped(Map<String, dynamic> data) {
+    if (data.isNotEmpty) opened.value = Map<String, dynamic>.from(data);
+  }
 
   static const _androidChannel = AndroidNotificationChannel(
     'aqua_athletic_default',
@@ -52,7 +61,23 @@ class NotificationService {
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
         iOS: DarwinInitializationSettings(),
       );
-      await _localNotifications.initialize(settings: initSettings);
+      await _localNotifications.initialize(
+        settings: initSettings,
+        // A tap on a notification shown while the app was open
+        onDidReceiveNotificationResponse: (response) {
+          final payload = response.payload;
+          if (payload == null || payload.isEmpty) return;
+          try {
+            _tapped(Map<String, dynamic>.from(jsonDecode(payload) as Map));
+          } catch (_) {}
+        },
+      );
+
+      // A tap on a notification while the app was in the background, and
+      // the one that opened the app from closed
+      FirebaseMessaging.onMessageOpenedApp.listen((m) => _tapped(m.data));
+      final first = await FirebaseMessaging.instance.getInitialMessage();
+      if (first != null) _tapped(first.data);
       await _localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(_androidChannel);
@@ -67,6 +92,7 @@ class NotificationService {
           id: notification.hashCode,
           title: notification.title,
           body: notification.body,
+          payload: jsonEncode(message.data),
           notificationDetails: NotificationDetails(
             android: AndroidNotificationDetails(
               _androidChannel.id,

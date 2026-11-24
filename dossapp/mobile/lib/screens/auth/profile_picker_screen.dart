@@ -1,7 +1,8 @@
+import '../../utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../widgets/language_toggle.dart';
+import '../../widgets/brand_page.dart';
 import '../../services/api_service.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
@@ -39,90 +40,56 @@ class _ProfilePickerScreenState extends State<ProfilePickerScreen> {
     final auth = context.watch<AuthProvider>();
     final profiles = auth.profiles;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
+    // Same shell as the login screen, so the two read as one flow
+    return BrandPage(
+      title: s.whoIsSwimming,
+      subtitle: s.chooseSwimmerSubtitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Same navy header as the home screen, so it reads as one app
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          width: 52, height: 52,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(Icons.family_restroom_rounded, color: Colors.white, size: 28),
-                        ),
-                        const LanguageToggle(),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      s.whoIsSwimming,
-                      style: GoogleFonts.barlowCondensed(
-                        fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      s.chooseSwimmerSubtitle,
-                      style: const TextStyle(fontSize: 15, color: Colors.white70, height: 1.35),
-                    ),
-                  ],
-                ),
+          for (var i = 0; i < profiles.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _SwimmerCard(
+                profile: profiles[i],
+                index: i,
+                busy: _opening == profiles[i].accountId,
+                enabled: _opening == null,
+                onTap: () => _open(profiles[i]),
               ),
             ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+          const SizedBox(height: 8),
+          // Teach the switcher here, where the question is on their mind
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primarySurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final p in profiles)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _SwimmerCard(
-                      profile: p,
-                      busy: _opening == p.accountId,
-                      enabled: _opening == null,
-                      onTap: () => _open(p),
-                    ),
+                const Icon(Icons.swap_horiz_rounded, size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    s.switchAnytime,
+                    style: GoogleFonts.barlow(fontSize: 13, color: AppColors.primary, height: 1.4),
                   ),
-                const SizedBox(height: 8),
-                // Teach the switcher here, where the question is on their mind
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.swap_horiz_rounded, size: 18, color: AppColors.textSecondary),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        s.switchAnytime,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
           ),
-          SafeArea(
-            top: false,
-            child: TextButton(
-              onPressed: _opening == null ? () => auth.logout() : null,
-              child: Text(s.logout),
+          const Spacer(),
+          const SizedBox(height: 24),
+          TextButton(
+            onPressed: _opening == null ? () => auth.logout() : null,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textSecondary,
+              minimumSize: const Size(0, 48),
+              textStyle: GoogleFonts.barlow(fontSize: 15, fontWeight: FontWeight.w600),
             ),
+            child: Text(s.logout),
           ),
         ],
       ),
@@ -132,29 +99,54 @@ class _ProfilePickerScreenState extends State<ProfilePickerScreen> {
 
 class _SwimmerCard extends StatelessWidget {
   final SwimmerProfile profile;
+  final int index;
   final bool busy;
   final bool enabled;
   final VoidCallback onTap;
 
-  const _SwimmerCard({required this.profile, required this.busy, required this.enabled, required this.onTap});
+  const _SwimmerCard({required this.profile, required this.index, required this.busy, required this.enabled, required this.onTap});
+
+  // The crest's own colours: navy, pool blue and torch orange. Each child
+  // keeps one, so a parent finds them by colour before reading the name.
+  static const _inks = [AppColors.primary, AppColors.secondary, AppColors.accent];
+  static const _tints = [AppColors.primarySurface, AppColors.secondaryLight, AppColors.accentLight];
+
+  String get _initials {
+    final parts = profile.name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    final first = parts.first.characters.first;
+    final last = parts.length > 1 ? parts.last.characters.first : '';
+    return (first + last).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final ink = _inks[index % _inks.length];
+    final tint = _tints[index % _tints.length];
     return Material(
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: AppColors.border),
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFCBD5E1)),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: enabled ? onTap : null,
         child: Padding(
-          // 88px tall: an easy target for a thumb (Fitts's Law)
-          padding: const EdgeInsets.all(16),
+          // 84px tall: an easy target for a thumb (Fitts's Law)
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              InitialsAvatar(profile.name, size: 56),
+              Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+                child: Text(
+                  _initials,
+                  style: GoogleFonts.barlow(fontSize: 19, fontWeight: FontWeight.w700, color: ink),
+                ),
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -164,12 +156,12 @@ class _SwimmerCard extends StatelessWidget {
                       profile.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      style: GoogleFonts.barlow(fontSize: 17, height: 1.2, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
-                      '${profile.branchName} • #${profile.athleteNumber}',
-                      style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                      '${profile.branchName} • ${swimmerId(profile.athleteNumber)}',
+                      style: GoogleFonts.barlow(fontSize: 14, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -178,7 +170,13 @@ class _SwimmerCard extends StatelessWidget {
               if (busy)
                 const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
               else
-                const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                  // This icon flips by itself in Arabic
+                  child: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                ),
             ],
           ),
         ),
@@ -237,6 +235,8 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
     final profiles = context.watch<AuthProvider>().profiles;
 
     return Container(
+      // Never taller than most of the screen, whatever the family size
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -261,49 +261,59 @@ class _SwitcherSheetState extends State<_SwitcherSheet> {
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
               ),
             ),
-            for (final p in profiles)
-              InkWell(
-                onTap: _opening == null ? () => _open(p) : null,
-                child: Container(
-                  color: p.isCurrent ? AppColors.primarySurface.withValues(alpha: 0.6) : null,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    children: [
-                      InitialsAvatar(p.name, size: 46),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              p.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+            // A family with many swimmers scrolls inside the sheet
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final p in profiles)
+                  InkWell(
+                    onTap: _opening == null ? () => _open(p) : null,
+                    child: Container(
+                      color: p.isCurrent ? AppColors.primarySurface.withValues(alpha: 0.6) : null,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      child: Row(
+                        children: [
+                          InitialsAvatar(p.name, size: 46),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                ),
+                                Text(
+                                  p.isCurrent
+                                      ? s.viewingNow
+                                      : '${p.branchName} • ${swimmerId(p.athleteNumber)}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: p.isCurrent ? FontWeight.w600 : FontWeight.w400,
+                                    color: p.isCurrent ? AppColors.primary : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              p.isCurrent
-                                  ? s.viewingNow
-                                  : '${p.branchName} • #${p.athleteNumber}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: p.isCurrent ? FontWeight.w600 : FontWeight.w400,
-                                color: p.isCurrent ? AppColors.primary : AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          if (_opening == p.accountId)
+                            const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+                          else if (p.isCurrent)
+                            const Icon(Icons.check_circle_rounded, color: AppColors.primary)
+                          else
+                            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+                        ],
                       ),
-                      if (_opening == p.accountId)
-                        const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
-                      else if (p.isCurrent)
-                        const Icon(Icons.check_circle_rounded, color: AppColors.primary)
-                      else
-                        const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-                    ],
+                    ),
                   ),
+                  ],
                 ),
               ),
+            ),
             const Divider(height: 1, color: AppColors.border),
             InkWell(
               onTap: _opening == null

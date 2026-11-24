@@ -88,7 +88,7 @@ class _BranchManagementScreenState extends State<BranchManagementScreen> {
                         Expanded(
                           child: Text(
                             isEdit ? t.editBranch : t.addBranch,
-                            style: GoogleFonts.barlowCondensed(
+                            style: GoogleFonts.barlow(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,

@@ -1,3 +1,4 @@
+import '../../widgets/motion.dart';
 import '../../services/app_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -156,11 +157,16 @@ class _BillScreenState extends State<BillScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _loading
-          ? _buildLoadingState()
-          : _error != null
-              ? ErrorState(message: _error!, onRetry: _load)
-              : RefreshIndicator(onRefresh: _load, child: _buildContent()),
+      body: SizedBox.expand(
+        child: FadeThrough(
+          stateKey: _loading ? 'loading' : _error != null ? 'error' : 'content',
+          child: _loading
+              ? _buildLoadingState()
+              : _error != null
+                  ? ErrorState(message: _error!, onRetry: _load)
+                  : RefreshIndicator(onRefresh: _load, child: _buildContent()),
+        ),
+      ),
     );
   }
 
@@ -216,7 +222,7 @@ class _BillScreenState extends State<BillScreen>
           sliver: SliverList(delegate: SliverChildListDelegate([
             // ── Amount + status: one card answers "how much, and is it paid" ──
             AnimatedListItem(index: 0, child: _buildAmountCard(bill)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             // ── The single action on this screen (Von Restorff) ──
             if (bill.isSuspended)
@@ -301,7 +307,7 @@ class _BillScreenState extends State<BillScreen>
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 formatMoney(bill.amountOwed),
-                style: GoogleFonts.barlowCondensed(
+                style: GoogleFonts.barlow(
                   fontSize: 46,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
@@ -427,39 +433,36 @@ class _BillScreenState extends State<BillScreen>
     );
   }
 
+  // Same card as the Home screen shows for a spot on hold, so the two pages
+  // say one thing in one way (Similarity). Red is only on the small tag.
   Widget _buildSuspendedCard() {
+    final s = S.of(context);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.warningLight,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.schedule_rounded, size: 36, color: AppColors.warning),
-          ),
-          const SizedBox(height: 12),
+          StatusPill(s.enrollmentPaused, AppColors.error, icon: Icons.pause_circle_outline_rounded),
+          const SizedBox(height: 14),
           Text(
-            S.of(context).enrollmentWindowClosed,
-            style: GoogleFonts.barlowCondensed(
-              fontSize: 22,
+            s.enrollmentWindowClosed,
+            style: GoogleFonts.barlow(
+              fontSize: 20,
+              height: 1.2,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            S.of(context).enrollmentWindowClosedMsg,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            s.enrollmentWindowClosedMsg,
+            style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
           ),
         ],
       ),
@@ -488,7 +491,7 @@ class _BillScreenState extends State<BillScreen>
           const SizedBox(height: 12),
           Text(
             S.of(context).billPending,
-            style: GoogleFonts.barlowCondensed(
+            style: GoogleFonts.barlow(
               fontSize: 22,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,

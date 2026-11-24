@@ -11,11 +11,49 @@ import '../services/locale_provider.dart';
 /// It names the language it switches TO, in that language. Switching only
 /// changes the locale, so whatever was typed stays in the fields.
 class LanguageToggle extends StatelessWidget {
-  const LanguageToggle({super.key});
+  /// True on a white page: a quiet outlined pill instead of the white one
+  /// made for the navy headers.
+  final bool onLight;
+
+  const LanguageToggle({super.key, this.onLight = false});
 
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
+    if (onLight) {
+      return Semantics(
+        button: true,
+        label: locale.isArabic ? 'Switch to English' : 'التحويل للعربية',
+        child: InkWell(
+          onTap: locale.toggleLanguage,
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            child: Center(
+              widthFactor: 1,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFCBD5E1)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.language_rounded, size: 16, color: Color(0xFF334155)),
+                    const SizedBox(width: 6),
+                    Text(
+                      locale.isArabic ? 'English' : 'العربية',
+                      style: GoogleFonts.barlow(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF334155)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Semantics(
       button: true,
       label: locale.isArabic ? 'Switch to English' : 'التحويل للعربية',

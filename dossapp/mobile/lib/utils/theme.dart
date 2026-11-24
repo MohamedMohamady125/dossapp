@@ -1,4 +1,6 @@
+import '../widgets/motion.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
@@ -23,6 +25,7 @@ class AppColors {
   // Borders
   static const border = Color(0xFFE2E8F0);
   static const borderLight = Color(0xFFF1F5F9);
+  static const fieldBorder = Color(0xFFCBD5E1);
 
   // Text
   static const textPrimary = Color(0xFF0F172A);
@@ -42,21 +45,22 @@ class AppColors {
   static const genderMale = Color(0xFF3B82F6);
   static const genderFemale = Color(0xFFEC4899);
 
-  // Gradients (no glow or blur, just the fill)
+  // Flat fills. They keep the gradient type so every screen that paints
+  // with them went flat in one place.
   static const primaryGradient = LinearGradient(
-    colors: [Color(0xFF1A3A6B), Color(0xFF2D5FAA)],
+    colors: [Color(0xFF1A3A6B), Color(0xFF1A3A6B)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const accentGradient = LinearGradient(
-    colors: [Color(0xFFF97316), Color(0xFFFB923C)],
+    colors: [Color(0xFFF97316), Color(0xFFF97316)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const successGradient = LinearGradient(
-    colors: [Color(0xFF059669), Color(0xFF10B981)],
+    colors: [Color(0xFF059669), Color(0xFF059669)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -69,14 +73,14 @@ class AppAnimation {
   static const slowDuration = Duration(milliseconds: 400);
   static const staggerDelay = Duration(milliseconds: 50);
 
-  static const enterCurve = Curves.easeOutCubic;
-  static const exitCurve = Curves.easeInCubic;
-  static const bounceCurve = Curves.elasticOut;
+  static const enterCurve = Motion.enter;
+  static const exitCurve = Motion.exit;
+  static const bounceCurve = Curves.easeOutCubic;
 }
 
 ThemeData appTheme() {
   final baseTextTheme = GoogleFonts.barlowTextTheme();
-  final headlineTextTheme = GoogleFonts.barlowCondensedTextTheme();
+  final headlineTextTheme = GoogleFonts.barlowTextTheme();
 
   return ThemeData(
     useMaterial3: true,
@@ -120,17 +124,22 @@ ThemeData appTheme() {
       labelMedium: baseTextTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
       labelSmall: baseTextTheme.labelSmall?.copyWith(color: AppColors.textMuted),
     ),
+    // Navy bar with white text on every screen, the same navy as the login
     appBarTheme: AppBarTheme(
       centerTitle: false,
       elevation: 0,
-      scrolledUnderElevation: 1,
-      backgroundColor: Colors.white,
-      foregroundColor: AppColors.textPrimary,
-      titleTextStyle: GoogleFonts.barlowCondensed(
-        fontSize: 22,
+      scrolledUnderElevation: 0,
+      backgroundColor: AppColors.primary,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      systemOverlayStyle: SystemUiOverlayStyle.light,
+      iconTheme: const IconThemeData(color: Colors.white),
+      actionsIconTheme: const IconThemeData(color: Colors.white),
+      titleTextStyle: GoogleFonts.barlow(
+        fontSize: 20,
         fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
-        letterSpacing: -0.3,
+        color: Colors.white,
+        letterSpacing: -0.2,
       ),
     ),
     cardTheme: CardThemeData(
@@ -145,7 +154,7 @@ ThemeData appTheme() {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(double.infinity, 52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         textStyle: GoogleFonts.barlow(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
@@ -157,32 +166,40 @@ ThemeData appTheme() {
         textStyle: GoogleFonts.barlow(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
+    // White fields with a thin border, the same as the login
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.surfaceVariant,
+      fillColor: Colors.white,
+      hoverColor: Colors.transparent,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide.none,
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.fieldBorder),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.fieldBorder),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: AppColors.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: AppColors.error, width: 2),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: AppColors.error, width: 1.5),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       labelStyle: GoogleFonts.barlow(color: AppColors.textSecondary),
+      floatingLabelStyle: GoogleFonts.barlow(color: AppColors.primary, fontWeight: FontWeight.w600),
       hintStyle: GoogleFonts.barlow(color: AppColors.textMuted),
+      errorMaxLines: 2,
     ),
     navigationBarTheme: NavigationBarThemeData(
       elevation: 0,
@@ -204,7 +221,7 @@ ThemeData appTheme() {
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.android: ZoomPageTransitionsBuilder(),
+        TargetPlatform.android: SlideFadePageTransitionsBuilder(),
       },
     ),
   );

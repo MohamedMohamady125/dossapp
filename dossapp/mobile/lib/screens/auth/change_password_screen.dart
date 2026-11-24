@@ -2,7 +2,7 @@ import '../../utils/app_error.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../widgets/language_toggle.dart';
+import '../../widgets/brand_page.dart';
 import '../../services/auth_provider.dart';
 import '../../utils/theme.dart';
 import '../../utils/translations.dart';
@@ -161,64 +161,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          // Gradient header with wave
-          Builder(builder: (context) {
-            final screenH = MediaQuery.of(context).size.height;
-            final headerH = (screenH * 0.22).clamp(150.0, 200.0);
-            return ClipPath(
-              clipper: _WaveClipper(),
-              child: Container(
-                height: headerH,
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new,
-                              color: Colors.white, size: 20),
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
-                        const SizedBox(width: 4),
-                        Image.asset('assets/images/logo.png', height: 36, width: 36),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            s.changePassword,
-                            style: GoogleFonts.barlowCondensed(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              letterSpacing: -0.3,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const LanguageToggle(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
-
-          // Form body
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 400),
-                child: Form(
+    return BrandPage(
+      title: s.changePassword,
+      subtitle: s.createNewPassword,
+      onBack: () => Navigator.of(context).maybePop(),
+      child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -484,37 +431,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                     ],
                   ),
                 ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
-}
-
-/// Custom clipper that creates a wave shape at the bottom of the header.
-class _WaveClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.lineTo(0, size.height - 30);
-
-    final firstControl = Offset(size.width * 0.25, size.height);
-    final firstEnd = Offset(size.width * 0.5, size.height - 15);
-    path.quadraticBezierTo(
-        firstControl.dx, firstControl.dy, firstEnd.dx, firstEnd.dy);
-
-    final secondControl = Offset(size.width * 0.75, size.height - 30);
-    final secondEnd = Offset(size.width, size.height - 10);
-    path.quadraticBezierTo(
-        secondControl.dx, secondControl.dy, secondEnd.dx, secondEnd.dy);
-
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
 }

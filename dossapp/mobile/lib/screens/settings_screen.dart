@@ -1,3 +1,5 @@
+import '../widgets/ui_kit.dart';
+import '../widgets/email_suggestion.dart';
 import '../utils/app_error.dart';
 import 'auth/profile_picker_screen.dart';
 import 'package:flutter/material.dart';
@@ -204,7 +206,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showChangePasswordDialog(BuildContext context, AuthProvider auth) {
-    final s = S.of(context);
+    // Called from a tap, so read once instead of listening
+    final s = S.read(context);
     final oldCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
@@ -227,7 +230,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showChangeEmailDialog(BuildContext context) {
-    final s = S.of(context);
+    // Called from a tap, so read once instead of listening
+    final s = S.read(context);
     final emailCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -286,7 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                   Text(
                     s.deleteAccount,
-                    style: GoogleFonts.barlowCondensed(
+                    style: GoogleFonts.barlow(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: AppColors.error,
@@ -372,27 +376,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // A sheet from the bottom, like the other choices in this app, with the
+  // two answers as full-width buttons within reach of the thumb (Fitts's
+  // Law). Staying is the easy, quiet answer; leaving is the red one.
   void _showLogoutConfirm(BuildContext context, AuthProvider auth, S s) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(s.logout),
-        content: Text(s.logoutConfirm),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(s.cancel),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: IconBadge(Icons.logout_rounded, color: AppColors.error, size: 48),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  s.logoutConfirm,
+                  style: GoogleFonts.barlow(fontSize: 22, height: 1.2, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  s.logoutBody,
+                  style: GoogleFonts.barlow(fontSize: 15, height: 1.4, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.pop(context);
+                      auth.logout();
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(s.logout),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 52,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.textPrimary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      textStyle: GoogleFonts.barlow(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    child: Text(s.stayLoggedIn),
+                  ),
+                ),
+              ],
+            ),
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              auth.logout();
-            },
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            child: Text(s.logout),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -486,7 +545,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                 const SizedBox(height: 12),
                 Text(
                   s.changePassword,
-                  style: GoogleFonts.barlowCondensed(
+                  style: GoogleFonts.barlow(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
@@ -705,7 +764,7 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                 const SizedBox(height: 12),
                 Text(
                   s.changeEmail,
-                  style: GoogleFonts.barlowCondensed(
+                  style: GoogleFonts.barlow(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
@@ -729,6 +788,7 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
                     return null;
                   },
                 ),
+                if (!_codeSent) EmailSuggestion(controller: widget.emailCtrl),
                 // Step 2: the code, shown right under the email it was sent to
                 if (_codeSent) ...[
                   const SizedBox(height: 12),

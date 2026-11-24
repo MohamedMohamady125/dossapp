@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'app_error.dart';
 
 /// Format a number with comma separators: 1012405 → "1,012,405"
 String formatNumber(dynamic value) {
@@ -79,3 +80,7 @@ String formatWhen(dynamic value) {
   if (sameDay) return _arabic ? 'النهارده $clock' : 'Today $clock';
   return westernDigits(DateFormat('d MMM, HH:mm').format(t));
 }
+
+/// A swimmer's number in words, not a bare hash: "ID 1091" / "رقم 1091".
+String swimmerId(Object? number) =>
+    AppLang.isArabic ? 'رقم $number' : 'ID $number';

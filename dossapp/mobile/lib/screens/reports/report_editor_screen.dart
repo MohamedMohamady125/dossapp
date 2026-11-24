@@ -1,3 +1,4 @@
+import '../../utils/formatters.dart';
 import '../../utils/app_error.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -233,7 +234,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
                   children: [
                     Text(
                       widget.athleteName,
-                      style: GoogleFonts.barlowCondensed(
+                      style: GoogleFonts.barlow(
                         fontSize: 21,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
@@ -243,7 +244,7 @@ class _ReportEditorScreenState extends State<ReportEditorScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '#${widget.athleteNumber}',
+                      swimmerId(widget.athleteNumber),
                       style: const TextStyle(color: Colors.white60, fontSize: 12),
                     ),
                   ],
